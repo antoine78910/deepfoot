@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --dark-bg: #0f0f14;
+  --dark-card: #1a1a24;
+  --accent-cyan: #00d4ff;
+  --accent-green: #00f0a0;
+}
+
+body {
+  background: var(--dark-bg);
+  color: #e4e4e7;
+  min-height: 100vh;
+}
+
+/* Gradient border effect for inputs */
+.input-gradient-border {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-green) 100%);
+  padding: 1px;
+  border-radius: 12px;
+}
+.input-gradient-border > input {
+  background: #16161e;
+  border-radius: 11px;
+  padding: 0.75rem 1rem;
+  width: 100%;
+  color: #fff;
+  outline: none;
+}
+
+.input-gradient-border > input::placeholder {
+  color: #71717a;
+}
