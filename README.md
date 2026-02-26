@@ -22,7 +22,7 @@ cp .env.example .env   # remplir SUPABASE_URL, SUPABASE_KEY, optionnel OPENAI_AP
 uvicorn app.main:app --reload --port 8000
 ```
 
-- **Données matchs** : [football-data.org](https://www.football-data.org/) (v4). Crée un token gratuit sur [client/register](https://www.football-data.org/client/register), ajoute `FOOTBALL_DATA_API_TOKEN` dans `backend/.env` : les analyses utilisent alors les vrais matchs (Ligue 1 par défaut, compétition configurable via `FOOTBALL_DATA_DEFAULT_COMPETITION`).
+- **Données matchs** : [football-data.org](https://www.football-data.org/) (v4). Token gratuit sur [client/register](https://www.football-data.org/client/register), variable `FOOTBALL_DATA_API_TOKEN` dans `backend/.env`. Les équipes sont cherchées dans **toutes les ligues** suivantes : WC, CL, BL1, DED, BSA, PD, FL1, ELC, PPL, EC, SA, PL (World Cup, Champions League, Bundesliga, Eredivisie, Brasileirão, Liga, Ligue 1, Championship, Primeira Liga, Euro, Serie A, Premier League). L’autocomplete sur la page d’accueil affiche les clubs avec **logo** (crest) dès que tu tapes (ex. « a » puis « aj » puis « aja » pour AJ Auxerre).
 - Sans `.env` ou sans clés Supabase/OpenAI/football-data, l’API tourne en mode démo (données synthétiques, pas de résumé OpenAI).
 
 ### Frontend
