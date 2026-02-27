@@ -9,13 +9,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     free_analyses_per_day: int = 1
     max_score_goals: int = 8  # grille Poisson 0..8
-    # football-data.org (https://www.football-data.org/)
-    football_data_api_token: str = ""
-    football_data_base_url: str = "https://api.football-data.org/v4"
-    football_data_default_competition: str = "FL1"  # Ligue 1 pour résolution des noms d'équipes
+    # API-Football (https://www.api-football.com/documentation-v3)
+    api_football_key: str = ""
+    api_football_base_url: str = "https://v3.football.api-sports.io"
+    admin_api_key: str = ""  # Si défini, requiert X-Admin-Key pour /admin/*
 
     class Config:
-        env_file = ".env"
+        # .env.local override .env (secrets locaux sans les commiter)
+        env_file = [".env", ".env.local"]
         env_file_encoding = "utf-8"
         extra = "ignore"
 

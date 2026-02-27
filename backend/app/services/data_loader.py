@@ -1,9 +1,10 @@
 # backend/app/services/data_loader.py
 """
 Charge les données équipes/matchs pour le feature engineering.
-Priorité: 1) API football-data.org (v4) si token configuré, 2) Supabase, 3) démo.
+Priorité: 1) API-Football (api-sports.io) si clé configurée, 2) Supabase, 3) démo.
 """
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Optional
 from app.core.config import get_settings
 from app.ml.features import (
     compute_goals_avg,
@@ -18,8 +19,8 @@ def normalize_team_name(name: str) -> str:
     return name.strip().lower().replace(" ", "_") if name else ""
 
 
-def _use_football_data() -> bool:
-    return bool(get_settings().football_data_api_token)
+def _use_api_football() -> bool:
+    return bool(get_settings().api_football_key)
 
 
 def _use_supabase() -> bool:
@@ -90,29 +91,96 @@ def get_h2h(home_slug: str, away_slug: str) -> tuple[int, int, int]:
     return (int(row.get("home_wins", 0)), int(row.get("draws", 0)), int(row.get("away_wins", 0)))
 
 
-def _load_match_context_football_data(home_team: str, away_team: str) -> dict[str, Any] | None:
+def _load_match_context_api_football(
+    home_team: str, away_team: str, progress_callback: Optional[Callable[[str, int], None]] = None
+) -> dict[str, Any] | None:
     """
-    Charge le contexte match via l'API football-data.org (v4).
-    Retourne None si token absent ou équipes non résolues.
+    Charge le contexte match via API-Football (api-sports.io) v3.
+    Retourne None si clé absente ou équipes non résolues.
     """
-    from app.services.football_data import (
+    def report(step: str, percent: int) -> None:
+        if progress_callback:
+            progress_callback(step, percent)
+
+    from app.services.api_football import (
         resolve_team_name_to_id,
-        get_team_matches,
-        team_matches_to_goals_and_form,
-        get_h2h_from_matches,
+        get_team_fixtures,
+        get_team_upcoming_fixtures,
+        get_team_by_id,
+        _fixture_to_goals_and_form,
+        get_h2h_from_fixtures,
+        get_fixtures_headtohead_multi_season,
+        get_weighted_h2h_home_pct,
     )
+    report("Resolving teams…", 5)
     home_id = resolve_team_name_to_id(home_team)
     away_id = resolve_team_name_to_id(away_team)
     if home_id is None or away_id is None:
         return None
-    home_matches = get_team_matches(home_id, status="FINISHED", limit=10)
-    away_matches = get_team_matches(away_id, status="FINISHED", limit=10)
-    home_goals_for, home_goals_against, home_form = team_matches_to_goals_and_form(
-        home_id, home_matches, last_n=5
+
+    report("Fetching team info…", 15)
+    league: Any = None
+    match_date: Any = None
+    venue: Any = None
+    home_team_logo: Any = None
+    away_team_logo: Any = None
+    try:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fut_h = ex.submit(get_team_by_id, home_id)
+            fut_a = ex.submit(get_team_by_id, away_id)
+            home_info = fut_h.result()
+            away_info = fut_a.result()
+        if home_info:
+            home_team_logo = home_info.get("logo")
+        if away_info:
+            away_team_logo = away_info.get("logo")
+        upcoming = get_team_upcoming_fixtures(home_id, next_n=15)
+        for f in upcoming:
+            teams = f.get("teams") or {}
+            f_home_id = (teams.get("home") or {}).get("id")
+            f_away_id = (teams.get("away") or {}).get("id")
+            if f_home_id == home_id and f_away_id == away_id:
+                fix = f.get("fixture") or {}
+                # Date : format "2 March 2026 at 00:15"
+                date_val = fix.get("date") or ""
+                if date_val:
+                    from datetime import datetime
+                    try:
+                        dt = datetime.fromisoformat(date_val.replace("Z", "+00:00"))
+                        match_date = f"{dt.day} {dt.strftime('%B %Y')} at {dt.strftime('%H:%M')}"
+                    except Exception:
+                        match_date = date_val[:16] if len(date_val) >= 16 else date_val
+                league = (f.get("league") or {}).get("name")
+                # Lieu : depuis la fixture (stade du match), sinon stade de l'équipe à domicile
+                fix_venue = fix.get("venue") if isinstance(fix.get("venue"), dict) else {}
+                if fix_venue:
+                    v_name = (fix_venue.get("name") or "").strip()
+                    v_city = (fix_venue.get("city") or "").strip()
+                    if v_name and v_city:
+                        venue = f"{v_name} - {v_city}"
+                    elif v_name:
+                        venue = v_name
+                if not venue and home_info:
+                    venue = home_info.get("stadium")
+                break
+        if not venue and home_info:
+            venue = home_info.get("stadium")
+    except Exception:
+        pass
+
+    report("Fetching team form…", 28)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fut_h = ex.submit(get_team_fixtures, home_id, None, 10)
+        fut_a = ex.submit(get_team_fixtures, away_id, None, 10)
+        home_fixtures = fut_h.result()
+        away_fixtures = fut_a.result()
+    home_goals_for, home_goals_against, home_form = _fixture_to_goals_and_form(
+        home_id, home_fixtures, last_n=5
     )
-    away_goals_for, away_goals_against, away_form = team_matches_to_goals_and_form(
-        away_id, away_matches, last_n=5
+    away_goals_for, away_goals_against, away_form = _fixture_to_goals_and_form(
+        away_id, away_fixtures, last_n=5
     )
+    report("Fetching head-to-head…", 52)
     if not home_goals_for and not home_goals_against:
         home_goals_for, home_goals_against = [1, 2, 1, 0, 2], [1, 0, 2, 1, 1]
     if not away_goals_for and not away_goals_against:
@@ -121,8 +189,37 @@ def _load_match_context_football_data(home_team: str, away_team: str) -> dict[st
         home_form = ["W", "D", "L", "W", "W"]
     if not away_form:
         away_form = ["W", "D", "L", "W", "W"]
-    h2h_matches = [m for m in home_matches if (m.get("awayTeam") or {}).get("id") == away_id or (m.get("homeTeam") or {}).get("id") == away_id]
-    h2h_h, h2h_d, h2h_a = get_h2h_from_matches(home_id, away_id, h2h_matches)
+    h2h_fixtures = get_fixtures_headtohead_multi_season(home_id, away_id, ideal_seasons=5, max_seasons=5)
+    h2h_h, h2h_d, h2h_a = get_h2h_from_fixtures(home_id, away_id, h2h_fixtures)
+    h2h_weighted_pct = get_weighted_h2h_home_pct(home_id, away_id, h2h_fixtures)
+
+    # Si on n'a pas réussi à trouver la ligue / date / stade via un prochain match,
+    # on essaie de les déduire du dernier H2H disponible sur les 5 dernières saisons.
+    if (league is None or match_date is None or venue is None) and h2h_fixtures:
+        last = h2h_fixtures[0]
+        if league is None:
+            league = (last.get("league") or {}).get("name") or league
+        fix_last = last.get("fixture") or {}
+        date_val = fix_last.get("date") or ""
+        if match_date is None and date_val:
+            from datetime import datetime
+            try:
+                dt = datetime.fromisoformat(date_val.replace("Z", "+00:00"))
+                match_date = f"{dt.day} {dt.strftime('%B %Y')} at {dt.strftime('%H:%M')}"
+            except Exception:
+                match_date = date_val[:16] if len(date_val) >= 16 else date_val
+        if venue is None:
+            fix_venue = fix_last.get("venue") if isinstance(fix_last.get("venue"), dict) else {}
+            if fix_venue:
+                v_name = (fix_venue.get("name") or "").strip()
+                v_city = (fix_venue.get("city") or "").strip()
+                if v_name and v_city:
+                    venue = f"{v_name} - {v_city}"
+                elif v_name:
+                    venue = v_name
+            if venue is None and home_info:
+                venue = home_info.get("stadium")
+    report("Computing features…", 58)
     hw = sum(1 for x in home_form if x == "W")
     hd = sum(1 for x in home_form if x == "D")
     hl = sum(1 for x in home_form if x == "L")
@@ -138,6 +235,7 @@ def _load_match_context_football_data(home_team: str, away_team: str) -> dict[st
         hw, hd, hl, aw, ad, al,
         h_for_avg, a_for_avg, h_against_avg, a_against_avg,
         h2h_h, h2h_d, h2h_a,
+        h2h_home_pct_override=h2h_weighted_pct,
     )
     return {
         "home_team": home_team,
@@ -151,29 +249,45 @@ def _load_match_context_football_data(home_team: str, away_team: str) -> dict[st
         "home_form_label": form_to_label(hw, hd, hl),
         "away_form_label": form_to_label(aw, ad, al),
         "comparison_pcts": pcts,
+        "league": league,
+        "match_date": match_date,
+        "venue": venue,
+        "home_team_logo": home_team_logo,
+        "away_team_logo": away_team_logo,
     }
 
 
-def load_match_context(home_team: str, away_team: str) -> dict[str, Any]:
+def load_match_context(
+    home_team: str, away_team: str, progress_callback: Optional[Callable[[str, int], None]] = None
+) -> dict[str, Any]:
     """
     Charge tout le contexte pour un match : form, goals for/against home/away, H2H.
-    Priorité: football-data.org (v4) si token → Supabase → démo.
+    Priorité: API-Football si clé → Supabase → démo.
     """
-    if _use_football_data():
-        ctx = _load_match_context_football_data(home_team, away_team)
+    def report(step: str, percent: int) -> None:
+        if progress_callback:
+            progress_callback(step, percent)
+
+    if _use_api_football():
+        ctx = _load_match_context_api_football(home_team, away_team, progress_callback=progress_callback)
         if ctx is not None:
             return ctx
 
+    report("Loading match data…", 10)
     h = normalize_team_name(home_team)
     a = normalize_team_name(away_team)
 
+    report("Fetching results…", 22)
     home_goals_for, home_goals_against = get_team_results(h, is_home=True)
     away_goals_for, away_goals_against = get_team_results(a, is_home=False)
 
+    report("Fetching form…", 38)
     home_form, hw, hd, hl = get_team_form(h)
     away_form, aw, ad, al = get_team_form(a)
 
+    report("Fetching head-to-head…", 50)
     h2h_h, h2h_d, h2h_a = get_h2h(h, a)
+    report("Computing features…", 58)
 
     h_for_avg, h_against_avg = compute_goals_avg(home_goals_for, home_goals_against)
     a_for_avg, a_against_avg = compute_goals_avg(away_goals_for, away_goals_against)

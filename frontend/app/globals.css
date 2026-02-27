@@ -3,10 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --dark-bg: #0f0f14;
-  --dark-card: #1a1a24;
-  --accent-cyan: #00d4ff;
-  --accent-green: #00f0a0;
+  --dark-bg: #0a0a0e;
+  --dark-card: #14141c;
+  --dark-input: #1c1c28;
+  --accent-cyan: #00ffe8;
+  --accent-green: #00ffe8;
+  --flashy-orange: #f97316;
+  --flashy-pink: #ec4899;
+  --flashy-purple: #a855f7;
+  --flashy-green: #22c55e;
+  --flashy-red: #ef4444;
+  --flashy-gold: #eab308;
+  --flashy-blue: #3b82f6;
 }
 
 body {
@@ -17,7 +25,7 @@ body {
 
 /* Gradient border effect for inputs */
 .input-gradient-border {
-  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-green) 100%);
+  background: linear-gradient(135deg, #00ffe8 0%, #00ddcc 100%);
   padding: 1px;
   border-radius: 12px;
 }

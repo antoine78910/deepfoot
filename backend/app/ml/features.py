@@ -71,36 +71,62 @@ def pct_from_form(wins: int, draws: int, losses: int) -> float:
     return (pts / (total * 3)) * 100
 
 
+NEUTRAL_PCT = 50.0
+
+
 def build_comparison_pcts(
     home_w: int, home_d: int, home_l: int,
     away_w: int, away_d: int, away_l: int,
     home_goals_for: float, away_goals_for: float,
     home_goals_against: float, away_goals_against: float,
     h2h_home_w: int = 0, h2h_draw: int = 0, h2h_away_w: int = 0,
+    h2h_home_pct_override: Optional[float] = None,
 ) -> dict[str, float]:
-    """Retourne les pourcentages pour les barres (attack, defense, form, h2h, goals, overall)."""
-    total_h2h = h2h_home_w + h2h_draw + h2h_away_w or 1
-    h2h_home_pct = (h2h_home_w + 0.5 * h2h_draw) / total_h2h * 100
+    """
+    Retourne les pourcentages pour les barres (attack, defense, form, h2h, goals, overall).
+    Si une feature n'a pas de données (total = 0), on met 50% / 50% pour ne pas fausser le reste.
+    h2h_home_pct_override : si fourni (ex. H2H pondéré sur 5 saisons), utilisé à la place du calcul brut.
+    """
+    if h2h_home_pct_override is not None and 0 <= h2h_home_pct_override <= 100:
+        h2h_home_pct = h2h_home_pct_override
+    else:
+        total_h2h = h2h_home_w + h2h_draw + h2h_away_w
+        if total_h2h == 0:
+            h2h_home_pct = NEUTRAL_PCT
+        else:
+            h2h_home_pct = (h2h_home_w + 0.5 * h2h_draw) / total_h2h * 100
 
-    form_home_pct = pct_from_form(home_w, home_d, home_l)
-    form_away_pct = pct_from_form(away_w, away_d, away_l)
-    form_total = form_home_pct + form_away_pct or 1
-    form_home_pct = form_home_pct / form_total * 100
+    form_home_pct_raw = pct_from_form(home_w, home_d, home_l)
+    form_away_pct_raw = pct_from_form(away_w, away_d, away_l)
+    form_total = form_home_pct_raw + form_away_pct_raw
+    if form_total == 0:
+        form_home_pct = NEUTRAL_PCT
+    else:
+        form_home_pct = form_home_pct_raw / form_total * 100
 
     attack_home = home_goals_for
     attack_away = away_goals_for
-    attack_total = attack_home + attack_away or 1
-    attack_home_pct = (attack_home / attack_total) * 100
+    attack_total = attack_home + attack_away
+    if attack_total == 0:
+        attack_home_pct = NEUTRAL_PCT
+    else:
+        attack_home_pct = (attack_home / attack_total) * 100
 
     def_home = 1.0 / (home_goals_against or 0.5)
     def_away = 1.0 / (away_goals_against or 0.5)
-    def_total = def_home + def_away or 1
-    defense_home_pct = (def_home / def_total) * 100
+    def_total = def_home + def_away
+    if def_total == 0:
+        defense_home_pct = NEUTRAL_PCT
+    else:
+        defense_home_pct = (def_home / def_total) * 100
 
     goals_home = home_goals_for
     goals_away = away_goals_for
-    goals_total = goals_home + goals_away or 1
-    goals_home_pct = (goals_home / goals_total) * 100
+    goals_total = goals_home + goals_away
+    if goals_total == 0:
+        goals_home_pct = NEUTRAL_PCT
+    else:
+        goals_home_pct = (goals_home / goals_total) * 100
 
     overall_home_pct = (
         attack_home_pct + defense_home_pct + form_home_pct + h2h_home_pct + goals_home_pct

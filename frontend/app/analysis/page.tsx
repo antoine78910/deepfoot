@@ -24,14 +24,14 @@ export default function AnalysisPage() {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-4">
         <p className="text-zinc-400 mb-4">No analysis data. Start by analyzing a match.</p>
-        <Link href="/" className="text-[#00d4ff] hover:underline">Back to home</Link>
+        <Link href="/" className="text-[#00ffe8] hover:underline">Back to home</Link>
       </main>
     );
   }
 
   return (
     <main className="min-h-screen px-4 py-8 pb-16 max-w-4xl mx-auto">
-      <Link href="/" className="inline-block text-zinc-500 hover:text-[#00d4ff] text-sm mb-8">
+      <Link href="/" className="inline-block text-zinc-500 hover:text-[#00ffe8] text-sm mb-8">
         ← New analysis
       </Link>
       <AnalysisResult result={data} />

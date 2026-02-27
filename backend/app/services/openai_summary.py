@@ -1,7 +1,8 @@
 # backend/app/services/openai_summary.py
 """
-Génération du résumé rapide et du scénario #1 via OpenAI.
+Génération du résumé rapide, scénarios et key forces via OpenAI (un seul appel structuré).
 """
+import json
 from openai import OpenAI
 from app.core.config import get_settings
 
@@ -79,3 +80,56 @@ def generate_scenario_1(context: str) -> str:
         return (r.choices[0].message.content or "").strip()
     except Exception:
         return "Scenario based on expected goals and recent form."
+
+
+def generate_ai_analysis(context: str, home_team: str, away_team: str) -> dict:
+    """
+    Single OpenAI call returning JSON: quick_summary, scenario_1, scenario_2, scenario_3, scenario_4,
+    key_forces_home, key_forces_away. Speeds up analysis vs multiple calls.
+    """
+    default = {
+        "quick_summary": "Summary based on stats and form.",
+        "scenario_1": "Scenario based on expected goals and recent form.",
+        "scenario_2": {"title": "", "body": "", "probability_pct": None},
+        "scenario_3": {"title": "", "body": "", "probability_pct": None},
+        "scenario_4": {"title": "", "body": "", "probability_pct": None},
+        "key_forces_home": [],
+        "key_forces_away": [],
+    }
+    client = _client()
+    if not client:
+        return default
+    system = """You are a football analysis assistant. Based on the match context, return a JSON object with exactly these keys (use the same language as the team names, e.g. French if teams are French):
+- quick_summary: 2-3 sentences neutral summary (teams, form, main takeaway).
+- scenario_1: One paragraph describing how the match might unfold (who dominates, when goals might come).
+- scenario_2: Object with title (short, e.g. "Home win"), body (2 sentences + optional "Professional tip: ..."), probability_pct (number or null).
+- scenario_3: Same structure as scenario_2 (e.g. "Offensive duel", "Goals galore", over 2.5).
+- scenario_4: Same structure (e.g. "Offensive inefficiency", BTTS No).
+- key_forces_home: Array of 2-4 short bullet points (e.g. "Good recent form", "Powerful attack").
+- key_forces_away: Array of 2-4 short bullet points for the away team.
+Return only valid JSON, no markdown."""
+    try:
+        r = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": context},
+            ],
+            max_tokens=1200,
+            response_format={"type": "json_object"},
+        )
+        raw = (r.choices[0].message.content or "").strip()
+        if not raw:
+            return default
+        data = json.loads(raw)
+        for key in ("scenario_2", "scenario_3", "scenario_4"):
+            if key in data and not isinstance(data[key], dict):
+                data[key] = {"title": str(data[key])[:80], "body": "", "probability_pct": None}
+            data.setdefault(key, default[key])
+        data.setdefault("quick_summary", default["quick_summary"])
+        data.setdefault("scenario_1", default["scenario_1"])
+        data.setdefault("key_forces_home", default["key_forces_home"])
+        data.setdefault("key_forces_away", default["key_forces_away"])
+        return data
+    except Exception:
+        return default

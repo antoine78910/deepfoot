@@ -20,12 +20,27 @@ class OverUnderItem(BaseModel):
     under_pct: float
 
 
+class MostLikelyScoreItem(BaseModel):
+    home: int
+    away: int
+    probability: float
+
+
+class AsianHandicapItem(BaseModel):
+    home_neg1_pct: float
+    home_plus1_pct: float
+    away_neg1_pct: float
+    away_plus1_pct: float
+
+
 class PredictResponse(BaseModel):
     home_team: str
     away_team: str
     league: Optional[str] = None
     match_date: Optional[str] = None
     venue: Optional[str] = None
+    home_team_logo: Optional[str] = None
+    away_team_logo: Optional[str] = None
 
     # Expected goals
     xg_home: float
@@ -36,6 +51,19 @@ class PredictResponse(BaseModel):
     prob_home: float
     prob_draw: float
     prob_away: float
+    implied_odds_home: Optional[float] = None
+    implied_odds_draw: Optional[float] = None
+    implied_odds_away: Optional[float] = None
+
+    # Score le plus probable
+    most_likely_score: Optional[MostLikelyScoreItem] = None
+    total_goals_distribution: Optional[dict[str, float]] = None  # {"0": pct, "1", "2", "3+"}
+    goal_difference_dist: Optional[dict[str, float]] = None  # {"1", "2", "3+"}
+    double_chance_1x: Optional[float] = None
+    double_chance_x2: Optional[float] = None
+    double_chance_12: Optional[float] = None
+    asian_handicap: Optional[AsianHandicapItem] = None
+    upset_probability: Optional[float] = None
 
     # BTTS
     btts_yes_pct: float
@@ -58,6 +86,11 @@ class PredictResponse(BaseModel):
     # LLM
     quick_summary: Optional[str] = None
     scenario_1: Optional[str] = None
+    scenario_2: Optional[dict] = None  # { title, body, probability_pct }
+    scenario_3: Optional[dict] = None
+    scenario_4: Optional[dict] = None
+    key_forces_home: Optional[list[str]] = None
+    key_forces_away: Optional[list[str]] = None
     ai_confidence: Optional[str] = None  # "Very high"
 
     # Stats comparatives (pour barres)

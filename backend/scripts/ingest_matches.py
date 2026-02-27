@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 """
 Script d'ingestion des matchs / résultats pour Visifoot 2.0.
-Source: API football-data.org (v4) — https://www.football-data.org/
+Source: API-Football (https://www.api-football.com/documentation-v3)
 À lancer via cron (ex. 1×/jour) ou manuellement.
 
-Usage:
-  cd backend && python scripts/ingest_matches.py
+Usage (depuis backend, avec l'environnement virtuel activé):
+  cd backend
+  venv\\Scripts\\activate   (Windows)
+  python scripts/ingest_matches.py
 
-Prérequis: .env avec FOOTBALL_DATA_API_TOKEN.
-Optionnel: SUPABASE_URL + SUPABASE_KEY pour persister en base (results, teams, h2h).
+Prérequis: venv activé, pip install -r requirements.txt, .env avec API_FOOTBALL_KEY.
 """
 import os
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+
+try:
+    import pydantic_settings  # noqa: F401
+except ImportError:
+    print("Erreur: module 'pydantic_settings' introuvable.")
+    print("Lance le script avec le venv du backend :")
+    print("  PowerShell:  cd backend  puis  .\\run_ingest.ps1")
+    print("  Ou:  cd backend  puis  .\\venv\\Scripts\\python.exe scripts/ingest_matches.py")
+    print("  CMD:  cd backend  puis  run_ingest.bat")
+    sys.exit(1)
+
+from datetime import datetime, timezone
 
 backend = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend))
@@ -22,29 +34,40 @@ os.chdir(backend)
 
 def main() -> None:
     from app.core.config import get_settings
-    from app.services.football_data import (
+    from app.core.leagues import LEAGUE_IDS, current_season
+    from app.services.api_football import (
         _use_api,
-        get_matches,
-        get_competition_teams,
-        get_team_matches,
+        get_fixtures_by_league,
+        fixture_for_ingest,
     )
 
     if not _use_api():
-        print("football-data.org not configured. Set FOOTBALL_DATA_API_TOKEN in .env")
-        print("Get a free token at https://www.football-data.org/client/register")
+        print("API-Football non configurée. Définir API_FOOTBALL_KEY dans .env ou .env.local")
+        print("Clé gratuite: https://www.api-football.com/")
         return
 
     settings = get_settings()
     has_supabase = bool(settings.supabase_url and settings.supabase_key)
+    season = current_season()
 
-    # 1) Récupérer les matchs récents (ex: 30 derniers jours finis)
-    date_to = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-    date_from = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-    matches = get_matches(date_from=date_from, date_to=date_to, status="FINISHED", limit=200)
-    print(f"football-data.org: {len(matches)} matchs récupérés ({date_from} → {date_to})")
+    # Récupérer les matchs finis par ligue
+    all_fixtures: list[dict] = []
+    seen_keys: set[tuple] = set()
+    for league_id in LEAGUE_IDS:
+        try:
+            fixtures = get_fixtures_by_league(league_id, season=season, status="FT")
+            for f in fixtures:
+                key = (f.get("fixture", {}).get("id"), (f.get("teams") or {}).get("home", {}).get("id"), (f.get("teams") or {}).get("away", {}).get("id"))
+                if key not in seen_keys and key[0] and key[1] and key[2]:
+                    seen_keys.add(key)
+                    all_fixtures.append(f)
+        except Exception:
+            continue
 
-    if not matches:
-        print("Aucun match trouvé pour la période. Vérifiez votre token et les compétitions accessibles.")
+    print(f"API-Football: {len(all_fixtures)} matchs récupérés (saison {season}, {len(LEAGUE_IDS)} ligues)")
+
+    if not all_fixtures:
+        print("Aucun match trouvé. Vérifiez votre clé API et les ligues accessibles.")
         return
 
     if has_supabase:
@@ -52,24 +75,11 @@ def main() -> None:
         supabase = get_supabase()
         teams_seen: set[str] = set()
         inserted = 0
-        for m in matches:
-            home = m.get("homeTeam") or {}
-            away = m.get("awayTeam") or {}
-            score = m.get("score") or {}
-            ft = score.get("fullTime") or {}
-            hid = str(home.get("id") or "")
-            aid = str(away.get("id") or "")
-            hname = (home.get("name") or "").strip()
-            aname = (away.get("name") or "").strip()
-            if not hid or not aid or not hname or not aname:
+        for f in all_fixtures:
+            row = fixture_for_ingest(f)
+            if not row:
                 continue
-            hg = ft.get("homeTeam")
-            ag = ft.get("awayTeam")
-            if hg is None or ag is None:
-                continue
-            utc_date = (m.get("utcDate") or "")[:10]
-            if not utc_date:
-                continue
+            hid, aid, hname, aname, hg, ag, utc_date, league = row
             for (tid, tname) in [(hid, hname), (aid, aname)]:
                 if tid not in teams_seen:
                     teams_seen.add(tid)
@@ -84,21 +94,16 @@ def main() -> None:
                 {
                     "home_team_id": hid,
                     "away_team_id": aid,
-                    "home_goals": int(hg),
-                    "away_goals": int(ag),
+                    "home_goals": hg,
+                    "away_goals": ag,
                     "date": utc_date,
-                    "league": (m.get("competition") or {}).get("name"),
+                    "league": league or None,
                 },
             ).execute()
             inserted += 1
         print(f"Supabase: results et teams mis à jour ({inserted} nouveaux matchs).")
     else:
-        print("Supabase non configuré: les matchs sont utilisables via l'API football-data uniquement (pas de persistance).")
-
-    # 2) Optionnel: précharger les équipes de la compétition par défaut
-    code = settings.football_data_default_competition
-    teams = get_competition_teams(code)
-    print(f"Compétition {code}: {len(teams)} équipes disponibles.")
+        print("Supabase non configuré: pas de persistance.")
 
 
 if __name__ == "__main__":

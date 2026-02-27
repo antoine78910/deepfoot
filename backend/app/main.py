@@ -1,7 +1,7 @@
 # backend/app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import predict, teams
+from app.api import predict, teams, competitions
 
 app = FastAPI(
     title="Visifoot 2.0 API",
@@ -17,6 +17,7 @@ app.add_middleware(
 )
 app.include_router(predict.router)
 app.include_router(teams.router)
+app.include_router(competitions.router)
 
 
 @app.get("/health")

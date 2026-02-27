@@ -1,6 +1,6 @@
--- Visifoot 2.0 — Schéma initial
+-- Visifoot 2.0 - Schema initial
 
--- Équipes
+-- Equipes
 create table if not exists public.teams (
   id uuid primary key default gen_random_uuid(),
   name text not null,
