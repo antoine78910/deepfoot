@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+
+/** Cookie name used for app subdomain auth (must match lib/auth.ts). Do not import @/lib/auth here – Edge can't bundle it. */
+const AUTH_COOKIE_NAME = "visifoot_session";
 
 /** Host is app subdomain (app.localhost, app.deepfoot.ai, etc.) */
 function isAppSubdomain(host: string): boolean {
