@@ -126,14 +126,13 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-app-gradient text-zinc-200 flex">
       <aside className="w-64 flex-shrink-0 sticky top-0 h-screen overflow-y-auto border-r border-dark-border bg-dark-card/50 flex flex-col">
-        <div className="px-5 pt-4 pb-3">
-          <Link href={basePath || "/"} className="flex flex-col items-start gap-0.5">
+        <div className="px-5 pt-4 pb-3 flex justify-center">
+          <Link href={basePath || "/"} className="flex items-center justify-center">
             <img
               src="/logo.png"
               alt="DEEPFOOT"
               className="h-14 w-auto object-contain max-w-full"
             />
-            <span className="text-xs text-zinc-500">AI match analysis</span>
           </Link>
         </div>
 
