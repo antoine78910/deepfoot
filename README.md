@@ -42,6 +42,12 @@ Ouvre http://localhost:3000 : saisir deux équipes → « Analyze the match with
 2. Exécuter les migrations dans `supabase/migrations/001_initial.sql` (SQL Editor).
 3. Renseigner `SUPABASE_URL` et `SUPABASE_KEY` dans `backend/.env`.
 
+## Déploiement Railway (backend)
+
+1. Sur [Railway](https://railway.app), crée un projet relié au repo GitHub.
+2. Le build utilise le **Dockerfile** (`backend/Dockerfile`) grâce au `railway.json` à la racine — pas besoin de définir Root Directory.
+3. Ajoute les variables d’environnement (SUPABASE_URL, SUPABASE_KEY, etc.) dans l’onglet **Variables** du service.
+
 ## Documentation
 
 - **Architecture complète** : [ARCHITECTURE.md](./ARCHITECTURE.md) (workflow, Poisson/XGBoost, abonnements, coûts).

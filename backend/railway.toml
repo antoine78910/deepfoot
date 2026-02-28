@@ -1,0 +1,8 @@
+# Railway – DeepFoot backend (FastAPI)
+# Set "Root Directory" to `backend` in your Railway service settings.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
