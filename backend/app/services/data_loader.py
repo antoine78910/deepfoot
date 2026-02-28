@@ -129,6 +129,7 @@ def _load_match_context_api_football(
     league: Any = None
     match_date: Any = None
     venue: Any = None
+    fixture_id: Any = None
     home_team_logo: Any = None
     away_team_logo: Any = None
     try:
@@ -153,6 +154,7 @@ def _load_match_context_api_football(
             # Accept both orientations; users may enter teams in either order.
             if {f_home_id, f_away_id} == {home_id, away_id}:
                 fix = f.get("fixture") or {}
+                fixture_id = fix.get("id")
                 # Date : format "2 March 2026 at 00:15"
                 date_val = fix.get("date") or ""
                 if date_val:
@@ -268,6 +270,7 @@ def _load_match_context_api_football(
         "league": league,
         "match_date": match_date,
         "venue": venue,
+        "fixture_id": fixture_id,
         "home_team_logo": home_team_logo,
         "away_team_logo": away_team_logo,
     }

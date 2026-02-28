@@ -100,7 +100,7 @@ def generate_ai_analysis(context: str, home_team: str, away_team: str) -> dict:
     if not client:
         return default
     system = """You are a football analysis assistant. Based on the match context, return a JSON object with exactly these keys (use the same language as the team names, e.g. French if teams are French):
-- quick_summary: 2-3 sentences. If "Latest football news" is provided in the context, write in Visifoot style: start with "[Home] hosts [Away] in a [League] match at [Venue]. Our AI, connected to the latest football news, takes into account the latest info: " then briefly mention relevant news for each side (e.g. fragile defense, key absences, tactical organization) and tie it to the stats. If no news is provided, give a neutral summary based on teams, form, and main takeaway.
+- quick_summary: 2-3 sentences. Always use the REAL team names, league name, and venue from the context (e.g. "Monaco hosts Angers in a Ligue 1 match at Stade Louis II") — never output placeholder text like [Home], [Away], [League] or [Venue]. If "Latest football news" is provided in the context, add: "Our AI, connected to the latest football news, takes into account the latest info: " then briefly mention relevant news for each side. Otherwise give a neutral summary based on teams, form, and main takeaway.
 - scenario_1: One paragraph describing how the match might unfold (who dominates, when goals might come).
 - scenario_2: Object with title (short, e.g. "Home win"), body (2 sentences + optional "Professional tip: ..."), probability_pct (number or null).
 - scenario_3: Same structure as scenario_2 (e.g. "Offensive duel", "Goals galore", over 2.5).

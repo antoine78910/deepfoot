@@ -8,6 +8,7 @@ class PredictRequest(BaseModel):
     away_team: str = Field(..., description="Nom ou slug équipe extérieur")
     home_team_id: Optional[int] = Field(None, description="ID API équipe domicile (prioritaire si fourni)")
     away_team_id: Optional[int] = Field(None, description="ID API équipe extérieur (prioritaire si fourni)")
+    use_api_predictions: bool = Field(False, description="Si True et fixture trouvée: 1X2 depuis API-Football Predictions au lieu du modèle Poisson")
 
 
 class ExactScoreItem(BaseModel):
@@ -84,6 +85,9 @@ class PredictResponse(BaseModel):
     away_wdl: Optional[str] = None
     home_form_label: Optional[str] = None  # "Great form"
     away_form_label: Optional[str] = None  # "Poor form"
+
+    # API-Football Predictions (quand use_api_predictions=True)
+    api_advice: Optional[str] = None
 
     # LLM
     quick_summary: Optional[str] = None

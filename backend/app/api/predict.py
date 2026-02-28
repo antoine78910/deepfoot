@@ -19,6 +19,7 @@ from app.services.data_loader import load_match_context
 from app.ml.poisson import predict_all
 from app.services.openai_summary import build_prompt_context, generate_ai_analysis
 from app.services.news_fetcher import fetch_football_news
+from app.services.api_football import get_predictions as api_get_predictions
 
 router = APIRouter(prefix="/predict", tags=["predict"])
 
@@ -71,6 +72,7 @@ def _build_response(
         "scenario_4": ai.get("scenario_4"),
         "key_forces_home": ai.get("key_forces_home") or [],
         "key_forces_away": ai.get("key_forces_away") or [],
+        "api_advice": out.get("api_advice"),
         "ai_confidence": "Very high",
         "attack_home_pct": pcts.get("attack_home_pct"),
         "defense_home_pct": pcts.get("defense_home_pct"),
@@ -100,6 +102,32 @@ def run_predict_with_progress(
     )
     report("Computing probabilities…", 62)
     out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
+
+    # Option: remplacer 1X2 par les prédictions API-Football si fixture trouvée
+    if payload.use_api_predictions and ctx.get("fixture_id"):
+        api_pred = api_get_predictions(ctx["fixture_id"])
+        if api_pred:
+            pred = api_pred.get("predictions") or {}
+            pct = pred.get("percent") or {}
+            def _pct(s: str) -> float:
+                if not s:
+                    return 0.0
+                s = str(s).strip().rstrip("%")
+                try:
+                    return round(float(s), 1)
+                except ValueError:
+                    return 0.0
+            out["prob_home"] = _pct(pct.get("home"))
+            out["prob_draw"] = _pct(pct.get("draw"))
+            out["prob_away"] = _pct(pct.get("away"))
+            # Cotes implicites cohérentes avec les nouveaux 1X2
+            def _impl(p: float) -> float:
+                return round(100 / max(p, 0.5), 2) if p else 0.0
+            out["implied_odds_home"] = _impl(out["prob_home"])
+            out["implied_odds_draw"] = _impl(out["prob_draw"])
+            out["implied_odds_away"] = _impl(out["prob_away"])
+            if pred.get("advice"):
+                out["api_advice"] = pred.get("advice")
 
     ai: dict = {}
     report("Generating AI summary…", 75)

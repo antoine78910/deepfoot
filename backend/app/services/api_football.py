@@ -809,6 +809,20 @@ def get_team_upcoming_fixtures(team_id: int, next_n: int = 10) -> list[dict]:
     return raw[:next_n]
 
 
+def get_predictions(fixture_id: int) -> Optional[dict]:
+    """
+    GET /predictions?fixture=X — prédictions API-Football (Poisson + stats + last matches, sans cotes bookmakers).
+    Retourne le premier élément de response ou None.
+    """
+    if not _use_api():
+        return None
+    data = _get("/predictions", params={"fixture": fixture_id})
+    raw = data.get("response") or []
+    if not raw:
+        return None
+    return raw[0]
+
+
 def get_team_by_id(team_id: int) -> Optional[dict]:
     """Infos d'une équipe (id, name, logo, venue/stadium). 1 requête par équipe."""
     if not _use_api():

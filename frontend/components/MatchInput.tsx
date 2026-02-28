@@ -37,6 +37,8 @@ type MatchInputProps = {
   onRequireAuth?: (teams?: { home: string; away: string }) => void;
   /** When true, no analysis is run; show CTA to analyze in the app instead */
   displayOnly?: boolean;
+  /** When true, use API-Football Predictions for 1X2 (if fixture found); otherwise use our Poisson model. For testing. */
+  useApiPredictions?: boolean;
 };
 
 export function MatchInput({
@@ -47,6 +49,7 @@ export function MatchInput({
   isLoggedIn = true,
   onRequireAuth,
   displayOnly = false,
+  useApiPredictions = false,
 }: MatchInputProps) {
   const [homeTeam, setHomeTeam] = useState(initialHome);
   const [awayTeam, setAwayTeam] = useState(initialAway);
@@ -176,9 +179,10 @@ export function MatchInput({
     setProgress(0);
     setProgressStep("");
     try {
-      const body: Record<string, string | number> = {
+      const body: Record<string, string | number | boolean> = {
         home_team: homeTeam.trim(),
         away_team: awayTeam.trim(),
+        use_api_predictions: useApiPredictions,
       };
       const homeId = homeTeamOption?.id != null ? Number(homeTeamOption.id) : NaN;
       const awayId = awayTeamOption?.id != null ? Number(awayTeamOption.id) : NaN;
