@@ -64,18 +64,32 @@ export default function AuthCallbackPage() {
         setStatus("ok");
 
         let target: string;
+        const PENDING_COOKIE = "visifoot_pending_match";
         try {
-          const raw = sessionStorage.getItem("visifoot_pending_match");
-          if (raw) {
-            const parsed = JSON.parse(raw) as { home?: string; away?: string };
-            sessionStorage.removeItem("visifoot_pending_match");
-            if (parsed.home && parsed.away) {
-              target = getAppHref(
-                `/matches?home=${encodeURIComponent(parsed.home)}&away=${encodeURIComponent(parsed.away)}`
-              );
-              window.location.replace(target);
-              return;
+          let parsed: { home?: string; away?: string } | null = null;
+          const cookieMatch = document.cookie.match(new RegExp(`(?:^|; )${PENDING_COOKIE}=([^;]*)`));
+          if (cookieMatch) {
+            try {
+              parsed = JSON.parse(decodeURIComponent(cookieMatch[1])) as { home?: string; away?: string };
+              document.cookie = `${PENDING_COOKIE}=; path=/; max-age=0; domain=.deepfoot.io`;
+              document.cookie = `${PENDING_COOKIE}=; path=/; max-age=0`;
+            } catch {
+              // ignore
             }
+          }
+          if (!parsed) {
+            const raw = sessionStorage.getItem("visifoot_pending_match");
+            if (raw) {
+              parsed = JSON.parse(raw) as { home?: string; away?: string };
+              sessionStorage.removeItem("visifoot_pending_match");
+            }
+          }
+          if (parsed?.home && parsed?.away) {
+            target = getAppHref(
+              `/matches?home=${encodeURIComponent(parsed.home)}&away=${encodeURIComponent(parsed.away)}`
+            );
+            window.location.replace(target);
+            return;
           }
         } catch {
           // ignore

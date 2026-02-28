@@ -7,6 +7,22 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const PENDING_MATCH_KEY = "visifoot_pending_match";
 
+/** Cookie shared across deepfoot.io and app.deepfoot.io so callback can read pending match after OAuth redirect */
+const PENDING_MATCH_COOKIE = "visifoot_pending_match";
+const PENDING_MATCH_COOKIE_MAX_AGE = 60 * 10; // 10 min
+
+function setPendingMatchCookie(home: string, away: string) {
+  try {
+    const value = encodeURIComponent(JSON.stringify({ home, away }));
+    const domain = typeof window !== "undefined" && (window.location.hostname === "deepfoot.io" || window.location.hostname === "www.deepfoot.io")
+      ? "; domain=.deepfoot.io"
+      : "";
+    document.cookie = `${PENDING_MATCH_COOKIE}=${value}; path=/; max-age=${PENDING_MATCH_COOKIE_MAX_AGE}; SameSite=Lax${domain}`;
+  } catch {
+    // ignore
+  }
+}
+
 interface SignupModalProps {
   open: boolean;
   onClose: () => void;
@@ -63,6 +79,7 @@ export function SignupModal({ open, onClose, onSignIn, pendingMatch }: SignupMod
       if (pendingMatch?.home && pendingMatch?.away) {
         try {
           sessionStorage.setItem(PENDING_MATCH_KEY, JSON.stringify({ home: pendingMatch.home, away: pendingMatch.away }));
+          setPendingMatchCookie(pendingMatch.home, pendingMatch.away);
         } catch {
           // ignore
         }

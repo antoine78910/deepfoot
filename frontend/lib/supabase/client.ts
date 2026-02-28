@@ -16,7 +16,7 @@ function getSupabaseUrl(): string {
     return window.__SUPABASE_ENV__.url;
   }
   throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL. Add it to frontend/.env.local and restart the dev server (npm run dev)."
+    "Missing NEXT_PUBLIC_SUPABASE_URL. Copy frontend/.env.example to .env.local, add your Supabase project URL (Dashboard → Settings → API), then restart: npm run dev"
   );
 }
 
@@ -28,7 +28,7 @@ function getSupabaseAnonKey(): string {
     return window.__SUPABASE_ENV__.anonKey;
   }
   throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Add it to frontend/.env.local and restart the dev server (npm run dev)."
+    "Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Copy frontend/.env.example to .env.local, add your Supabase anon key (Dashboard → Settings → API), then restart: npm run dev"
   );
 }
 
