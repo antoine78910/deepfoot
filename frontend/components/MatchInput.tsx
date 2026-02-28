@@ -85,25 +85,25 @@ export function MatchInput({
     };
 
     if (homeTrim) {
-      fetch(`${API_URL}/teams?q=${encodeURIComponent(homeTrim)}&limit=10`)
+      fetch(`${API_URL}/teams?q=${encodeURIComponent(homeTrim)}&limit=20`)
         .then((res) => res.json())
         .then((data: { teams?: TeamOption[] }) => {
-          const list = (data.teams || []).filter((t: TeamOption) => t?.id != null && t?.crest);
+          const list = (data.teams || []).filter((t: TeamOption) => Boolean(t?.name));
           const found = list.find((t: TeamOption) => matchName(t, homeTrim)) ?? list[0];
           if (found) {
             setHomeTeam(found.name);
             setHomeTeamOption(found);
             setSelectedHomeTeam(found.name.trim() || null);
-            setSelectedHomeTeamId(found.id);
+            setSelectedHomeTeamId(found.id ?? null);
           }
         })
         .catch(() => {});
     }
     if (awayTrim) {
-      fetch(`${API_URL}/teams?q=${encodeURIComponent(awayTrim)}&limit=10`)
+      fetch(`${API_URL}/teams?q=${encodeURIComponent(awayTrim)}&limit=20`)
         .then((res) => res.json())
         .then((data: { teams?: TeamOption[] }) => {
-          const list = (data.teams || []).filter((t: TeamOption) => t?.id != null && t?.crest);
+          const list = (data.teams || []).filter((t: TeamOption) => Boolean(t?.name));
           const found = list.find((t: TeamOption) => matchName(t, awayTrim)) ?? list[0];
           if (found) {
             setAwayTeam(found.name);
@@ -299,7 +299,7 @@ export function MatchInput({
           suppressSuggestions={!!awayTeamOption}
         />
 
-        {(homeTeamOption || awayTeamOption) && (
+        {(homeTeamOption || awayTeamOption || (homeTeam.trim() && awayTeam.trim())) && (
           <div className="flex items-center justify-center gap-4 py-3 px-4 rounded-xl bg-dark-input/50 border border-dark-border">
             <div className="flex items-center gap-2 min-w-0">
               {homeTeamOption?.crest ? (
