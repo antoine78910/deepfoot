@@ -308,6 +308,7 @@ export function TeamAutocomplete({
       <div className="input-gradient-border">
         <input
           type="text"
+          name="team"
           placeholder={placeholder}
           value={query}
           onChange={handleInputChange}
@@ -315,6 +316,9 @@ export function TeamAutocomplete({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           aria-autocomplete="list"
           aria-expanded={open}
         />
