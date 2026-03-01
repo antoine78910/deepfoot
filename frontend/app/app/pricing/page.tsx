@@ -21,49 +21,9 @@ export default function PricingPage() {
         {t("pricing.accessSubtitle")}
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mt-8 sm:mt-10">
-        {/* Free */}
-        <div className="relative rounded-2xl bg-[#14141c] border border-zinc-600/60 p-5 sm:p-6 flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🆓</span>
-            <h2 className="text-xl font-bold text-white">{t("pricing.free")}</h2>
-          </div>
-          <div className="mt-4 flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-white">
-              {formatPrice(currencyConfig, 0)}
-            </span>
-            <span className="text-zinc-500 text-sm">{t("pricing.perMonth")}</span>
-          </div>
-          <p className="text-zinc-400 text-sm mt-1">{t("pricing.freeDesc")}</p>
-          <ul className="mt-6 space-y-3 flex-1">
-            <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
-              <span>{t("pricing.freeFeature1")}</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
-              <span>{t("pricing.freeFeatureReduced")}</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
-              <span>{t("pricing.freeFeatureKeyStats")}</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-red-400 mt-0.5 flex-shrink-0">✕</span>
-              <span className="text-zinc-500">{t("pricing.freeNoAI")}</span>
-            </li>
-          </ul>
-          {currentPlan === "free" ? (
-            <div className="mt-6 w-full py-3 px-4 rounded-xl font-medium text-center text-zinc-400 border border-zinc-600/60 bg-zinc-800/30">
-              {t("pricing.currentPlan")}
-            </div>
-          ) : (
-            <div className="mt-6 h-12" />
-          )}
-        </div>
-
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 mt-8 sm:mt-10">
         {/* Starter */}
-        <div className="relative rounded-2xl bg-[#14141c] border border-zinc-600/60 p-5 sm:p-6 flex flex-col">
+        <div className="relative rounded-2xl bg-[#14141c] border border-zinc-600/60 p-5 sm:p-6 flex flex-col transition-all duration-300">
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xl">⚡</span>
             <h2 className="text-xl font-bold text-white">{t("pricing.starter")}</h2>
@@ -102,7 +62,7 @@ export default function PricingPage() {
             onClick={() => {
               window.location.href = getWhopCheckoutUrl("starter", currencyConfig.currency);
             }}
-            className="mt-6 w-full py-3 px-4 rounded-xl font-medium text-white bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 transition disabled:opacity-50"
+            className="mt-6 w-full py-3 px-4 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:bg-[#00ffe8]/90 transition-all duration-300 disabled:opacity-50"
             disabled={currentPlan === "starter"}
           >
             {currentPlan === "starter"
@@ -112,8 +72,8 @@ export default function PricingPage() {
         </div>
 
         {/* Pro - Popular */}
-        <div className="relative rounded-2xl bg-[#14141c] border-2 border-emerald-500/70 p-5 sm:p-6 flex flex-col">
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 text-xs font-medium">
+        <div className="relative rounded-2xl bg-[#14141c] border-2 border-[#00ffe8]/60 p-5 sm:p-6 flex flex-col transition-all duration-300 shadow-[0_0_30px_-5px_rgba(0,255,232,0.25)] hover:shadow-[0_0_40px_-5px_rgba(0,255,232,0.35)]">
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-3 py-1 rounded-full bg-[#00ffe8]/20 border border-[#00ffe8]/50 text-[#00ffe8] text-xs font-medium">
             <span>★</span> <span>★</span> {t("pricing.popular")}
           </div>
           <div className="flex items-center gap-2 mt-2">
@@ -129,23 +89,23 @@ export default function PricingPage() {
           <p className="text-zinc-400 text-sm mt-1">{t("pricing.proDesc")}</p>
           <ul className="mt-6 space-y-3 flex-1">
             <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-[#00ffe8] mt-0.5 flex-shrink-0">✓</span>
               <span>{t("pricing.featureUnlimited")}</span>
             </li>
             <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-[#00ffe8] mt-0.5 flex-shrink-0">✓</span>
               <span>{t("pricing.featureFullAnalysis")}</span>
             </li>
             <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-[#00ffe8] mt-0.5 flex-shrink-0">✓</span>
               <span>{t("pricing.featureScenarios")}</span>
             </li>
             <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-[#00ffe8] mt-0.5 flex-shrink-0">✓</span>
               <span>{t("pricing.featureStats")}</span>
             </li>
             <li className="flex items-start gap-2 text-sm text-zinc-300">
-              <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
+              <span className="text-[#00ffe8] mt-0.5 flex-shrink-0">✓</span>
               <span>{t("pricing.featureNews")}</span>
             </li>
             <li className="flex items-start gap-2 text-sm text-zinc-300">
@@ -171,7 +131,7 @@ export default function PricingPage() {
         </div>
 
         {/* Lifetime - For life */}
-        <div className="relative rounded-2xl bg-[#14141c] border-2 border-amber-500/60 p-5 sm:p-6 flex flex-col">
+        <div className="relative rounded-2xl bg-[#14141c] border-2 border-amber-500/60 p-5 sm:p-6 flex flex-col transition-all duration-300 shadow-[0_0_30px_-5px_rgba(245,158,11,0.2)] hover:shadow-[0_0_45px_-5px_rgba(245,158,11,0.35)]">
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-400 text-xs font-medium">
             <span>∞</span> {t("pricing.forLife")}
           </div>
@@ -210,8 +170,8 @@ export default function PricingPage() {
             <li className="flex items-start gap-2 text-sm text-zinc-300">
               <span className="text-amber-400 mt-0.5 flex-shrink-0">✓</span>
               <span>
-                {t("pricing.lifetimeUnlimitedAI")}
-                <span className="ml-1 opacity-70" title="AI">💬</span>
+                <strong className="font-semibold text-amber-200/95">{t("pricing.lifetimeUnlimitedAI")}</strong>
+                <span className="ml-1" title="AI">💬</span>
               </span>
             </li>
           </ul>
@@ -220,7 +180,7 @@ export default function PricingPage() {
             onClick={() => {
               window.location.href = getWhopCheckoutUrl("lifetime", currencyConfig.currency);
             }}
-            className="mt-6 w-full py-3 px-4 rounded-xl font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 transition disabled:opacity-50"
+            className="mt-6 w-full py-3 px-4 rounded-xl font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 transition-all duration-300 disabled:opacity-50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.4)]"
             disabled={currentPlan === "lifetime"}
           >
             {currentPlan === "lifetime"
