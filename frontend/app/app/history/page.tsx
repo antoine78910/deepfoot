@@ -69,8 +69,13 @@ export default function HistoryPage() {
   }, []);
 
   const openAnalysis = (item: HistoryItem) => {
-    sessionStorage.setItem("visifoot_analysis", JSON.stringify(item.result));
-    router.push(`${basePath}/analysis`);
+    const params = new URLSearchParams({
+      team1: item.home_team,
+      team2: item.away_team,
+      fromHistory: "true",
+      predictionId: item.id,
+    });
+    router.push(`${basePath}/analyze?${params.toString()}`);
   };
 
   return (
