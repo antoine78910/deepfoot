@@ -118,6 +118,7 @@ def _load_match_context_api_football(
         get_fixtures_headtohead_multi_season,
         get_weighted_h2h_home_pct,
         guess_common_league_name,
+        get_fixture_by_id,
         get_fixture_statistics,
     )
     report("Resolving teams…", 5)
@@ -257,7 +258,7 @@ def _load_match_context_api_football(
         h2h_home_pct_override=h2h_weighted_pct,
     )
 
-    # Si pas de prochain match mais un dernier H2H terminé (FT) : score final + stats du match
+    # Si pas de prochain match : récupérer le dernier H2H via GET /fixtures?id= ; si status=FT → score + GET /fixtures/statistics
     match_over = False
     final_score_home: Any = None
     final_score_away: Any = None
@@ -265,35 +266,38 @@ def _load_match_context_api_football(
     if fixture_id is None and h2h_fixtures:
         last_h2h = h2h_fixtures[0]
         fix_last = last_h2h.get("fixture") or {}
-        status = (fix_last.get("status") or {}).get("short") if isinstance(fix_last.get("status"), dict) else str(fix_last.get("status") or "")
-        if status == "FT":
-            match_over = True
-            last_fid = fix_last.get("id")
-            teams_last = last_h2h.get("teams") or {}
-            f_home_id = (teams_last.get("home") or {}).get("id")
-            f_away_id = (teams_last.get("away") or {}).get("id")
-            goals_last = last_h2h.get("goals") or {}
-            g_h = goals_last.get("home")
-            g_a = goals_last.get("away")
-            if home_id == f_home_id:
-                final_score_home = g_h
-                final_score_away = g_a
-            else:
-                final_score_home = g_a
-                final_score_away = g_h
-            if last_fid and f_home_id is not None and f_away_id is not None:
-                stats_raw = get_fixture_statistics(last_fid, f_home_id, f_away_id)
-                if stats_raw and home_id != f_home_id:
-                    match_statistics = [
-                        {"type": s["type"], "home_value": s["away_value"], "away_value": s["home_value"]}
-                        for s in stats_raw
-                    ]
+        last_fid = fix_last.get("id")
+        if last_fid:
+            # 1) GET /fixtures?id={fixture_id} — résultat officiel (status, goals)
+            fixture_result = get_fixture_by_id(last_fid)
+            if fixture_result and (fixture_result.get("status_short") or "").strip() == "FT":
+                match_over = True
+                f_home_id = fixture_result.get("home_team_id")
+                f_away_id = fixture_result.get("away_team_id")
+                g_h = fixture_result.get("goals_home")
+                g_a = fixture_result.get("goals_away")
+                if home_id == f_home_id:
+                    final_score_home = g_h
+                    final_score_away = g_a
                 else:
-                    match_statistics = stats_raw
+                    final_score_home = g_a
+                    final_score_away = g_h
+                # 2) GET /fixtures/statistics?fixture={fixture_id} — stats du match
+                if f_home_id is not None and f_away_id is not None:
+                    stats_raw = get_fixture_statistics(last_fid, f_home_id, f_away_id)
+                    if stats_raw and home_id != f_home_id:
+                        match_statistics = [
+                            {"type": s["type"], "home_value": s["away_value"], "away_value": s["home_value"]}
+                            for s in stats_raw
+                        ]
+                    else:
+                        match_statistics = stats_raw
 
     return {
         "home_team": home_team,
         "away_team": away_team,
+        "home_team_id": home_id,
+        "away_team_id": away_id,
         "lambda_home": lambda_home,
         "lambda_away": lambda_away,
         "home_form": home_form,

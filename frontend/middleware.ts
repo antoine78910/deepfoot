@@ -41,9 +41,16 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/app")) {
     return NextResponse.next();
   }
-  // /analyse stays as-is so app subdomain serves the same analyse page at app..../analyse
+  // /analyse and /analyze: rewrite to /app/analyze so one page handles both URLs
   if (pathname === "/analyse" || pathname.startsWith("/analyse/")) {
-    return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = pathname === "/analyse" ? "/app/analyze" : `/app/analyze${pathname.slice(8)}`;
+    return NextResponse.rewrite(url);
+  }
+  if (pathname === "/analyze" || pathname.startsWith("/analyze/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname === "/analyze" ? "/app/analyze" : `/app/analyze${pathname.slice(8)}`;
+    return NextResponse.rewrite(url);
   }
   // Rewrite / → /app, /history → /app/history, etc.
   const rewritePath = pathname === "/" ? "/app" : `/app${pathname}`;

@@ -187,6 +187,8 @@ def _build_response(
         "final_score_home": ctx.get("final_score_home"),
         "final_score_away": ctx.get("final_score_away"),
         "match_statistics": ctx.get("match_statistics"),
+        "home_team_id": ctx.get("home_team_id"),
+        "away_team_id": ctx.get("away_team_id"),
     }
 
 

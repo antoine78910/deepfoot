@@ -41,6 +41,10 @@ function AnalyzeContent() {
       const away = team2.trim() || (typeof parsed?.away_team === "string" ? parsed.away_team.trim() : "");
       if (home && away) {
         const params = new URLSearchParams({ home_team: home, away_team: away });
+        const hid = parsed?.home_team_id;
+        const aid = parsed?.away_team_id;
+        if (typeof hid === "number" && !Number.isNaN(hid)) params.set("home_team_id", String(hid));
+        if (typeof aid === "number" && !Number.isNaN(aid)) params.set("away_team_id", String(aid));
         fetch(`${API_URL}/predict/match-result?${params}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((enrich) => {
@@ -49,10 +53,10 @@ function AnalyzeContent() {
                 prev
                   ? {
                       ...prev,
-                      match_over: enrich.match_over,
-                      final_score_home: enrich.final_score_home,
-                      final_score_away: enrich.final_score_away,
-                      match_statistics: enrich.match_statistics,
+                      match_over: enrich.match_over ?? prev.match_over,
+                      final_score_home: enrich.final_score_home ?? prev.final_score_home,
+                      final_score_away: enrich.final_score_away ?? prev.final_score_away,
+                      match_statistics: enrich.match_statistics ?? prev.match_statistics,
                     }
                   : prev
               );

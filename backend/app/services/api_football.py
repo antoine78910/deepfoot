@@ -823,6 +823,34 @@ def get_predictions(fixture_id: int) -> Optional[dict]:
     return raw[0]
 
 
+def get_fixture_by_id(fixture_id: int) -> Optional[dict]:
+    """
+    GET /fixtures?id={fixture_id} — résultat d'un match (status, goals, teams).
+    Quand status.short == "FT" → match terminé. Retourne { status_short, goals_home, goals_away, home_team_id, away_team_id } ou None.
+    """
+    if not _use_api():
+        return None
+    data = _get("/fixtures", params={"id": fixture_id})
+    raw = data.get("response") or []
+    if not raw:
+        return None
+    item = raw[0]
+    fixture = item.get("fixture") or {}
+    status = fixture.get("status")
+    status_short = (status.get("short") if isinstance(status, dict) else None) or str(status or "")
+    goals = item.get("goals") or {}
+    teams = item.get("teams") or {}
+    home_team = teams.get("home") or {}
+    away_team = teams.get("away") or {}
+    return {
+        "status_short": status_short,
+        "goals_home": goals.get("home"),
+        "goals_away": goals.get("away"),
+        "home_team_id": home_team.get("id"),
+        "away_team_id": away_team.get("id"),
+    }
+
+
 def get_fixture_statistics(
     fixture_id: int,
     home_team_id: int,

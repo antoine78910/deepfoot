@@ -45,6 +45,8 @@ class PredictResponse(BaseModel):
     venue: Optional[str] = None
     home_team_logo: Optional[str] = None
     away_team_logo: Optional[str] = None
+    home_team_id: Optional[int] = None
+    away_team_id: Optional[int] = None
 
     # Expected goals
     xg_home: float
