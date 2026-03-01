@@ -4,7 +4,7 @@ import queue
 import threading
 from typing import Callable, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.schemas.predict import (
@@ -253,6 +253,34 @@ def run_predict_with_progress(
 
     report("Done", 100)
     return _build_response(ctx, out, ai)
+
+
+@router.get("/match-result")
+def get_match_result(
+    home_team: str = Query(..., min_length=1),
+    away_team: str = Query(..., min_length=1),
+    home_team_id: Optional[int] = Query(None),
+    away_team_id: Optional[int] = Query(None),
+):
+    """
+    Returns match_over, final_score_*, match_statistics for the last H2H if the match is over.
+    Used to enrich displayed analysis (e.g. when opening from history) so score and stats show.
+    """
+    try:
+        ctx = load_match_context(
+            home_team.strip(),
+            away_team.strip(),
+            home_team_id=home_team_id,
+            away_team_id=away_team_id,
+        )
+        return {
+            "match_over": ctx.get("match_over"),
+            "final_score_home": ctx.get("final_score_home"),
+            "final_score_away": ctx.get("final_score_away"),
+            "match_statistics": ctx.get("match_statistics"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("", response_model=PredictResponse)

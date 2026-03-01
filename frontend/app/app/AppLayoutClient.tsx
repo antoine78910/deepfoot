@@ -181,23 +181,19 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
                 </li>
               );
             })}
+            <li>
+              <Link
+                href={`${basePath}/pricing`}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border border-amber-500/50 bg-[#15171c]/80 text-zinc-200 hover:bg-zinc-800/50 hover:border-amber-500/70 transition-colors"
+              >
+                <CreditCardIcon className="flex-shrink-0" />
+                <span className="flex-1">{t("nav.pricing")}</span>
+                <span className="text-xs font-medium uppercase tracking-wider px-2 py-1 rounded-md bg-amber-900/70 text-amber-200">
+                  {t("nav.upgrade")}
+                </span>
+              </Link>
+            </li>
           </ul>
-
-          <div className="mt-6">
-            <Link
-              href={`${basePath}/pricing`}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-            >
-              <CreditCardIcon className="flex-shrink-0" />
-              <span>{t("nav.pricing")}</span>
-            </Link>
-            <Link
-              href={`${basePath}/pricing`}
-              className="mt-2 block mx-3 py-2 rounded-lg text-center text-sm font-medium bg-amber-500/90 text-white hover:bg-amber-500"
-            >
-              {t("nav.upgrade")}
-            </Link>
-          </div>
 
           <div className="mt-6 px-3">
             <p className="flex items-center gap-2 text-xs text-zinc-500 mb-1">
