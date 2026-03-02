@@ -1,5 +1,5 @@
 # backend/app/api/me.py
-"""Endpoint /me : plan, usage, limite d'analyses ; POST /me/cancel-subscription pour annuler via Whop."""
+"""Endpoint /me : plan, usage, limite d'analyses ; POST /me/cancel-subscription pour annuler via Whop (at_period_end)."""
 import logging
 from fastapi import APIRouter, Header, HTTPException
 
@@ -15,6 +15,8 @@ from datetime import date, datetime, timezone
 
 router = APIRouter(tags=["me"])
 logger = logging.getLogger(__name__)
+
+CANCELLATION_MODE = "at_period_end"  # User keeps access until end of paid period (tuto Whop)
 
 
 @router.get("/me")
@@ -39,11 +41,128 @@ def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
     }
 
 
+def _get_user_email_from_supabase(admin, user_id: str) -> str | None:
+    """Récupère l'email de l'utilisateur depuis Supabase Auth (service role)."""
+    if not admin or not user_id:
+        return None
+    try:
+        r = admin.auth.admin.get_user_by_id(user_id)
+        if getattr(r, "user", None) and getattr(r.user, "email", None):
+            return (r.user.email or "").strip() or None
+    except Exception as e:
+        logger.debug("Could not get user email from Supabase auth: %s", e)
+    return None
+
+
+async def _whop_cancel_membership(membership_id: str, whop_key: str) -> bool:
+    """Annule un membership Whop (at_period_end). Retourne True si succès."""
+    import httpx
+    url = f"https://api.whop.com/api/v1/memberships/{membership_id}/cancel"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {whop_key}"},
+                json={"cancellation_mode": CANCELLATION_MODE},
+                timeout=15.0,
+            )
+        if resp.status_code < 400:
+            return True
+        logger.warning("Whop cancel membership %s: %s %s", membership_id, resp.status_code, resp.text)
+    except httpx.HTTPError as e:
+        logger.exception("Whop cancel request failed: %s", e)
+    return False
+
+
+async def _whop_find_and_cancel_by_email(email: str, whop_key: str, company_id: str) -> bool:
+    """
+    Trouve le membre Whop par email, puis son membership actif, et l'annule (at_period_end).
+    Suit le tuto: list members → find by email → list memberships active → cancel.
+    """
+    if not email or not whop_key or not company_id:
+        return False
+    import httpx
+    headers = {"Authorization": f"Bearer {whop_key}"}
+    email_lower = email.strip().lower()
+
+    # 1) List members (Whop v5 company members ou v2 members)
+    member_id = None
+    for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{base}/company/members",
+                    params={"company_id": company_id, "per": 100},
+                    headers=headers,
+                    timeout=15.0,
+                )
+            if r.status_code >= 400:
+                continue
+            data = r.json()
+            members = data.get("data") if isinstance(data.get("data"), list) else data.get("members") or []
+            if not isinstance(members, list):
+                members = []
+            for m in members:
+                if not isinstance(m, dict):
+                    continue
+                u = m.get("user") or m.get("user_id")
+                if isinstance(u, dict):
+                    em = (u.get("email") or "").strip().lower()
+                else:
+                    em = (m.get("email") or "").strip().lower()
+                if em == email_lower:
+                    member_id = m.get("id") or m.get("member_id")
+                    break
+            if member_id:
+                break
+        except Exception as e:
+            logger.debug("Whop list members %s: %s", base, e)
+    if not member_id:
+        logger.warning("Whop: no member found for email %s", email[:3] + "***")
+        return False
+
+    # 2) List active memberships for this member
+    membership_id = None
+    for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{base}/company/memberships",
+                    params={"company_id": company_id, "member_id": member_id, "status": "active", "per": 10},
+                    headers=headers,
+                    timeout=15.0,
+                )
+            if r.status_code >= 400:
+                continue
+            data = r.json()
+            list_ms = data.get("data") if isinstance(data.get("data"), list) else data.get("memberships") or []
+            if not isinstance(list_ms, list):
+                list_ms = []
+            for ms in list_ms:
+                if isinstance(ms, dict) and (ms.get("status") or "").lower() == "active":
+                    membership_id = ms.get("id") or ms.get("membership_id")
+                    break
+            if not list_ms and isinstance(data.get("data"), list):
+                list_ms = data["data"]
+            if not membership_id and list_ms:
+                membership_id = list_ms[0].get("id") or list_ms[0].get("membership_id") if isinstance(list_ms[0], dict) else None
+            if membership_id:
+                break
+        except Exception as e:
+            logger.debug("Whop list memberships %s: %s", base, e)
+    if not membership_id:
+        logger.warning("Whop: no active membership for member %s", member_id)
+        return False
+
+    return await _whop_cancel_membership(membership_id, whop_key)
+
+
 @router.post("/me/cancel-subscription")
 async def cancel_subscription(x_user_id: str | None = Header(None, alias="X-User-Id")):
     """
-    Annule l'abonnement Whop de l'utilisateur (immédiat) et repasse le plan en free.
-    Nécessite X-User-Id. Le profil doit avoir whop_membership_id (rempli au paiement / sync).
+    Annule l'abonnement Whop (at_period_end: l'utilisateur garde l'accès jusqu'à la fin de la période)
+    et repasse le plan en free dans notre DB.
+    Si whop_membership_id est présent → annule ce membership. Sinon, tente par email (Whop company members).
     """
     user_id = (x_user_id or "").strip()
     if not user_id:
@@ -70,28 +189,21 @@ async def cancel_subscription(x_user_id: str | None = Header(None, alias="X-User
     row = r.data[0]
     membership_id = (row.get("whop_membership_id") or "").strip()
 
+    settings = get_settings()
+    whop_key = (settings.whop_api_key or "").strip()
+    company_id = (settings.whop_company_id or "").strip()
     cancelled_via_whop = False
-    if membership_id:
-        settings = get_settings()
-        whop_key = (settings.whop_api_key or "").strip()
-        if whop_key:
-            import httpx
-            url = f"https://api.whop.com/api/v1/memberships/{membership_id}/cancel"
-            try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.post(
-                        url,
-                        headers={"Authorization": f"Bearer {whop_key}"},
-                        json={"cancellation_mode": "immediate"},
-                        timeout=15.0,
-                    )
-                if resp.status_code < 400:
-                    cancelled_via_whop = True
-                    logger.info("Cancel subscription: user %s cancelled via Whop API", user_id)
-                else:
-                    logger.warning("Whop cancel membership %s: %s %s", membership_id, resp.status_code, resp.text)
-            except httpx.HTTPError as e:
-                logger.exception("Whop cancel request failed: %s", e)
+
+    if membership_id and whop_key:
+        cancelled_via_whop = await _whop_cancel_membership(membership_id, whop_key)
+        if cancelled_via_whop:
+            logger.info("Cancel subscription: user %s cancelled via Whop API (membership_id)", user_id)
+    elif not membership_id and whop_key and company_id:
+        email = _get_user_email_from_supabase(admin, user_id)
+        if email:
+            cancelled_via_whop = await _whop_find_and_cancel_by_email(email, whop_key, company_id)
+            if cancelled_via_whop:
+                logger.info("Cancel subscription: user %s cancelled via Whop API (by email)", user_id)
 
     admin.table("profiles").upsert(
         {"id": user_id, "plan": "free", "whop_membership_id": None},

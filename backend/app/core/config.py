@@ -25,8 +25,10 @@ class Settings(BaseSettings):
     datafast_api_key: str = ""
     # Whop — secret du webhook pour vérifier la signature (ws_...)
     whop_webhook_secret: str = ""
-    # Whop — API key (lecture paiement / resync par payment_id)
+    # Whop — API key (lecture paiement / resync par payment_id, annulation)
     whop_api_key: str = ""
+    # Whop — Company ID (biz_xxx) pour annulation par email si pas de membership_id
+    whop_company_id: str = ""
 
     @model_validator(mode="after")
     def fill_supabase_from_next_public(self: "Settings") -> "Settings":

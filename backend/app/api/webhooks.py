@@ -93,14 +93,29 @@ def _extract_whop_payment(body: dict, fallback_visitor_id: str | None = None) ->
     if not isinstance(payload, dict):
         return None
 
-    # Amount: might be in cents (integer) or units (float)
-    amount_raw = _pick_first(payload, ("amount", "amount_total", "total", "subtotal", "amount_after_fees"))
+    # Amount: prefer actual amount paid (after coupon) — Whop uses final_amount (cents)
+    amount_raw = _pick_first(
+        payload,
+        (
+            "final_amount",       # Whop: final amount paid in cents (after discount)
+            "amount_paid",
+            "amount_captured",
+            "total_paid",
+            "charged_amount",
+            "amount",
+            "amount_total",
+            "total",
+            "subtotal",
+            "amount_after_fees",
+        ),
+    )
     if amount_raw is None:
         return None
     try:
         amount = float(amount_raw)
-        if amount > 1000 and amount == int(amount):
-            amount = amount / 100  # assume cents
+        # Whop sends amounts in cents (integer); convert to units. Decimals (0.9, 9.99) = already dollars.
+        if amount == int(amount):
+            amount = amount / 100  # whole number = cents
     except (TypeError, ValueError):
         return None
 

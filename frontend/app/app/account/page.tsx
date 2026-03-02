@@ -77,6 +77,7 @@ export default function AccountPage() {
   const { config: currencyConfig, isLoading: currencyLoading } = useGeoCurrency();
   const [user, setUser] = useState<ReturnType<typeof getUserFromStorage>>(null);
   const [unsubscribeModalOpen, setUnsubscribeModalOpen] = useState(false);
+  const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
   const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -165,6 +166,7 @@ export default function AccountPage() {
         setUser({ ...u, plan: "free" });
       }
       setUnsubscribeModalOpen(false);
+      setUnsubscribeSuccessMessage(t("account.unsubscribedSuccess"));
       if (data?.cancelled_via_whop === false) {
         alert(t("account.planSetFreeCancelWhop"));
       }
@@ -177,6 +179,22 @@ export default function AccountPage() {
     <div className="p-4 sm:p-8 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-white">{t("account.title")}</h1>
       <p className="text-zinc-500 mt-1">{t("account.subtitle")}</p>
+
+      {unsubscribeSuccessMessage && (
+        <div className="mt-6 rounded-xl bg-emerald-500/20 border border-emerald-500/50 px-4 py-3 text-emerald-200 flex items-center justify-between gap-3">
+          <span>{unsubscribeSuccessMessage}</span>
+          <button
+            type="button"
+            onClick={() => setUnsubscribeSuccessMessage(null)}
+            className="p-1 rounded-lg text-emerald-300 hover:text-white hover:bg-emerald-500/30 transition"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Personal information */}
       <div className="mt-8 rounded-2xl bg-dark-card border border-dark-border p-6">
@@ -338,7 +356,11 @@ export default function AccountPage() {
           </Link>
           <button
             type="button"
-            onClick={() => setUnsubscribeModalOpen(true)}
+            onClick={() => {
+              if (!window.confirm(t("account.unsubscribeConfirmMessage"))) return;
+              setUnsubscribeSuccessMessage(null);
+              setUnsubscribeModalOpen(true);
+            }}
             className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-red-400 hover:text-red-300 text-sm font-medium transition"
           >
             {t("account.unsubscribe")}
