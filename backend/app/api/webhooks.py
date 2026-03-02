@@ -84,6 +84,81 @@ def _is_payment_succeeded_event(event: str) -> bool:
     return ("payment" in normalized) and ("succeeded" in normalized)
 
 
+def _is_revoke_access_event(event: str) -> bool:
+    """Events where the user loses access: subscription no longer active or payment failed."""
+    if not event:
+        return False
+    normalized = event.replace("-", "_").replace(".", "_")
+    if "payment" in normalized and "failed" in normalized:
+        return True
+    if "membership" in normalized and (
+        "invalid" in normalized or "cancel" in normalized or "expir" in normalized or "went_invalid" in normalized
+    ):
+        return True
+    return False
+
+
+def _extract_email_and_membership_from_body(body: dict) -> tuple[str | None, str | None]:
+    """Extract (email, membership_id) from any Whop payload (payment or membership)."""
+    data = body.get("data")
+    obj = data.get("object") if isinstance(data, dict) else body
+    if not isinstance(obj, dict):
+        obj = body
+    email = None
+    member = _pick_first(obj, ("member", "user")) or {}
+    if isinstance(member, dict):
+        email = (_pick_first(member, ("email", "email_address")) or "").strip()
+    if not email:
+        email = (_pick_first(obj, ("user_email", "email", "email_address")) or "").strip()
+    membership_id = (_pick_first(obj, ("id", "membership_id")) or "").strip() or None
+    if not membership_id and isinstance(obj.get("membership"), dict):
+        membership_id = (_pick_first(obj["membership"], ("id", "membership_id")) or "").strip() or None
+    return (email or None, membership_id)
+
+
+def _set_supabase_plan_to_free(email: str | None = None, membership_id: str | None = None) -> bool:
+    """Set profiles.plan to free (and clear whop_membership_id) by email or membership_id. Returns True if updated."""
+    from app.core.config import get_settings
+    settings = get_settings()
+    url = (settings.supabase_url or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL") or "").strip()
+    role_key = (settings.supabase_service_role_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+    if not url or not role_key:
+        logger.warning("Whop webhook: missing Supabase URL or SERVICE_ROLE_KEY, cannot set plan to free")
+        return False
+    try:
+        from supabase import create_client
+        admin = create_client(url, role_key)
+        if membership_id:
+            r = admin.table("profiles").select("id").eq("whop_membership_id", membership_id).execute()
+            if r.data and len(r.data) > 0:
+                user_id = r.data[0].get("id")
+                if user_id:
+                    admin.table("profiles").upsert(
+                        {"id": user_id, "plan": "free", "whop_membership_id": None},
+                        on_conflict="id",
+                    ).execute()
+                    logger.info("Whop webhook: set plan=free for user %s (membership_id=%s)", user_id, membership_id[:12] + "...")
+                    return True
+        if email:
+            r = admin.auth.admin.list_users(page=1, per_page=1000)
+            users = getattr(r, "users", []) if not isinstance(r, list) else r
+            for u in users:
+                em = getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)
+                if em and str(em).lower().strip() == email.lower().strip():
+                    user_id = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
+                    if user_id:
+                        admin.table("profiles").upsert(
+                            {"id": user_id, "plan": "free", "whop_membership_id": None},
+                            on_conflict="id",
+                        ).execute()
+                        logger.info("Whop webhook: set plan=free for user %s (email=%s...)", user_id, email[:8])
+                        return True
+        return False
+    except Exception as e:
+        logger.warning("Whop webhook: could not set plan to free: %s", e)
+        return False
+
+
 def _extract_whop_payment(body: dict, fallback_visitor_id: str | None = None) -> dict | None:
     """
     Extract amount (float), currency (str), transaction_id (str), datafast_visitor_id (str | None)
@@ -330,6 +405,16 @@ async def whop_webhook(request: Request):
             )
 
     event = _extract_event_name(body)
+
+    # Abo inactif ou paiement échoué → passer le plan en free
+    if _is_revoke_access_event(event):
+        email, membership_id = _extract_email_and_membership_from_body(body)
+        if email or membership_id:
+            updated = _set_supabase_plan_to_free(email=email, membership_id=membership_id)
+            logger.info("Whop webhook: revoke event=%s plan set to free=%s", event, updated)
+        else:
+            logger.warning("Whop webhook: revoke event=%s but no email/membership_id in payload", event)
+        return {"ok": True, "event": event, "plan_set_to_free": bool(email or membership_id)}
 
     if not _is_payment_succeeded_event(event):
         logger.info("Whop webhook: ignored event=%s", event or "unknown")

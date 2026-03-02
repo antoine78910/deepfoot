@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getUserFromStorage, setUserInStorage } from "@/lib/auth";
+import { getUserFromStorage, setUserInStorage, type PlanId } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
 import { formatPrice } from "@/lib/geoCurrency";
@@ -160,14 +160,16 @@ export default function AccountPage() {
         return;
       }
       const data = await res.json().catch(() => ({}));
+      const newPlan = (data?.plan && typeof data.plan === "string") ? data.plan : "free";
       const u = getUserFromStorage();
       if (u && u.id === user.id) {
-        setUserInStorage({ ...u, plan: "free" });
-        setUser({ ...u, plan: "free" });
+        setUserInStorage({ ...u, plan: newPlan as PlanId });
+        setUser({ ...u, plan: newPlan as PlanId });
       }
       setUnsubscribeModalOpen(false);
-      setUnsubscribeSuccessMessage(t("account.unsubscribedSuccess"));
-      if (data?.cancelled_via_whop === false) {
+      if (data?.cancelled_via_whop === true) {
+        setUnsubscribeSuccessMessage(t("account.unsubscribedSuccess"));
+      } else {
         alert(t("account.planSetFreeCancelWhop"));
       }
     } catch {

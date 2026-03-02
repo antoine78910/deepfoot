@@ -173,7 +173,7 @@ async def cancel_subscription(x_user_id: str | None = Header(None, alias="X-User
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
     try:
-        r = admin.table("profiles").select("whop_membership_id").eq("id", user_id).execute()
+        r = admin.table("profiles").select("plan, whop_membership_id").eq("id", user_id).execute()
     except Exception as e:
         msg = str(e).lower()
         code = getattr(e, "code", None) or (e.args[0].get("code") if e.args and isinstance(e.args[0], dict) else None)
@@ -205,13 +205,15 @@ async def cancel_subscription(x_user_id: str | None = Header(None, alias="X-User
             if cancelled_via_whop:
                 logger.info("Cancel subscription: user %s cancelled via Whop API (by email)", user_id)
 
-    admin.table("profiles").upsert(
-        {"id": user_id, "plan": "free", "whop_membership_id": None},
-        on_conflict="id",
-    ).execute()
-    logger.info("Cancel subscription: user %s plan set to free", user_id)
-    return {
-        "ok": True,
-        "plan": "free",
-        "cancelled_via_whop": cancelled_via_whop,
-    }
+    # Ne passer le plan en free qu si l'annulation Whop a réellement réussi (évite de downgrader par erreur)
+    if cancelled_via_whop:
+        admin.table("profiles").upsert(
+            {"id": user_id, "plan": "free", "whop_membership_id": None},
+            on_conflict="id",
+        ).execute()
+        logger.info("Cancel subscription: user %s plan set to free", user_id)
+        return {"ok": True, "plan": "free", "cancelled_via_whop": True}
+    # Annulation Whop impossible (pas de membership_id, ou API / cancel-by-email a échoué) : on ne touche pas au plan
+    logger.info("Cancel subscription: user %s — Whop cancel not done, plan unchanged", user_id)
+    current_plan = (row.get("plan") or "free").strip() or "free"
+    return {"ok": True, "plan": current_plan, "cancelled_via_whop": False}
