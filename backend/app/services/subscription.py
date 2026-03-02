@@ -5,7 +5,7 @@ Sans Supabase configuré, on autorise toujours (mode démo).
 """
 from datetime import date, timezone
 from app.core.config import get_settings
-from app.core.supabase_client import get_supabase
+from app.core.supabase_client import get_supabase, get_supabase_admin
 
 # Plans reconnus : free, starter, pro, lifetime (premium mappé sur pro)
 PLAN_FREE = "free"
@@ -34,10 +34,11 @@ def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None]:
     """
     Récupère plan normalisé (free|starter|pro|lifetime), analyses_used_today, last_analysis_date.
     Si pas de ligne profile ou user_id vide, considère free avec 0 usage.
+    Utilise le client service_role si dispo (RLS bloque la clé anon sans JWT).
     """
     if not user_id or not _use_supabase():
         return (PLAN_FREE, 0, None)
-    supabase = get_supabase()
+    supabase = get_supabase_admin() or get_supabase()
     r = supabase.table("profiles").select("plan, analyses_used_today, last_analysis_date").eq("id", user_id).execute()
     if not r.data or len(r.data) == 0:
         return (PLAN_FREE, 0, None)
@@ -98,11 +99,11 @@ def consume_analysis(user_id: str) -> None:
     if not user_id or not _use_supabase():
         return
     today = date.today(timezone.utc).isoformat()
-    supabase = get_supabase()
     plan, used, last = get_plan_and_usage(user_id)
     used = reset_if_new_day(used, last, date.today(timezone.utc))
     new_used = used + 1
 
+    supabase = get_supabase_admin() or get_supabase()
     supabase.table("profiles").upsert({
         "id": user_id,
         "analyses_used_today": new_used,
