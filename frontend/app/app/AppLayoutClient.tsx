@@ -333,23 +333,39 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
               <BarChartIcon className="w-4 h-4" />
               {t("nav.todayAnalyses")}
             </p>
-            <p className={`text-lg font-bold ${analysesLimit === 0 || (analysesLimit == null && (user?.plan ?? "free") === "free") ? "text-red-400" : "text-white"}`}>
-              {(user?.plan ?? "free") === "free" ? "0/0" : `${analysesUsed}/${analysesLimit == null ? "∞" : analysesLimit}`}
-            </p>
-            <div className="h-1.5 bg-zinc-800 rounded-full mt-1 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${analysesLimit === 0 || (analysesLimit == null && (user?.plan ?? "free") === "free") ? "bg-red-500" : "bg-accent-green"}`}
-                style={{ width: `${analysesLimit === 0 ? 100 : analysesLimit != null && analysesLimit > 0 ? Math.min(100, (analysesUsed / analysesLimit) * 100) : (user?.plan ?? "free") === "free" ? 100 : 0}%` }}
-              />
-            </div>
-            {(analysesLimit === 0 || ((user?.plan ?? "free") === "free" && analysesLimit == null)) && (
-              <p className="text-xs text-zinc-400 mt-2">
-                {t("nav.limitReached")} •{" "}
-                <Link href="/pricing" className="text-[#00ffe8] hover:underline">
-                  {t("nav.upgradeForMore")}
-                </Link>
-              </p>
-            )}
+            {(() => {
+              const plan = user?.plan ?? "free";
+              const effectiveLimit = plan === "starter" && analysesLimit == null ? 1 : analysesLimit;
+              const limitNum = effectiveLimit != null ? effectiveLimit : (plan === "free" ? 0 : null);
+              const isOverLimit = plan === "free" ? true : (effectiveLimit != null && analysesUsed >= effectiveLimit);
+              const displayLimit = plan === "free" ? "0" : (effectiveLimit == null ? "∞" : String(effectiveLimit));
+              return (
+                <>
+                  <p className={`text-lg font-bold ${isOverLimit ? "text-red-400" : "text-white"}`}>
+                    {plan === "free" ? "0/0" : `${analysesUsed}/${displayLimit}`}
+                  </p>
+                  <div className="h-1.5 bg-zinc-800 rounded-full mt-1 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${isOverLimit ? "bg-red-500" : "bg-accent-green"}`}
+                      style={{ width: `${plan === "free" ? 100 : limitNum != null && limitNum > 0 ? Math.min(100, (analysesUsed / limitNum) * 100) : 0}%` }}
+                    />
+                  </div>
+                </>
+              );
+            })()}
+            {(() => {
+              const plan = user?.plan ?? "free";
+              const effectiveLimit = plan === "starter" && analysesLimit == null ? 1 : analysesLimit;
+              const isLimitReached = plan === "free" || (effectiveLimit != null && analysesUsed >= effectiveLimit);
+              return isLimitReached ? (
+                <p className="text-xs text-zinc-400 mt-2">
+                  {t("nav.limitReached")} •{" "}
+                  <Link href="/pricing" className="text-[#00ffe8] hover:underline">
+                    {t("nav.upgradeForMore")}
+                  </Link>
+                </p>
+              ) : null;
+            })()}
           </div>
         </nav>
 
@@ -371,10 +387,10 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
                 <p className="text-sm font-medium text-white truncate">
                   {user?.displayName ?? user?.email ?? "—"}
                 </p>
-                <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
                   {user?.plan && user.plan !== "free" ? (
                     <>
-                      <PlanIcon plan={user.plan} />
+                      <PlanIcon plan={user.plan} className="w-3 h-3 flex-shrink-0" />
                       {t(PLAN_KEYS[user.plan])}
                     </>
                   ) : (

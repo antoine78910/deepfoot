@@ -71,7 +71,7 @@ function PricingPage() {
       )}
 
       {currentPlan !== "lifetime" && (
-        <div className={`grid gap-4 sm:gap-4 mt-8 sm:mt-10 ${currentPlan === "pro" ? "grid-cols-1 max-w-md mx-auto" : currentPlan === "starter" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4 mt-8 sm:mt-10 max-w-4xl mx-auto">
         {/* Starter - only when user is free */}
         {currentPlan === "free" && (
         <div className="relative rounded-2xl bg-[#14141c]/70 border border-zinc-600/50 p-5 sm:p-5 flex flex-col transition-all duration-300 backdrop-blur-sm">
@@ -185,8 +185,8 @@ function PricingPage() {
         </div>
         )}
 
-        {/* Lifetime - For life */}
-        <div className="relative rounded-2xl bg-[#14141c]/70 border-2 border-amber-500/60 p-5 sm:p-5 flex flex-col transition-all duration-300 backdrop-blur-sm shadow-[0_0_30px_-5px_rgba(245,158,11,0.2)] hover:shadow-[0_0_45px_-5px_rgba(245,158,11,0.35)]">
+        {/* Lifetime - For life (centered when alone, e.g. user is pro) */}
+        <div className={`relative rounded-2xl bg-[#14141c]/70 border-2 border-amber-500/60 p-5 sm:p-5 flex flex-col transition-all duration-300 backdrop-blur-sm shadow-[0_0_30px_-5px_rgba(245,158,11,0.2)] hover:shadow-[0_0_45px_-5px_rgba(245,158,11,0.35)] ${currentPlan === "pro" ? "sm:col-start-2" : ""}`}>
           <div className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-400 text-xs font-medium">
             <span className="w-3.5 h-3.5 flex-shrink-0 inline-block" style={{ color: "currentColor" }}>
               <InfinityIcon className="w-full h-full" />
