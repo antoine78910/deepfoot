@@ -18,18 +18,33 @@ const BULLET_ITEMS: { key: "unlockModal1.featureProbableScore" | "unlockModal1.f
 const STAGGER_DELAY_MS = 90;
 const ANIMATION_DURATION_MS = 450;
 
+/** Format ISO or date string for display (e.g. "15 Mar 2025, 20:00") */
+function formatMatchDate(raw: string): string {
+  try {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw;
+    return d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return raw;
+  }
+}
+
 export function UnlockFullAnalysisModal({
   open,
   onClose,
   onUnlockClick,
   matchLabel,
   matchCountdown,
+  matchDate,
 }: {
   open: boolean;
   onClose: () => void;
   onUnlockClick: () => void;
   matchLabel?: string;
+  /** Ex: "3j 16h" (optionnel) */
   matchCountdown?: string;
+  /** Date/heure du match (ex: "15 Mar 2025, 20:00" ou chaîne brute) */
+  matchDate?: string | null;
 }) {
   const { t } = useLanguage();
   const [visibleCount, setVisibleCount] = useState(0);
@@ -129,27 +144,29 @@ export function UnlockFullAnalysisModal({
             </ul>
           </div>
 
-          {/* Match countdown block — orange/amber style */}
-          {(matchLabel || matchCountdown) && (
+          {/* Match start block — orange/amber style */}
+          {(matchLabel || matchDate || matchCountdown) && (
             <div className="mt-4 rounded-xl px-4 py-3.5 flex items-center gap-3 bg-[#381F1A] border border-amber-500/30 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]">
               <Clock className="w-5 h-5 flex-shrink-0 text-amber-400" strokeWidth={2} aria-hidden />
-              <p className="text-white text-sm font-medium">
-                {matchLabel ?? "Match"}
-                {matchCountdown ? (
-                  <> {t("unlockModal1.matchStartsIn")} <span className="font-semibold text-amber-200">{matchCountdown}</span></>
-                ) : null}
-              </p>
+              <div className="min-w-0">
+                {matchLabel && <p className="text-white text-sm font-medium truncate">{matchLabel}</p>}
+                {(matchDate || matchCountdown) && (
+                  <p className="text-amber-200/95 text-sm mt-0.5">
+                    {matchDate ? (
+                      <>Starts: <span className="font-semibold text-amber-200">{formatMatchDate(matchDate)}</span></>
+                    ) : (
+                      <>{t("unlockModal1.matchStartsIn")} <span className="font-semibold text-amber-200">{matchCountdown}</span></>
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
           <button
             type="button"
             onClick={onUnlockClick}
-            className="mt-6 w-full py-3.5 px-4 rounded-xl font-semibold text-[#0d0d12] transition-all flex items-center justify-center gap-2 hover:opacity-95 hover:shadow-lg"
-            style={{
-              background: `linear-gradient(135deg, ${ACCENT} 0%, #5EC2A0 100%)`,
-              boxShadow: `0 4px 20px -2px ${ACCENT}40`,
-            }}
+            className="mt-6 w-full py-3.5 px-4 rounded-xl font-semibold text-[#0d0d12] transition-all duration-300 flex items-center justify-center gap-2 bg-[#00ffe8] hover:bg-[#00ffe8]/95 hover:shadow-[0_0_18px_4px_rgba(0,255,232,0.45)]"
           >
             <span aria-hidden>🏆</span>
             {t("unlockModal1.cta")}

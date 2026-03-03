@@ -57,6 +57,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
     if user_id and admin and whop_key and company_id:
         email = _get_user_email_from_supabase(admin, user_id)
         if email:
+            logger.info("me: syncing plan from Whop for user_id=%s email=%s***", _mask_user_id(user_id), (email or "")[:4])
             whop_plan, membership_id = await _whop_get_plan_for_email(email, whop_key, company_id)
             if whop_plan and membership_id:
                 plan_from_db, _, _ = get_plan_and_usage(user_id)
@@ -213,10 +214,22 @@ async def _whop_find_and_cancel_by_email(email: str, whop_key: str, company_id: 
     return await _whop_cancel_membership(membership_id, whop_key)
 
 
+def _extract_members_list(data: dict, base: str) -> list:
+    """Extrait la liste des membres depuis la réponse Whop (v5 ou v2)."""
+    raw = data.get("data") or data.get("members") or []
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict) and "data" in raw:
+        d = raw.get("data")
+        return d if isinstance(d, list) else []
+    return []
+
+
 async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -> tuple[str | None, str | None]:
     """
     Trouve le membre Whop par email et son membership actif ; retourne (app_plan, membership_id).
     Permet de resynchroniser le plan (sync-plan) sans annuler.
+    Pagination : on parcourt jusqu'à 5 pages (500 membres) pour trouver l'email.
     """
     if not email or not whop_key or not company_id:
         return (None, None)
@@ -225,36 +238,49 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
     email_lower = email.strip().lower()
     member_id = None
     for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
-        try:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(
-                    f"{base}/company/members",
-                    params={"company_id": company_id, "per": 100},
-                    headers=headers,
-                    timeout=15.0,
-                )
-            if r.status_code >= 400:
-                continue
-            data = r.json()
-            members = data.get("data") if isinstance(data.get("data"), list) else data.get("members") or []
-            if not isinstance(members, list):
-                members = []
-            for m in members:
-                if not isinstance(m, dict):
-                    continue
-                u = m.get("user") or m.get("user_id")
-                if isinstance(u, dict):
-                    em = (u.get("email") or "").strip().lower()
-                else:
-                    em = (m.get("email") or "").strip().lower()
-                if em == email_lower:
-                    member_id = m.get("id") or m.get("member_id")
+        for page in range(1, 6):  # pages 1..5
+            try:
+                async with httpx.AsyncClient() as client:
+                    r = await client.get(
+                        f"{base}/company/members",
+                        params={"company_id": company_id, "per": 100, "page": page},
+                        headers=headers,
+                        timeout=15.0,
+                    )
+                if r.status_code == 401:
+                    logger.warning("Whop API: 401 Unauthorized (check WHOP_API_KEY)")
                     break
-            if member_id:
-                break
-        except Exception as e:
-            logger.debug("Whop list members %s: %s", base, e)
+                if r.status_code == 403:
+                    logger.warning("Whop API: 403 Forbidden (check company_id or API scope)")
+                    break
+                if r.status_code >= 400:
+                    continue
+                data = r.json()
+                members = _extract_members_list(data, base)
+                if not members and page == 1:
+                    logger.info("Whop: company members list empty (company_id=%s)", company_id[:12] + "...")
+                for m in members:
+                    if not isinstance(m, dict):
+                        continue
+                    u = m.get("user") or m.get("user_id")
+                    if isinstance(u, dict):
+                        em = (u.get("email") or "").strip().lower()
+                    else:
+                        em = (m.get("email") or "").strip().lower()
+                    if em == email_lower:
+                        member_id = m.get("id") or m.get("member_id")
+                        break
+                if member_id:
+                    break
+                # Si moins de 100 résultats, pas de page suivante
+                if len(members) < 100:
+                    break
+            except Exception as e:
+                logger.warning("Whop list members %s page %s: %s", base, page, e)
+        if member_id:
+            break
     if not member_id:
+        logger.info("Whop: no member found for email %s (tried v5 and v2, paginated)", email_lower[:3] + "***")
         return (None, None)
 
     membership_id = None

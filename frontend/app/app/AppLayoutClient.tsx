@@ -182,9 +182,25 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
         if (data && typeof data === "object") {
           setAnalysesUsed(Number(data.analyses_used_today) || 0);
           setAnalysesLimit(data.analyses_limit !== undefined ? data.analyses_limit : null);
-          if (data.plan && uid) {
+          let planToSet = data.plan as PlanId | undefined;
+          if (data.plan === "free" && uid) {
+            try {
+              const syncRes = await fetch(`${API_URL}/me/sync-plan`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-User-Id": uid },
+                signal: ac.signal,
+              });
+              const syncData = syncRes.ok ? (await syncRes.json()) : null;
+              if (syncData && typeof syncData === "object" && syncData.updated && syncData.plan) {
+                planToSet = syncData.plan as PlanId;
+              }
+            } catch {
+              // ignore sync-plan errors
+            }
+          }
+          if (planToSet && uid) {
             const u = getUserFromStorage();
-            const newPlan = data.plan as PlanId;
+            const newPlan = planToSet;
             if (u && (u.plan !== newPlan || u.id !== uid)) {
               setUserInStorage({ ...u, id: uid, plan: newPlan });
               setUser({ ...u, id: uid, plan: newPlan });

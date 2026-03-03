@@ -271,7 +271,7 @@ export function AnalysisResult({ result }: { result: Result }) {
 
   /** Overlay 15% + CTA (comme la ref: après le titre Exact probabilities) */
   const exactProbabilitiesOverlay = () => (
-    <div className="absolute inset-0 flex items-center justify-center p-4 min-h-[200px] bg-black/40">
+    <div className="absolute inset-0 flex items-center justify-center p-4 min-h-[200px] pt-20">
       <div className="rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center">
         <h3 className="text-lg sm:text-xl font-bold text-white">
           {t("analysis.limitedAccessTitle")}
@@ -661,6 +661,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         onClose={closeUnlockStep1}
         onUnlockClick={openUnlockStep2}
         matchLabel={home && away ? `${home} vs ${away}` : undefined}
+        matchDate={result.match_date ?? undefined}
       />
       <UnlockPricingModal open={showUnlockModal2} onClose={closeUnlockStep2} />
 
