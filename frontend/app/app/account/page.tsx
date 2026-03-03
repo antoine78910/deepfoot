@@ -80,6 +80,8 @@ export default function AccountPage() {
   const [unsubscribeModalOpen, setUnsubscribeModalOpen] = useState(false);
   const [cancelWhopMessageOpen, setCancelWhopMessageOpen] = useState(false);
   const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
+  const [syncPlanLoading, setSyncPlanLoading] = useState(false);
+  const [syncPlanMessage, setSyncPlanMessage] = useState<string | null>(null);
   const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -145,6 +147,35 @@ export default function AccountPage() {
   };
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const handleSyncPlan = async () => {
+    if (!user?.id || !API_URL || API_URL === "undefined") return;
+    setSyncPlanMessage(null);
+    setSyncPlanLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/me/sync-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-User-Id": user.id },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.updated && data?.plan) {
+        const u = getUserFromStorage();
+        if (u && u.id === user.id) {
+          const newPlan = data.plan as PlanId;
+          setUserInStorage({ ...u, plan: newPlan });
+          setUser({ ...u, plan: newPlan });
+        }
+        setSyncPlanMessage(t("account.syncPlanSuccess"));
+      } else if (data?.reason === "no_active_membership") {
+        setSyncPlanMessage(t("account.syncPlanNoMembership"));
+      } else {
+        setSyncPlanMessage(t("account.syncPlanFailed"));
+      }
+    } catch {
+      setSyncPlanMessage(t("account.syncPlanFailed"));
+    } finally {
+      setSyncPlanLoading(false);
+    }
+  };
 
   const handleConfirmCancel = async () => {
     if (!user?.id || !API_URL || API_URL === "undefined") {
@@ -351,7 +382,26 @@ export default function AccountPage() {
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        {(syncPlanMessage || user?.plan === "free") && (
+          <div className="mt-4 p-3 rounded-xl bg-zinc-800/50 border border-zinc-600/50">
+            {user?.plan === "free" && (
+              <button
+                type="button"
+                onClick={handleSyncPlan}
+                disabled={syncPlanLoading}
+                className="px-4 py-2 rounded-lg bg-[#00ffe8]/20 border border-[#00ffe8]/50 text-[#00ffe8] text-sm font-medium hover:bg-[#00ffe8]/30 transition disabled:opacity-50"
+              >
+                {syncPlanLoading ? "…" : t("account.syncPlan")}
+              </button>
+            )}
+            {syncPlanMessage && (
+              <p className="mt-2 text-sm text-zinc-300">
+                {syncPlanMessage}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 mt-3">
           <Link
             href="/pricing"
             className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition"

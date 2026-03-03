@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 
 CANCELLATION_MODE = "at_period_end"  # User keeps access until end of paid period (tuto Whop)
 
+# Whop plan_id → our plan name (same as webhooks)
+WHOP_PLAN_TO_APP = {
+    "plan_xncEV4h0yc3F1": "starter",
+    "plan_OPBroVFLkZFuG": "pro",
+    "plan_a9qUhL4i9mz6B": "lifetime",
+    "plan_SosIjQXUrG5Pb": "starter",
+    "plan_pVoGBCVIzFw4M": "pro",
+    "plan_m9Bcvjqy3xudw": "lifetime",
+    "plan_WmP3L9eEPlEJb": "starter",
+    "plan_ASd2bXI29nfKR": "pro",
+    "plan_FXHgaDOloK9Q1": "lifetime",
+}
+
 
 @router.get("/me")
 def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
@@ -155,6 +168,121 @@ async def _whop_find_and_cancel_by_email(email: str, whop_key: str, company_id: 
         return False
 
     return await _whop_cancel_membership(membership_id, whop_key)
+
+
+async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -> tuple[str | None, str | None]:
+    """
+    Trouve le membre Whop par email et son membership actif ; retourne (app_plan, membership_id).
+    Permet de resynchroniser le plan (sync-plan) sans annuler.
+    """
+    if not email or not whop_key or not company_id:
+        return (None, None)
+    import httpx
+    headers = {"Authorization": f"Bearer {whop_key}"}
+    email_lower = email.strip().lower()
+    member_id = None
+    for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{base}/company/members",
+                    params={"company_id": company_id, "per": 100},
+                    headers=headers,
+                    timeout=15.0,
+                )
+            if r.status_code >= 400:
+                continue
+            data = r.json()
+            members = data.get("data") if isinstance(data.get("data"), list) else data.get("members") or []
+            if not isinstance(members, list):
+                members = []
+            for m in members:
+                if not isinstance(m, dict):
+                    continue
+                u = m.get("user") or m.get("user_id")
+                if isinstance(u, dict):
+                    em = (u.get("email") or "").strip().lower()
+                else:
+                    em = (m.get("email") or "").strip().lower()
+                if em == email_lower:
+                    member_id = m.get("id") or m.get("member_id")
+                    break
+            if member_id:
+                break
+        except Exception as e:
+            logger.debug("Whop list members %s: %s", base, e)
+    if not member_id:
+        return (None, None)
+
+    membership_id = None
+    plan_id = None
+    for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{base}/company/memberships",
+                    params={"company_id": company_id, "member_id": member_id, "status": "active", "per": 10},
+                    headers=headers,
+                    timeout=15.0,
+                )
+            if r.status_code >= 400:
+                continue
+            data = r.json()
+            list_ms = data.get("data") if isinstance(data.get("data"), list) else data.get("memberships") or []
+            if not isinstance(list_ms, list):
+                list_ms = []
+            for ms in list_ms:
+                if isinstance(ms, dict) and (ms.get("status") or "").lower() == "active":
+                    membership_id = ms.get("id") or ms.get("membership_id")
+                    plan_id = ms.get("plan_id") or (ms.get("plan") or {}).get("id") if isinstance(ms.get("plan"), dict) else None
+                    break
+            if not membership_id and list_ms and isinstance(list_ms[0], dict):
+                ms = list_ms[0]
+                membership_id = ms.get("id") or ms.get("membership_id")
+                plan_id = ms.get("plan_id") or (ms.get("plan") or {}).get("id") if isinstance(ms.get("plan"), dict) else None
+            if membership_id:
+                break
+        except Exception as e:
+            logger.debug("Whop list memberships %s: %s", base, e)
+    if not membership_id:
+        return (None, None)
+    app_plan = WHOP_PLAN_TO_APP.get((plan_id or "").strip()) if plan_id else "starter"
+    return (app_plan or "starter", membership_id)
+
+
+@router.post("/me/sync-plan")
+async def sync_plan(x_user_id: str | None = Header(None, alias="X-User-Id")):
+    """
+    Resynchronise le plan depuis Whop (par email). Si un abonnement actif est trouvé,
+    met à jour profiles.plan et whop_membership_id. Utile si l'utilisateur est affiché en free par erreur.
+    """
+    user_id = (x_user_id or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id required")
+    admin = get_supabase_admin()
+    if not admin:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    settings = get_settings()
+    whop_key = (settings.whop_api_key or "").strip()
+    company_id = (settings.whop_company_id or "").strip()
+    if not whop_key or not company_id:
+        raise HTTPException(status_code=503, detail="Whop not configured (API key + company ID)")
+    email = _get_user_email_from_supabase(admin, user_id)
+    if not email:
+        return {"ok": False, "plan": "free", "updated": False, "reason": "no_email"}
+    app_plan, membership_id = await _whop_get_plan_for_email(email, whop_key, company_id)
+    if not app_plan or not membership_id:
+        return {"ok": True, "plan": "free", "updated": False, "reason": "no_active_membership"}
+    try:
+        admin.table("profiles").upsert(
+            {"id": user_id, "plan": app_plan, "whop_membership_id": membership_id},
+            on_conflict="id",
+        ).execute()
+        logger.info("Sync plan: user %s updated to %s (membership_id=%s)", user_id, app_plan, membership_id[:12] + "...")
+        return {"ok": True, "plan": app_plan, "updated": True}
+    except Exception as e:
+        logger.exception("Sync plan: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update profile")
 
 
 @router.post("/me/cancel-subscription")
