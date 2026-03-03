@@ -32,19 +32,62 @@ WHOP_PLAN_TO_APP = {
 }
 
 
+def _mask_user_id(user_id: str) -> str:
+    """Pour les logs : affiche les 8 premiers caractères max."""
+    if not user_id:
+        return "anonymous"
+    return (user_id[:8] + "...") if len(user_id) > 8 else user_id
+
+
 @router.get("/me")
-def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
+async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
     """
     Retourne le plan, l'usage du jour et la limite pour l'utilisateur.
     X-User-Id optionnel (id Supabase). Si absent, renvoie free avec limite 1.
+    À chaque appel, si l'utilisateur est identifié et Whop configuré, on resynchronise
+    le plan depuis Whop pour éviter d'afficher "free" à tort.
     """
     user_id = (x_user_id or "").strip()
+    admin = get_supabase_admin() if user_id else None
+    settings = get_settings()
+    whop_key = (settings.whop_api_key or "").strip()
+    company_id = (settings.whop_company_id or "").strip()
+
+    # Resync plan from Whop when user is logged in and Whop is configured
+    if user_id and admin and whop_key and company_id:
+        email = _get_user_email_from_supabase(admin, user_id)
+        if email:
+            whop_plan, membership_id = await _whop_get_plan_for_email(email, whop_key, company_id)
+            if whop_plan and membership_id:
+                plan_from_db, _, _ = get_plan_and_usage(user_id)
+                if whop_plan != plan_from_db:
+                    try:
+                        admin.table("profiles").upsert(
+                            {"id": user_id, "plan": whop_plan, "whop_membership_id": membership_id},
+                            on_conflict="id",
+                        ).execute()
+                        logger.info(
+                            "me: synced plan from Whop user_id=%s plan=%s (was %s)",
+                            _mask_user_id(user_id),
+                            whop_plan,
+                            plan_from_db,
+                        )
+                    except Exception as e:
+                        logger.warning("me: failed to update plan from Whop for user_id=%s: %s", _mask_user_id(user_id), e)
+
     plan, used, last = get_plan_and_usage(user_id)
     today = datetime.now(timezone.utc).date()
     used = reset_if_new_day(used, last, today)
     limit, full_analysis = get_analysis_limit(plan)
     allowed, _msg, next_full, _ = can_analyze(user_id)
 
+    logger.info(
+        "me: user_id=%s plan=%s full_analysis=%s can_analyze=%s",
+        _mask_user_id(user_id),
+        plan,
+        next_full,
+        allowed,
+    )
     return {
         "plan": plan,
         "analyses_used_today": used,

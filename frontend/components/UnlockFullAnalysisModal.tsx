@@ -2,18 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Lock } from "lucide-react";
+import { Lock, Target, BarChart3, Sparkles, FileText, Lightbulb, Clock } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const ACCENT = "#00ffe8";
 
-const BULLET_ITEMS = [
-  { key: "unlockModal1.featureProbableScore" as const, icon: "🎯" },
-  { key: "unlockModal1.featureDetailedProb" as const, icon: "📊" },
-  { key: "unlockModal1.featureScenarios" as const, icon: "✨" },
-  { key: "unlockModal1.featureFullAnalysis" as const, icon: "📄" },
-  { key: "unlockModal1.featureBookmaker" as const, icon: "💡" },
+const BULLET_ITEMS: { key: "unlockModal1.featureProbableScore" | "unlockModal1.featureDetailedProb" | "unlockModal1.featureScenarios" | "unlockModal1.featureFullAnalysis" | "unlockModal1.featureBookmaker"; Icon: typeof Target; iconColor: string }[] = [
+  { key: "unlockModal1.featureProbableScore", Icon: Target, iconColor: "text-rose-400" },
+  { key: "unlockModal1.featureDetailedProb", Icon: BarChart3, iconColor: "text-[#00ffe8]" },
+  { key: "unlockModal1.featureScenarios", Icon: Sparkles, iconColor: "text-violet-400" },
+  { key: "unlockModal1.featureFullAnalysis", Icon: FileText, iconColor: "text-amber-400" },
+  { key: "unlockModal1.featureBookmaker", Icon: Lightbulb, iconColor: "text-amber-300" },
 ];
+
+const STAGGER_DELAY_MS = 90;
+const ANIMATION_DURATION_MS = 450;
 
 export function UnlockFullAnalysisModal({
   open,
@@ -38,7 +41,7 @@ export function UnlockFullAnalysisModal({
     }
     setVisibleCount(0);
     const delays = BULLET_ITEMS.map((_, i) =>
-      setTimeout(() => setVisibleCount((c) => Math.max(c, i + 1)), 120 + i * 100)
+      setTimeout(() => setVisibleCount((c) => Math.max(c, i + 1)), 80 + i * STAGGER_DELAY_MS)
     );
     return () => delays.forEach(clearTimeout);
   }, [open]);
@@ -59,22 +62,19 @@ export function UnlockFullAnalysisModal({
   if (!open) return null;
 
   const modal = (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div
-        className="relative w-full max-w-md rounded-2xl bg-[#14141c] border-2 shadow-2xl overflow-hidden"
-        style={{ borderColor: `${ACCENT}40`, boxShadow: `0 0 40px -5px ${ACCENT}20` }}
+        className="relative w-full max-w-md rounded-2xl bg-[#1A1B22] border border-white/10 shadow-2xl overflow-hidden"
         role="dialog"
         aria-modal="true"
         aria-labelledby="unlock-modal-title"
       >
-        {/* Banner — branding accent */}
+        {/* Top banner — teal branding */}
         <div
-          className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white"
-          style={{ background: `linear-gradient(135deg, ${ACCENT}30 0%, ${ACCENT}15 100%)`, borderBottom: `1px solid ${ACCENT}40` }}
+          className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white"
+          style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #5EC2A0 100%)` }}
         >
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: ACCENT }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
+          <span className="text-base" aria-hidden>📈</span>
           <span>{t("unlockModal1.banner")}</span>
           <span className="text-lg" aria-hidden>🔥</span>
         </div>
@@ -82,8 +82,7 @@ export function UnlockFullAnalysisModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 p-1.5 rounded-lg transition hover:bg-white/10"
-          style={{ color: ACCENT }}
+          className="absolute top-3 right-3 p-2 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition z-10"
           aria-label="Close"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -92,65 +91,70 @@ export function UnlockFullAnalysisModal({
         </button>
 
         <div className="p-6 pt-5">
-          <h2 id="unlock-modal-title" className="text-xl font-bold text-white pr-8">
+          <h2 id="unlock-modal-title" className="text-xl sm:text-2xl font-bold text-white text-center pr-8">
             {t("unlockModal1.title")}
           </h2>
-          <p className="flex items-center gap-1.5 text-sm mt-1" style={{ color: `${ACCENT}cc` }}>
+          <p className="flex items-center justify-center gap-1.5 text-sm mt-2 text-zinc-400">
             <span aria-hidden>👥</span>
             {t("unlockModal1.socialProof")}
           </p>
 
-          {/* What you'll unlock — bullets appear one by one */}
-          <div className="mt-6 rounded-xl p-4 border" style={{ backgroundColor: "#1c1c28", borderColor: `${ACCENT}25` }}>
-            <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: ACCENT }}>
+          {/* What you'll unlock — styled card, smooth staggered bullets */}
+          <div className="mt-6 rounded-xl p-4 sm:p-5 border border-white/5 bg-[#2C2D35]/80">
+            <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">
               {t("unlockModal1.whatYouUnlock")}
             </p>
-            <ul className="space-y-2.5">
-              {BULLET_ITEMS.map(({ key, icon }, index) => (
+            <ul className="space-y-0">
+              {BULLET_ITEMS.map(({ key, Icon, iconColor }, index) => (
                 <li
                   key={key}
-                  className="flex items-center gap-3 text-sm text-zinc-300 transition-all duration-300 ease-out"
+                  className="flex items-center gap-3 py-2.5 text-sm text-white transition-all ease-out border-b border-white/5 last:border-0 last:pb-0"
                   style={{
+                    transitionDuration: `${ANIMATION_DURATION_MS}ms`,
                     opacity: index < visibleCount ? 1 : 0,
-                    transform: index < visibleCount ? "translateY(0)" : "translateY(8px)",
+                    transform: index < visibleCount ? "translateY(0)" : "translateY(10px)",
                   }}
                 >
-                  <Lock className="w-4 h-4 flex-shrink-0" style={{ color: index < visibleCount ? ACCENT : "#71717a" }} aria-hidden />
-                  <span>{t(key)}</span>
-                  <span className="ml-auto text-base opacity-90" aria-hidden>{icon}</span>
+                  <Lock
+                    className="w-4 h-4 flex-shrink-0 text-zinc-500"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <span className={`w-5 h-5 flex-shrink-0 flex items-center justify-center ${iconColor}`}>
+                    <Icon className="w-full h-full" strokeWidth={2} />
+                  </span>
+                  <span className="flex-1 min-w-0">{t(key)}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Match countdown block — accent branding */}
+          {/* Match countdown block — orange/amber style */}
           {(matchLabel || matchCountdown) && (
-            <div className="mt-4 rounded-xl p-4 flex items-center gap-3 border" style={{ backgroundColor: `${ACCENT}12`, borderColor: `${ACCENT}35` }}>
-              <span className="text-2xl" aria-hidden>⏰</span>
-              <div>
-                <p className="text-white font-medium text-sm">
-                  {matchLabel ?? "Match"} {t("unlockModal1.matchStartsIn")}
-                </p>
-                <p className="font-semibold text-sm mt-0.5" style={{ color: ACCENT }}>
-                  {matchCountdown ?? "—"}
-                </p>
-              </div>
+            <div className="mt-4 rounded-xl px-4 py-3.5 flex items-center gap-3 bg-[#381F1A] border border-amber-500/30 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]">
+              <Clock className="w-5 h-5 flex-shrink-0 text-amber-400" strokeWidth={2} aria-hidden />
+              <p className="text-white text-sm font-medium">
+                {matchLabel ?? "Match"}
+                {matchCountdown ? (
+                  <> {t("unlockModal1.matchStartsIn")} <span className="font-semibold text-amber-200">{matchCountdown}</span></>
+                ) : null}
+              </p>
             </div>
           )}
 
           <button
             type="button"
             onClick={onUnlockClick}
-            className="mt-6 w-full py-3.5 px-4 rounded-xl font-semibold text-[#0d0d12] transition flex items-center justify-center gap-2 hover:opacity-95"
+            className="mt-6 w-full py-3.5 px-4 rounded-xl font-semibold text-[#0d0d12] transition-all flex items-center justify-center gap-2 hover:opacity-95 hover:shadow-lg"
             style={{
-              background: `linear-gradient(135deg, ${ACCENT} 0%, #00ddcc 100%)`,
-              boxShadow: `0 0 20px -2px ${ACCENT}50`,
+              background: `linear-gradient(135deg, ${ACCENT} 0%, #5EC2A0 100%)`,
+              boxShadow: `0 4px 20px -2px ${ACCENT}40`,
             }}
           >
             <span aria-hidden>🏆</span>
             {t("unlockModal1.cta")}
           </button>
-          <p className="text-center text-xs mt-3" style={{ color: `${ACCENT}99` }}>
+          <p className="text-center text-xs mt-3 text-zinc-500">
             {t("unlockModal1.instantAccess")}
           </p>
         </div>
