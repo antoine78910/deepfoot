@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     api_football_key: str = ""
     api_football_base_url: str = "https://v3.football.api-sports.io"
     # Sportmonks Football API v3 (https://docs.sportmonks.com/v3/) — nouveau modèle data + prédictions
-    # Lit SPORTMONKS_API_TOKEN ou, à défaut, FOOTBALL_API_KEY (même clé possible côté user)
+    # Lit SPORTMONKS_API_TOKEN ou, à défaut, API_FOOTBALL_KEY (même clé possible côté user)
     sportmonks_api_token: str = ""
     admin_api_key: str = ""  # Si défini, requiert X-Admin-Key pour /admin/*
     # Polling matchs terminés (FT) : intervalle en secondes (10 = test, 3600 = 1h)
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         """Si Sportmonks non configuré, utiliser FOOTBALL_API_KEY (user peut avoir renommé la clé)."""
         token = (self.sportmonks_api_token or "").strip()
         if not token:
-            token = (os.getenv("FOOTBALL_API_KEY") or os.getenv("SPORTMONKS_API_TOKEN") or "").strip()
+            token = (os.getenv("API_FOOTBALL_KEY") or os.getenv("SPORTMONKS_API_TOKEN") or "").strip()
         if token != self.sportmonks_api_token:
             return self.model_copy(update={"sportmonks_api_token": token})
         return self
