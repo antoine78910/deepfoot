@@ -72,6 +72,16 @@ const PLAN_KEYS: Record<string, string> = {
   lifetime: "nav.lifetime",
 };
 
+function formatSubscriptionEndDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { dateStyle: "long" });
+  } catch {
+    return iso;
+  }
+}
+
 export default function AccountPage() {
   const { t } = useLanguage();
   const { config: currencyConfig, isLoading: currencyLoading } = useGeoCurrency();
@@ -80,8 +90,6 @@ export default function AccountPage() {
   const [unsubscribeModalOpen, setUnsubscribeModalOpen] = useState(false);
   const [cancelWhopMessageOpen, setCancelWhopMessageOpen] = useState(false);
   const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
-  const [syncPlanLoading, setSyncPlanLoading] = useState(false);
-  const [syncPlanMessage, setSyncPlanMessage] = useState<string | null>(null);
   const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -91,6 +99,26 @@ export default function AccountPage() {
   useEffect(() => {
     setUser(getUserFromStorage());
   }, []);
+
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid || !API_URL || API_URL === "undefined") return;
+    const ac = new AbortController();
+    fetch(`${API_URL}/me`, { headers: { "X-User-Id": uid }, signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data === "object") {
+          const u = getUserFromStorage();
+          if (u && u.id === uid) {
+            const plan = (data.plan as PlanId) ?? u.plan;
+            const endsAt = data.subscription_ends_at ?? u.subscription_ends_at;
+            setUser((prev) => (prev?.id === uid ? { ...prev, plan, subscription_ends_at: endsAt } : prev));
+          }
+        }
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [user?.id]);
 
   const startEditEmail = () => {
     setEditingEmail(true);
@@ -147,37 +175,6 @@ export default function AccountPage() {
   };
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-  const handleSyncPlan = async () => {
-    if (!user?.id || !API_URL || API_URL === "undefined") return;
-    setSyncPlanMessage(null);
-    setSyncPlanLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/me/sync-plan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Id": user.id },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data?.updated && data?.plan) {
-        const u = getUserFromStorage();
-        if (u && u.id === user.id) {
-          const newPlan = data.plan as PlanId;
-          setUserInStorage({ ...u, plan: newPlan });
-          setUser({ ...u, plan: newPlan });
-        }
-        setSyncPlanMessage(t("account.syncPlanSuccess"));
-      } else if (data?.reason === "whop_api_error") {
-        setSyncPlanMessage(t("account.syncPlanWhopApiError"));
-      } else if (data?.reason === "no_active_membership") {
-        setSyncPlanMessage(t("account.syncPlanNoMembership"));
-      } else {
-        setSyncPlanMessage(t("account.syncPlanFailed"));
-      }
-    } catch {
-      setSyncPlanMessage(t("account.syncPlanFailed"));
-    } finally {
-      setSyncPlanLoading(false);
-    }
-  };
 
   const handleConfirmCancel = async () => {
     if (!user?.id || !API_URL || API_URL === "undefined") {
@@ -195,15 +192,21 @@ export default function AccountPage() {
         return;
       }
       const data = await res.json().catch(() => ({}));
-      const newPlan = (data?.plan && typeof data.plan === "string") ? data.plan : "free";
+      const newPlan = (data?.plan && typeof data.plan === "string") ? data.plan : user?.plan ?? "free";
+      const endsAt = typeof data?.subscription_ends_at === "string" ? data.subscription_ends_at : undefined;
       const u = getUserFromStorage();
       if (u && u.id === user.id) {
-        setUserInStorage({ ...u, plan: newPlan as PlanId });
-        setUser({ ...u, plan: newPlan as PlanId });
+        const next = { ...u, plan: newPlan as PlanId, subscription_ends_at: endsAt ?? u.subscription_ends_at };
+        setUserInStorage(next);
+        setUser(next);
       }
       setUnsubscribeModalOpen(false);
       if (data?.cancelled_via_whop === true) {
-        setUnsubscribeSuccessMessage(t("account.unsubscribedSuccess"));
+        const endDate = endsAt ? formatSubscriptionEndDate(endsAt) : null;
+        const msg = endDate
+          ? t("account.unsubscribedSuccessWithDate").replace("{date}", endDate)
+          : t("account.unsubscribedSuccess");
+        setUnsubscribeSuccessMessage(msg);
       } else {
         setCancelWhopMessageOpen(true);
       }
@@ -346,7 +349,10 @@ export default function AccountPage() {
         <div className="mb-6">
           <p className="text-sm text-zinc-500">{t("account.status")}</p>
           <p className="flex items-center gap-2 mt-0.5 text-emerald-400">
-            <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} /> {t("account.active")}
+            <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
+            {user?.subscription_ends_at
+              ? t("account.endsOn").replace("{date}", formatSubscriptionEndDate(user.subscription_ends_at))
+              : t("account.active")}
           </p>
         </div>
 
@@ -384,25 +390,6 @@ export default function AccountPage() {
           </button>
         </div>
 
-        {(syncPlanMessage || user?.plan === "free") && (
-          <div className="mt-4 p-3 rounded-xl bg-zinc-800/50 border border-zinc-600/50">
-            {user?.plan === "free" && (
-              <button
-                type="button"
-                onClick={handleSyncPlan}
-                disabled={syncPlanLoading}
-                className="px-4 py-2 rounded-lg bg-[#00ffe8]/20 border border-[#00ffe8]/50 text-[#00ffe8] text-sm font-medium hover:bg-[#00ffe8]/30 transition disabled:opacity-50"
-              >
-                {syncPlanLoading ? "…" : t("account.syncPlan")}
-              </button>
-            )}
-            {syncPlanMessage && (
-              <p className="mt-2 text-sm text-zinc-300">
-                {syncPlanMessage}
-              </p>
-            )}
-          </div>
-        )}
         <div className="flex flex-wrap gap-3 mt-3">
           <Link
             href="/pricing"
@@ -410,16 +397,25 @@ export default function AccountPage() {
           >
             {t("account.seeAllPlans")}
           </Link>
-          <button
-            type="button"
-            onClick={() => {
-              setUnsubscribeSuccessMessage(null);
-              setConfirmUnsubscribeOpen(true);
-            }}
-            className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-red-400 hover:text-red-300 text-sm font-medium transition"
-          >
-            {t("account.unsubscribe")}
-          </button>
+          {user?.subscription_ends_at ? (
+            <span
+              className="px-4 py-2.5 rounded-xl bg-zinc-800/80 text-zinc-400 text-sm font-medium cursor-default"
+              title={t("account.planCancelledEndsOn").replace("{date}", formatSubscriptionEndDate(user.subscription_ends_at))}
+            >
+              {t("account.planCancelledEndsOn").replace("{date}", formatSubscriptionEndDate(user.subscription_ends_at))}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setUnsubscribeSuccessMessage(null);
+                setConfirmUnsubscribeOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-red-400 hover:text-red-300 text-sm font-medium transition"
+            >
+              {t("account.unsubscribe")}
+            </button>
+          )}
         </div>
       </div>
 
