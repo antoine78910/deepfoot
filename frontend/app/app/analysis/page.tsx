@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnalysisResult } from "@/components/AnalysisResult";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -9,7 +9,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function AppAnalysisPage() {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const { t } = useLanguage();
+  const prevLangRef = useRef<string | null>(null);
+  const { t, lang } = useLanguage();
 
   useEffect(() => {
     const raw = sessionStorage.getItem("visifoot_analysis");
@@ -53,6 +54,27 @@ export default function AppAnalysisPage() {
       setData(null);
     }
   }, []);
+
+  // When user changes language, translate current analysis in place
+  useEffect(() => {
+    if (!data || typeof data !== "object") return;
+    if (prevLangRef.current === null) {
+      prevLangRef.current = lang;
+      return;
+    }
+    if (prevLangRef.current === lang) return;
+    prevLangRef.current = lang;
+    fetch(`${API_URL}/predict/translate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis: data, target_lang: lang }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((translated) => {
+        if (translated && typeof translated === "object") setData(translated);
+      })
+      .catch(() => {});
+  }, [lang, data]);
 
   if (data === null) {
     return (

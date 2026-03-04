@@ -5,6 +5,7 @@ Whop API URLs appelées (Company API Key uniquement — pas de /me ni de routes 
   - GET  https://api.whop.com/api/v1/members?company_id=...&first=100
   - GET  https://api.whop.com/api/v1/memberships?company_id=...&statuses=active&user_ids=...&first=50
   - POST https://api.whop.com/api/v1/memberships/{membership_id}/cancel
+  - POST https://api.whop.com/api/v1/memberships/{membership_id}/uncancel
 """
 import logging
 from fastapi import APIRouter, Header, HTTPException
@@ -86,27 +87,37 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
                     logger.warning("me: failed to update plan from Whop for user_id=%s: %s", _mask_user_id(user_id), e)
 
     plan, used, last, subscription_ends_at, whop_membership_id = get_plan_and_usage(user_id)
-    # Status = toujours celui du membership affiché (whop_membership_id en base). On interroge Whop pour ce membership uniquement.
+    # Always verify with Whop whether the stored membership is renewing or cancelled; update DB and status accordingly.
     if user_id and whop_key and whop_membership_id:
-        period_end_iso, is_canceled = await _whop_get_membership_status(whop_membership_id, whop_key)
-        if is_canceled and period_end_iso:
-            subscription_ends_at = period_end_iso
-            try:
-                admin = get_supabase_admin()
-                if admin:
-                    admin.table("profiles").update({"subscription_ends_at": period_end_iso}).eq("id", user_id).execute()
-                    logger.info("me: user_id=%s status from Whop (canceled) => ends %s", _mask_user_id(user_id), period_end_iso[:10])
-            except Exception as e:
-                logger.warning("me: failed to persist subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
+        logger.info(
+            "me: verifying membership status with Whop user_id=%s membership_id=%s...",
+            _mask_user_id(user_id),
+            (whop_membership_id[:12] + "...") if len(whop_membership_id or "") > 12 else (whop_membership_id or ""),
+        )
+        period_end_iso, is_canceled, whop_ok = await _whop_get_membership_status(whop_membership_id, whop_key)
+        if whop_ok:
+            if is_canceled and period_end_iso:
+                subscription_ends_at = period_end_iso
+                try:
+                    admin = get_supabase_admin()
+                    if admin:
+                        admin.table("profiles").update({"subscription_ends_at": period_end_iso}).eq("id", user_id).execute()
+                        logger.info("me: user_id=%s Whop status=cancelled => subscription_ends_at=%s", _mask_user_id(user_id), period_end_iso[:10])
+                except Exception as e:
+                    logger.warning("me: failed to persist subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
+            else:
+                subscription_ends_at = None
+                try:
+                    admin = get_supabase_admin()
+                    if admin:
+                        admin.table("profiles").update({"subscription_ends_at": None}).eq("id", user_id).execute()
+                        logger.info("me: user_id=%s Whop status=renewing => subscription_ends_at cleared", _mask_user_id(user_id))
+                except Exception as e:
+                    logger.warning("me: failed to clear subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
         else:
-            subscription_ends_at = None
-            try:
-                admin = get_supabase_admin()
-                if admin:
-                    admin.table("profiles").update({"subscription_ends_at": None}).eq("id", user_id).execute()
-                    logger.debug("me: user_id=%s status from Whop (active/renewing) => subscription_ends_at cleared", _mask_user_id(user_id))
-            except Exception as e:
-                logger.warning("me: failed to clear subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
+            logger.warning("me: user_id=%s Whop status unavailable (API error?), keeping subscription_ends_at=%s", _mask_user_id(user_id), subscription_ends_at[:10] if subscription_ends_at else None)
+    elif user_id and (plan or "").strip().lower() not in ("", "free") and not whop_membership_id:
+        logger.info("me: user_id=%s has plan=%s but no whop_membership_id, skipping Whop status check", _mask_user_id(user_id), plan)
     today = datetime.now(timezone.utc).date()
     used = reset_if_new_day(used, last, today)
     limit, full_analysis = get_analysis_limit(plan)
@@ -200,10 +211,10 @@ async def _whop_get_membership_details(membership_id: str, whop_key: str) -> tup
         return (None, None, False)
 
 
-async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool]:
+async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool, bool]:
     """
     Récupère le statut d'un membership Whop (GET by id).
-    Retourne (period_end_iso, is_canceled). Si l'API échoue, retourne (None, False).
+    Retourne (period_end_iso, is_canceled, ok). ok=False si l'API échoue.
     """
     import httpx
     try:
@@ -214,20 +225,22 @@ async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tupl
                 timeout=10.0,
             )
         if r.status_code >= 400:
-            return (None, False)
+            logger.warning("Whop get membership status HTTP %s membership_id=%s", r.status_code, (membership_id or "")[:12] + "...")
+            return (None, False, False)
         data = r.json()
         m = data.get("data") if isinstance(data.get("data"), dict) else data
         if not isinstance(m, dict):
-            return (None, False)
-        return _whop_parse_membership_status(m)
+            return (None, False, False)
+        period_end, is_canceled = _whop_parse_membership_status(m)
+        return (period_end, is_canceled, True)
     except Exception as e:
-        logger.debug("Whop get membership status: %s", e)
-        return (None, False)
+        logger.warning("Whop get membership status failed membership_id=%s: %s", membership_id[:12] + "..." if len(membership_id or "") > 12 else membership_id, e)
+        return (None, False, False)
 
 
 async def _whop_get_membership_period_end(membership_id: str, whop_key: str) -> str | None:
     """Récupère renewal_period_end d'un membership Whop (pour affichage date de fin)."""
-    period_end, _ = await _whop_get_membership_status(membership_id, whop_key)
+    period_end, _, _ = await _whop_get_membership_status(membership_id, whop_key)
     return period_end
 
 
@@ -259,6 +272,34 @@ async def _whop_cancel_membership(membership_id: str, whop_key: str) -> tuple[bo
     except httpx.HTTPError as e:
         logger.exception("Whop cancel request failed: %s", e)
     return (False, None)
+
+
+async def _whop_uncancel_membership(membership_id: str, whop_key: str) -> bool:
+    """
+    Reverse a pending cancellation (cancel_at_period_end) for a Whop membership.
+    Returns True if Whop accepted the uncancel (subscription will renew again).
+    """
+    import httpx
+    url = f"https://api.whop.com/api/v1/memberships/{membership_id}/uncancel"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {whop_key}"},
+                timeout=15.0,
+            )
+        if resp.status_code >= 400:
+            body = (resp.text or "").lower()
+            if resp.status_code == 400 and ("already" in body or "not cancel" in body):
+                logger.info("Whop uncancel membership %s: already renewing", membership_id)
+                return True
+            logger.warning("Whop uncancel membership %s: %s %s", membership_id, resp.status_code, resp.text)
+            return False
+        logger.info("Whop uncancel membership %s: success", membership_id)
+        return True
+    except httpx.HTTPError as e:
+        logger.exception("Whop uncancel request failed: %s", e)
+    return False
 
 
 async def _whop_find_and_cancel_by_email(email: str, whop_key: str, company_id: str) -> tuple[bool, str | None]:
@@ -632,3 +673,52 @@ async def cancel_subscription(x_user_id: str | None = Header(None, alias="X-User
         return {"ok": True, "plan": current_plan, "cancelled_via_whop": True, "subscription_ends_at": period_end_iso}
     logger.info("Cancel subscription: user %s — Whop cancel not done, plan unchanged", user_id)
     return {"ok": True, "plan": current_plan, "cancelled_via_whop": False}
+
+
+@router.post("/me/renew-subscription")
+async def renew_subscription(x_user_id: str | None = Header(None, alias="X-User-Id")):
+    """
+    Reverse the cancellation of the user's plan (Whop uncancel). Clears subscription_ends_at
+    so the subscription will renew again at the end of the period.
+    """
+    user_id = (x_user_id or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id required")
+
+    admin = get_supabase_admin()
+    if not admin:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    try:
+        r = admin.table("profiles").select("plan, whop_membership_id").eq("id", user_id).execute()
+    except Exception as e:
+        msg = str(e).lower()
+        if "whop_membership_id" in msg or "does not exist" in msg:
+            raise HTTPException(status_code=503, detail="Database migration required")
+        raise
+
+    if not r.data or len(r.data) == 0:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    row = r.data[0]
+    membership_id = (row.get("whop_membership_id") or "").strip()
+    current_plan = (row.get("plan") or "free").strip() or "free"
+
+    if not membership_id:
+        raise HTTPException(status_code=400, detail="No subscription to renew")
+
+    settings = get_settings()
+    whop_key = (settings.whop_api_key or "").strip()
+    if not whop_key:
+        raise HTTPException(status_code=503, detail="Whop not configured")
+
+    renewed = await _whop_uncancel_membership(membership_id, whop_key)
+    if not renewed:
+        raise HTTPException(status_code=400, detail="Could not renew subscription. It may already be active.")
+
+    try:
+        admin.table("profiles").update({"subscription_ends_at": None}).eq("id", user_id).execute()
+    except Exception as e:
+        logger.warning("renew-subscription: failed to clear subscription_ends_at for user %s: %s", user_id, e)
+
+    logger.info("Renew subscription: user %s plan=%s subscription_ends_at cleared", user_id, current_plan)
+    return {"ok": True, "plan": current_plan, "renewed": True, "subscription_ends_at": None}

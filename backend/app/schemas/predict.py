@@ -1,6 +1,6 @@
 # backend/app/schemas/predict.py
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Any
 
 
 class PredictRequest(BaseModel):
@@ -118,3 +118,8 @@ class PredictResponse(BaseModel):
 
     # Plan : si False, le front n'affiche que les premières stats et floute le reste (free)
     full_analysis: Optional[bool] = True
+
+
+class TranslateRequest(BaseModel):
+    analysis: dict[str, Any] = Field(..., description="Full analysis/result object to translate")
+    target_lang: str = Field("en", description="Target language: en, fr, or es")

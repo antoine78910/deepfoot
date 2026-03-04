@@ -106,9 +106,13 @@ def generate_ai_analysis(
         " Write the ENTIRE response (quick_summary, scenario_1, scenario_2, scenario_3, scenario_4, key_forces_home, key_forces_away) in French."
         if (language or "").strip().lower() == "fr"
         else (
-            " Write the ENTIRE response in English."
-            if (language or "").strip().lower() == "en"
-            else " Use the same language as the team names (e.g. French if teams are French)."
+            " Write the ENTIRE response in Spanish."
+            if (language or "").strip().lower() == "es"
+            else (
+                " Write the ENTIRE response in English."
+                if (language or "").strip().lower() == "en"
+                else " Use the same language as the team names (e.g. French if teams are French)."
+            )
         )
     )
     system = """You are a football analysis assistant. Based on the match context, return a JSON object with exactly these keys."""
@@ -147,3 +151,61 @@ Return only valid JSON, no markdown."""
         return data
     except Exception:
         return default
+
+
+# Keys we translate when user changes language (AI-generated text only).
+TRANSLATE_KEYS = ("quick_summary", "scenario_1", "scenario_2", "scenario_3", "scenario_4", "key_forces_home", "key_forces_away")
+
+
+def translate_analysis(analysis: dict, target_lang: str) -> dict:
+    """
+    Returns a copy of `analysis` with AI text fields translated to target_lang.
+    target_lang: "en", "fr", or "es".
+    """
+    lang_names = {"en": "English", "fr": "French", "es": "Spanish"}
+    lang_name = lang_names.get((target_lang or "en").strip().lower(), "English")
+    out = dict(analysis)
+    subset = {}
+    for key in TRANSLATE_KEYS:
+        if key not in out:
+            continue
+        v = out[key]
+        if v is None:
+            continue
+        if key in ("scenario_2", "scenario_3", "scenario_4") and isinstance(v, dict):
+            subset[key] = {"title": v.get("title") or "", "body": v.get("body") or ""}
+        elif key in ("key_forces_home", "key_forces_away") and isinstance(v, list):
+            subset[key] = v
+        elif isinstance(v, str):
+            subset[key] = v
+    if not subset:
+        return out
+    client = _client()
+    if not client:
+        return out
+    try:
+        payload = json.dumps(subset, ensure_ascii=False)
+        system = f"Translate the following JSON into {lang_name}. Preserve the exact structure and keys. Translate only string values and each string in arrays. Return only valid JSON, no markdown."
+        r = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": payload},
+            ],
+            max_tokens=2000,
+            response_format={"type": "json_object"},
+        )
+        raw = (r.choices[0].message.content or "").strip()
+        if not raw:
+            return out
+        translated = json.loads(raw)
+        for key in TRANSLATE_KEYS:
+            if key not in translated:
+                continue
+            if key in ("scenario_2", "scenario_3", "scenario_4") and isinstance(out.get(key), dict) and isinstance(translated.get(key), dict):
+                out[key] = {**out[key], "title": translated[key].get("title") or out[key].get("title"), "body": translated[key].get("body") or out[key].get("body")}
+            else:
+                out[key] = translated[key]
+        return out
+    except Exception:
+        return out

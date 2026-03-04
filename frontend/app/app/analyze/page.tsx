@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnalysisResult } from "@/components/AnalysisResult";
@@ -14,7 +14,8 @@ function AnalyzeContent() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const { t } = useLanguage();
+  const prevLangRef = useRef<string | null>(null);
+  const { t, lang } = useLanguage();
 
   const team1 = searchParams.get("team1") ?? "";
   const team2 = searchParams.get("team2") ?? "";
@@ -73,6 +74,27 @@ function AnalyzeContent() {
       setNotFound(true);
     }
   }, [fromHistory, predictionId, team1, team2]);
+
+  // When user changes language, translate current analysis in place
+  useEffect(() => {
+    if (!data || typeof data !== "object") return;
+    if (prevLangRef.current === null) {
+      prevLangRef.current = lang;
+      return;
+    }
+    if (prevLangRef.current === lang) return;
+    prevLangRef.current = lang;
+    fetch(`${API_URL}/predict/translate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis: data, target_lang: lang }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((translated) => {
+        if (translated && typeof translated === "object") setData(translated);
+      })
+      .catch(() => {});
+  }, [lang, data]);
 
   if (notFound) {
     return (

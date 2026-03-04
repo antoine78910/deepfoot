@@ -822,7 +822,7 @@ export function AnalysisResult({ result }: { result: Result }) {
           <StatBar label="Attack" homePct={result.attack_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
           <StatBar label="Defense" homePct={result.defense_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
           <StatBar label="Form" homePct={result.form_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
-          <StatBar label="H2H" homePct={result.h2h_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
+          <StatBar label={t("analysis.h2hLabel")} homePct={result.h2h_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
           <StatBar label="Goals" homePct={result.goals_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
           <StatBar label="Overall" homePct={result.overall_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
         </div>
@@ -842,7 +842,7 @@ export function AnalysisResult({ result }: { result: Result }) {
           )}
           {typeof result.btts_yes_pct === "number" && (
             <StatBar
-              label="BTTS Yes"
+              label={t("analysis.bttsLabel")}
               homePct={result.btts_yes_pct}
               homeColor={HOME_COLOR}
               awayColor={AWAY_COLOR}
@@ -860,7 +860,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         <p className="text-xs text-zinc-500">
           {t("analysis.expectedGoals")} (xG): Home {typeof result.xg_home === "number" ? result.xg_home.toFixed(2) : "0"} – Away{" "}
           {typeof result.xg_away === "number" ? result.xg_away.toFixed(2) : "0"} (total{" "}
-          {typeof result.xg_total === "number" ? result.xg_total.toFixed(2) : "0"} goals). BTTS Yes{" "}
+          {typeof result.xg_total === "number" ? result.xg_total.toFixed(2) : "0"} goals). {t("analysis.bttsYesShort")}{" "}
           {typeof result.btts_yes_pct === "number" ? result.btts_yes_pct.toFixed(1) : "0"}%.
         </p>
       </section>

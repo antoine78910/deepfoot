@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.schemas.predict import (
     PredictRequest,
     PredictResponse,
+    TranslateRequest,
     OverUnderItem,
     ExactScoreItem,
     MostLikelyScoreItem,
@@ -17,7 +18,7 @@ from app.schemas.predict import (
 )
 from app.services.data_loader import load_match_context
 from app.ml.poisson import predict_all
-from app.services.openai_summary import build_prompt_context, generate_ai_analysis
+from app.services.openai_summary import build_prompt_context, generate_ai_analysis, translate_analysis
 from app.services.news_fetcher import fetch_football_news
 from app.services.api_football import get_predictions as api_get_predictions
 from app.services.subscription import can_analyze, consume_analysis
@@ -283,6 +284,19 @@ def get_match_result(
             "final_score_away": ctx.get("final_score_away"),
             "match_statistics": ctx.get("match_statistics"),
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/translate")
+def translate_predict(payload: TranslateRequest):
+    """
+    Translate the AI-generated text fields of an analysis to the target language (en, fr, es).
+    Returns the same analysis object with quick_summary, scenario_1–4, key_forces translated.
+    """
+    try:
+        translated = translate_analysis(payload.analysis, payload.target_lang or "en")
+        return translated
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 

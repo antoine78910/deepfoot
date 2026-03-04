@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getUserFromStorage, setUserInStorage, type PlanId } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -82,7 +83,10 @@ function formatSubscriptionEndDate(iso: string): string {
   }
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export default function AccountPage() {
+  const pathname = usePathname();
   const { t } = useLanguage();
   const { config: currencyConfig, isLoading: currencyLoading } = useGeoCurrency();
   const [user, setUser] = useState<ReturnType<typeof getUserFromStorage>>(null);
@@ -90,6 +94,8 @@ export default function AccountPage() {
   const [unsubscribeModalOpen, setUnsubscribeModalOpen] = useState(false);
   const [cancelWhopMessageOpen, setCancelWhopMessageOpen] = useState(false);
   const [cancelWhopEndDate, setCancelWhopEndDate] = useState<string | null>(null);
+  const [renewSuccessOpen, setRenewSuccessOpen] = useState(false);
+  const [renewLoading, setRenewLoading] = useState(false);
   const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
   const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
   const [editingEmail, setEditingEmail] = useState(false);
@@ -101,19 +107,23 @@ export default function AccountPage() {
     setUser(getUserFromStorage());
   }, []);
 
+  // Refetch /me every time we visit the account page so status (renewing vs cancelled) is always up to date
+  const isAccountPage = pathname === "/account" || pathname === "/app/account" || (pathname ?? "").startsWith("/app/account");
   useEffect(() => {
-    const uid = user?.id;
+    if (!isAccountPage) return;
+    const u = getUserFromStorage();
+    const uid = u?.id;
     if (!uid || !API_URL || API_URL === "undefined") return;
     const ac = new AbortController();
     fetch(`${API_URL}/me`, { headers: { "X-User-Id": uid }, signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data && typeof data === "object") {
-          const u = getUserFromStorage();
-          if (u && u.id === uid) {
-            const plan = (data.plan as PlanId) ?? u.plan;
-            const endsAt = data.subscription_ends_at ?? u.subscription_ends_at;
-            const next = { ...u, plan, subscription_ends_at: endsAt ?? undefined };
+          const current = getUserFromStorage();
+          if (current && current.id === uid) {
+            const plan = (data.plan as PlanId) ?? current.plan;
+            const endsAt = data.subscription_ends_at ?? current.subscription_ends_at;
+            const next = { ...current, plan, subscription_ends_at: endsAt ?? undefined };
             setUserInStorage(next);
             setUser(next);
           }
@@ -121,7 +131,7 @@ export default function AccountPage() {
       })
       .catch(() => {});
     return () => ac.abort();
-  }, [user?.id]);
+  }, [isAccountPage, pathname]);
 
   const startEditEmail = () => {
     setEditingEmail(true);
@@ -176,8 +186,6 @@ export default function AccountPage() {
     setUnsubscribeModalOpen(false);
     window.location.href = getWhopCheckoutUrl("pro", currencyConfig.currency, getDatafastVisitorId(), "account-offer-pro");
   };
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
   const handleConfirmCancel = async () => {
     if (!user?.id || !API_URL || API_URL === "undefined") {
@@ -403,12 +411,14 @@ export default function AccountPage() {
             {t("account.seeAllPlans")}
           </Link>
           {user?.subscription_ends_at ? (
-            <Link
-              href="/pricing"
-              className="px-4 py-2.5 rounded-xl bg-[#00ffe8]/15 border border-[#00ffe8]/50 text-[#00ffe8] hover:bg-[#00ffe8]/25 hover:border-[#00ffe8] text-sm font-medium transition"
+            <button
+              type="button"
+              disabled={renewLoading}
+              onClick={handleRenewPlan}
+              className="px-4 py-2.5 rounded-xl bg-[#00ffe8]/15 border border-[#00ffe8]/50 text-[#00ffe8] hover:bg-[#00ffe8]/25 hover:border-[#00ffe8] disabled:opacity-60 text-sm font-medium transition"
             >
-              {t("account.renewPlan")}
-            </Link>
+              {renewLoading ? "…" : t("account.renewPlan")}
+            </button>
           ) : (
             <button
               type="button"
@@ -500,6 +510,24 @@ export default function AccountPage() {
             <button
               type="button"
               onClick={() => { setCancelWhopMessageOpen(false); setCancelWhopEndDate(null); }}
+              className="w-full py-2.5 px-4 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:opacity-90 transition"
+            >
+              {t("account.close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: You just renewed your plan */}
+      {renewSuccessOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setRenewSuccessOpen(false)} aria-hidden />
+          <div className="relative w-full max-w-md rounded-2xl bg-[#0a0a0f] border border-[#00ffe8]/30 shadow-xl shadow-[#00ffe8]/10 p-6">
+            <h2 className="text-xl font-bold text-white mb-2">{t("account.renewSuccess")}</h2>
+            <p className="text-zinc-300 text-sm mb-6">{t("account.active")}</p>
+            <button
+              type="button"
+              onClick={() => setRenewSuccessOpen(false)}
               className="w-full py-2.5 px-4 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:opacity-90 transition"
             >
               {t("account.close")}
