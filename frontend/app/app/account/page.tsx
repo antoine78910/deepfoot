@@ -165,6 +165,8 @@ export default function AccountPage() {
           setUser({ ...u, plan: newPlan });
         }
         setSyncPlanMessage(t("account.syncPlanSuccess"));
+      } else if (data?.reason === "whop_api_error") {
+        setSyncPlanMessage(t("account.syncPlanWhopApiError"));
       } else if (data?.reason === "no_active_membership") {
         setSyncPlanMessage(t("account.syncPlanNoMembership"));
       } else {

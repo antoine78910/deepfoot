@@ -58,7 +58,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         email = _get_user_email_from_supabase(admin, user_id)
         if email:
             logger.info("me: syncing plan from Whop for user_id=%s email=%s***", _mask_user_id(user_id), (email or "")[:4])
-            whop_plan, membership_id = await _whop_get_plan_for_email(email, whop_key, company_id)
+            whop_plan, membership_id, _ = await _whop_get_plan_for_email(email, whop_key, company_id)
             if whop_plan and membership_id:
                 plan_from_db, _, _ = get_plan_and_usage(user_id)
                 if whop_plan != plan_from_db:
@@ -225,18 +225,19 @@ def _extract_members_list(data: dict, base: str) -> list:
     return []
 
 
-async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -> tuple[str | None, str | None]:
+async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -> tuple[str | None, str | None, str | None]:
     """
-    Trouve le membre Whop par email et son membership actif ; retourne (app_plan, membership_id).
-    Permet de resynchroniser le plan (sync-plan) sans annuler.
-    Pagination : on parcourt jusqu'à 5 pages (500 membres) pour trouver l'email.
+    Trouve le membre Whop par email et son membership actif.
+    Retourne (app_plan, membership_id, api_error).
+    api_error = "whop_unauthorized" (401) ou "whop_forbidden" (403) si l'API Whop refuse la requête.
     """
     if not email or not whop_key or not company_id:
-        return (None, None)
+        return (None, None, None)
     import httpx
     headers = {"Authorization": f"Bearer {whop_key}"}
     email_lower = email.strip().lower()
     member_id = None
+    api_error: str | None = None
     for base in ["https://api.whop.com/api/v5", "https://api.whop.com/api/v2"]:
         for page in range(1, 6):  # pages 1..5
             try:
@@ -249,9 +250,11 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
                     )
                 if r.status_code == 401:
                     logger.warning("Whop API: 401 Unauthorized (check WHOP_API_KEY)")
+                    api_error = "whop_unauthorized"
                     break
                 if r.status_code == 403:
                     logger.warning("Whop API: 403 Forbidden (check company_id or API scope)")
+                    api_error = "whop_forbidden"
                     break
                 if r.status_code >= 400:
                     continue
@@ -277,11 +280,13 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
                     break
             except Exception as e:
                 logger.warning("Whop list members %s page %s: %s", base, page, e)
-        if member_id:
+        if member_id or api_error:
             break
+    if api_error:
+        return (None, None, api_error)
     if not member_id:
         logger.info("Whop: no member found for email %s (tried v5 and v2, paginated)", email_lower[:3] + "***")
-        return (None, None)
+        return (None, None, None)
 
     membership_id = None
     plan_id = None
@@ -314,9 +319,9 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
         except Exception as e:
             logger.debug("Whop list memberships %s: %s", base, e)
     if not membership_id:
-        return (None, None)
+        return (None, None, None)
     app_plan = WHOP_PLAN_TO_APP.get((plan_id or "").strip()) if plan_id else "starter"
-    return (app_plan or "starter", membership_id)
+    return (app_plan or "starter", membership_id, None)
 
 
 @router.post("/me/sync-plan")
@@ -339,7 +344,9 @@ async def sync_plan(x_user_id: str | None = Header(None, alias="X-User-Id")):
     email = _get_user_email_from_supabase(admin, user_id)
     if not email:
         return {"ok": False, "plan": "free", "updated": False, "reason": "no_email"}
-    app_plan, membership_id = await _whop_get_plan_for_email(email, whop_key, company_id)
+    app_plan, membership_id, whop_error = await _whop_get_plan_for_email(email, whop_key, company_id)
+    if whop_error:
+        return {"ok": False, "plan": "free", "updated": False, "reason": "whop_api_error"}
     if not app_plan or not membership_id:
         return {"ok": True, "plan": "free", "updated": False, "reason": "no_active_membership"}
     try:
