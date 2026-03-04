@@ -2,7 +2,7 @@
 import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 
 class Settings(BaseSettings):
@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     datafast_api_key: str = ""
     # Whop — secret du webhook pour vérifier la signature (ws_...)
     whop_webhook_secret: str = ""
-    # Whop — API key (lecture paiement / resync par payment_id, annulation)
-    whop_api_key: str = ""
-    # Whop — Company ID (biz_xxx) pour annulation par email si pas de membership_id
-    whop_company_id: str = ""
+    # Whop — API key (Company API key from Whop Dashboard; env: WHOP_API_KEY)
+    whop_api_key: str = Field(default="", validation_alias="WHOP_API_KEY")
+    # Whop — Company ID (biz_xxx) pour annulation par email si pas de membership_id; env: WHOP_COMPANY_ID
+    whop_company_id: str = Field(default="", validation_alias="WHOP_COMPANY_ID")
 
     @model_validator(mode="after")
     def fill_supabase_from_next_public(self: "Settings") -> "Settings":

@@ -249,7 +249,14 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
                         timeout=15.0,
                     )
                 if r.status_code == 401:
-                    logger.warning("Whop API: 401 Unauthorized (check WHOP_API_KEY)")
+                    try:
+                        body = (r.text or "")[:500]
+                        logger.warning(
+                            "Whop API: 401 Unauthorized (check WHOP_API_KEY). Response: %s",
+                            body or "(empty)",
+                        )
+                    except Exception:
+                        logger.warning("Whop API: 401 Unauthorized (check WHOP_API_KEY)")
                     api_error = "whop_unauthorized"
                     break
                 if r.status_code == 403:
