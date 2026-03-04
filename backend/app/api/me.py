@@ -86,8 +86,8 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
                     logger.warning("me: failed to update plan from Whop for user_id=%s: %s", _mask_user_id(user_id), e)
 
     plan, used, last, subscription_ends_at, whop_membership_id = get_plan_and_usage(user_id)
-    # Fallback: si on a un membership_id en base mais pas de subscription_ends_at, vérifier chez Whop (au cas où best_membership n'a pas tout renvoyé)
-    if user_id and whop_key and whop_membership_id and not subscription_ends_at:
+    # Status = toujours celui du membership affiché (whop_membership_id en base). On interroge Whop pour ce membership uniquement.
+    if user_id and whop_key and whop_membership_id:
         period_end_iso, is_canceled = await _whop_get_membership_status(whop_membership_id, whop_key)
         if is_canceled and period_end_iso:
             subscription_ends_at = period_end_iso
@@ -95,9 +95,18 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
                 admin = get_supabase_admin()
                 if admin:
                     admin.table("profiles").update({"subscription_ends_at": period_end_iso}).eq("id", user_id).execute()
-                    logger.info("me: user_id=%s subscription_ends_at set from Whop (canceled) => %s", _mask_user_id(user_id), period_end_iso[:10])
+                    logger.info("me: user_id=%s status from Whop (canceled) => ends %s", _mask_user_id(user_id), period_end_iso[:10])
             except Exception as e:
                 logger.warning("me: failed to persist subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
+        else:
+            subscription_ends_at = None
+            try:
+                admin = get_supabase_admin()
+                if admin:
+                    admin.table("profiles").update({"subscription_ends_at": None}).eq("id", user_id).execute()
+                    logger.debug("me: user_id=%s status from Whop (active/renewing) => subscription_ends_at cleared", _mask_user_id(user_id))
+            except Exception as e:
+                logger.warning("me: failed to clear subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
     today = datetime.now(timezone.utc).date()
     used = reset_if_new_day(used, last, today)
     limit, full_analysis = get_analysis_limit(plan)
@@ -140,7 +149,13 @@ def _whop_parse_membership_status(m: dict) -> tuple[str | None, bool]:
     is_canceled = status is canceled/cancelled or cancel_at_period_end is true.
     """
     status = (m.get("status") or "").strip().lower()
-    cancel_at_end = bool(m.get("cancel_at_period_end"))
+    raw_cancel = m.get("cancel_at_period_end")
+    if isinstance(raw_cancel, bool):
+        cancel_at_end = raw_cancel
+    elif isinstance(raw_cancel, str):
+        cancel_at_end = raw_cancel.strip().lower() in ("true", "1", "yes")
+    else:
+        cancel_at_end = bool(raw_cancel) if raw_cancel is not None else False
     is_canceled = status in ("canceled", "cancelled") or cancel_at_end
     raw = m.get("renewal_period_end") or m.get("renewal_period_end_at")
     period_end: str | None = None
