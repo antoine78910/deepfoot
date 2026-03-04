@@ -305,6 +305,26 @@ def _load_match_context_api_football(
                     else:
                         match_statistics = stats_raw
 
+    data_recap = {
+        "data_source": "API-Football",
+        "form_home_matches": len(home_goals_for),
+        "form_away_matches": len(away_goals_for),
+        "home_goals_for_avg": round(h_for_avg, 2),
+        "home_goals_against_avg": round(h_against_avg, 2),
+        "away_goals_for_avg": round(a_for_avg, 2),
+        "away_goals_against_avg": round(a_against_avg, 2),
+        "home_wdl": form_to_wdl(home_form),
+        "away_wdl": form_to_wdl(away_form),
+        "h2h_matches_count": len(h2h_fixtures),
+        "h2h_home_wins": h2h_h,
+        "h2h_draws": h2h_d,
+        "h2h_away_wins": h2h_a,
+        "h2h_seasons_used": 5,
+        "fixture_id": fixture_id,
+        "has_upcoming_match": fixture_id is not None,
+        "league": league,
+        "venue": venue,
+    }
     return {
         "home_team": home_team,
         "away_team": away_team,
@@ -330,6 +350,7 @@ def _load_match_context_api_football(
         "final_score_home": final_score_home,
         "final_score_away": final_score_away,
         "match_statistics": match_statistics,
+        "data_recap": data_recap,
     }
 
 
@@ -387,7 +408,27 @@ def load_match_context(
         h_for_avg, a_for_avg, h_against_avg, a_against_avg,
         h2h_h, h2h_d, h2h_a,
     )
-
+    h2h_total = h2h_h + h2h_d + h2h_a
+    data_recap = {
+        "data_source": "Supabase",
+        "form_home_matches": len(home_goals_for),
+        "form_away_matches": len(away_goals_for),
+        "home_goals_for_avg": round(h_for_avg, 2),
+        "home_goals_against_avg": round(h_against_avg, 2),
+        "away_goals_for_avg": round(a_for_avg, 2),
+        "away_goals_against_avg": round(a_against_avg, 2),
+        "home_wdl": form_to_wdl(home_form),
+        "away_wdl": form_to_wdl(away_form),
+        "h2h_matches_count": h2h_total,
+        "h2h_home_wins": h2h_h,
+        "h2h_draws": h2h_d,
+        "h2h_away_wins": h2h_a,
+        "h2h_seasons_used": None,
+        "fixture_id": None,
+        "has_upcoming_match": False,
+        "league": None,
+        "venue": None,
+    }
     return {
         "home_team": home_team,
         "away_team": away_team,
@@ -400,4 +441,5 @@ def load_match_context(
         "home_form_label": form_to_label(hw, hd, hl),
         "away_form_label": form_to_label(aw, ad, al),
         "comparison_pcts": pcts,
+        "data_recap": data_recap,
     }

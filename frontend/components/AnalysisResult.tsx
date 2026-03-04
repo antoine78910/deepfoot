@@ -65,6 +65,44 @@ type Result = {
   final_score_away?: number;
   match_statistics?: { type: string; home_value: string | number; away_value: string | number }[];
   full_analysis?: boolean;
+  analysis_recap?: {
+    data_source?: string;
+    form?: {
+      home_matches_used?: number;
+      away_matches_used?: number;
+      home_goals_for_avg?: number;
+      home_goals_against_avg?: number;
+      away_goals_for_avg?: number;
+      away_goals_against_avg?: number;
+      home_wdl?: string;
+      away_wdl?: string;
+    };
+    h2h?: {
+      matches_count?: number;
+      home_wins?: number;
+      draws?: number;
+      away_wins?: number;
+      seasons_used?: number | null;
+    };
+    probabilities?: {
+      model?: string;
+      lambda_home?: number;
+      lambda_away?: number;
+      xg_home?: number;
+      xg_away?: number;
+    };
+    match_info?: {
+      fixture_id?: number | null;
+      has_upcoming_match?: boolean;
+      league?: string | null;
+      venue?: string | null;
+    };
+    ai_summary?: {
+      news_included?: boolean;
+      context_used?: string;
+    };
+    api_requests_estimate?: string | null;
+  } | null;
   [k: string]: unknown;
 };
 
@@ -865,6 +903,66 @@ export function AnalysisResult({ result }: { result: Result }) {
         </p>
       </section>
         </>
+      )}
+
+      {/* Récap des données utilisées pour cette analyse */}
+      {result.analysis_recap && (
+        <section className="pt-6 mt-6 border-t border-white/10">
+          <h2 className="text-lg font-semibold text-white mb-3">📋 {t("analysis.recapTitle")}</h2>
+          <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-sm space-y-4">
+            <div>
+              <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapDataSource")}</h3>
+              <p className="text-zinc-300">{result.analysis_recap.data_source}</p>
+              {result.analysis_recap.api_requests_estimate && (
+                <p className="text-zinc-500 text-xs mt-0.5">{result.analysis_recap.api_requests_estimate}</p>
+              )}
+            </div>
+            {result.analysis_recap.form && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapForm")}</h3>
+                <ul className="text-zinc-300 space-y-0.5 list-none text-xs">
+                  <li>{t("analysis.recapFormMatches").replace("{home}", String(result.analysis_recap.form.home_matches_used ?? 5)).replace("{away}", String(result.analysis_recap.form.away_matches_used ?? 5))}</li>
+                  <li>{t("analysis.recapFormWdl").replace("{home}", result.analysis_recap.form.home_wdl ?? "—").replace("{away}", result.analysis_recap.form.away_wdl ?? "—")}</li>
+                  <li>{t("analysis.recapFormGoals").replace("{hFor}", String(result.analysis_recap.form.home_goals_for_avg ?? "—")).replace("{hAg}", String(result.analysis_recap.form.home_goals_against_avg ?? "—")).replace("{aFor}", String(result.analysis_recap.form.away_goals_for_avg ?? "—")).replace("{aAg}", String(result.analysis_recap.form.away_goals_against_avg ?? "—"))}</li>
+                </ul>
+              </div>
+            )}
+            {result.analysis_recap.h2h && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapH2h")}</h3>
+                <p className="text-zinc-300 text-xs">
+                  {t("analysis.recapH2hDetail")
+                    .replace("{count}", String(result.analysis_recap.h2h.matches_count ?? 0))
+                    .replace("{homeWins}", String(result.analysis_recap.h2h.home_wins ?? 0))
+                    .replace("{draws}", String(result.analysis_recap.h2h.draws ?? 0))
+                    .replace("{awayWins}", String(result.analysis_recap.h2h.away_wins ?? 0))
+                    .replace("{seasons}", result.analysis_recap.h2h.seasons_used != null ? String(result.analysis_recap.h2h.seasons_used) : "—")}
+                </p>
+              </div>
+            )}
+            {result.analysis_recap.probabilities && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapProbabilities")}</h3>
+                <p className="text-zinc-300 text-xs">
+                  {t("analysis.recapProbDetail")
+                    .replace("{model}", result.analysis_recap.probabilities.model ?? "Poisson")
+                    .replace("{xgHome}", typeof result.analysis_recap.probabilities.xg_home === "number" ? result.analysis_recap.probabilities.xg_home.toFixed(2) : "—")
+                    .replace("{xgAway}", typeof result.analysis_recap.probabilities.xg_away === "number" ? result.analysis_recap.probabilities.xg_away.toFixed(2) : "—")}
+                </p>
+              </div>
+            )}
+            {result.analysis_recap.ai_summary && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapAiSummary")}</h3>
+                <p className="text-zinc-300 text-xs">
+                  {result.analysis_recap.ai_summary.news_included
+                    ? t("analysis.recapAiWithNews")
+                    : t("analysis.recapAiNoNews")}
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       <p className="text-center text-zinc-500 text-xs pt-6 border-t border-white/5">This analysis is provided for informational purposes only.</p>

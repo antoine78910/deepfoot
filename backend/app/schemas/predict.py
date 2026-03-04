@@ -119,6 +119,9 @@ class PredictResponse(BaseModel):
     # Plan : si False, le front n'affiche que les premières stats et floute le reste (free)
     full_analysis: Optional[bool] = True
 
+    # Récap détaillé des données utilisées pour cette analyse (source, matchs forme, H2H, modèle, etc.)
+    analysis_recap: Optional[dict] = None
+
 
 class TranslateRequest(BaseModel):
     analysis: dict[str, Any] = Field(..., description="Full analysis/result object to translate")

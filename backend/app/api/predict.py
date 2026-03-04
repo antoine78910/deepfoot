@@ -129,13 +129,62 @@ def _out_from_api_predictions(api_pred: dict) -> dict:
     }
 
 
+def _build_analysis_recap(
+    ctx: dict,
+    out: dict,
+    prob_source: str,
+    news_included: bool,
+) -> dict:
+    """Build a detailed recap of all data used for this analysis (per match)."""
+    recap = ctx.get("data_recap") or {}
+    return {
+        "data_source": recap.get("data_source", "Unknown"),
+        "form": {
+            "home_matches_used": recap.get("form_home_matches"),
+            "away_matches_used": recap.get("form_away_matches"),
+            "home_goals_for_avg": recap.get("home_goals_for_avg"),
+            "home_goals_against_avg": recap.get("home_goals_against_avg"),
+            "away_goals_for_avg": recap.get("away_goals_for_avg"),
+            "away_goals_against_avg": recap.get("away_goals_against_avg"),
+            "home_wdl": recap.get("home_wdl"),
+            "away_wdl": recap.get("away_wdl"),
+        },
+        "h2h": {
+            "matches_count": recap.get("h2h_matches_count"),
+            "home_wins": recap.get("h2h_home_wins"),
+            "draws": recap.get("h2h_draws"),
+            "away_wins": recap.get("h2h_away_wins"),
+            "seasons_used": recap.get("h2h_seasons_used"),
+        },
+        "probabilities": {
+            "model": prob_source,
+            "lambda_home": ctx.get("lambda_home"),
+            "lambda_away": ctx.get("lambda_away"),
+            "xg_home": out.get("xg_home"),
+            "xg_away": out.get("xg_away"),
+        },
+        "match_info": {
+            "fixture_id": recap.get("fixture_id"),
+            "has_upcoming_match": recap.get("has_upcoming_match"),
+            "league": recap.get("league") or ctx.get("league"),
+            "venue": recap.get("venue") or ctx.get("venue"),
+        },
+        "ai_summary": {
+            "news_included": news_included,
+            "context_used": "stats + form + H2H" + (" + football news" if news_included else ""),
+        },
+        "api_requests_estimate": "~17–21 requests (API-Football)" if recap.get("data_source") == "API-Football" else None,
+    }
+
+
 def _build_response(
     ctx: dict,
     out: dict,
     ai: dict,
+    analysis_recap: Optional[dict] = None,
 ) -> dict:
     pcts = ctx.get("comparison_pcts") or {}
-    return {
+    resp = {
         "home_team": ctx["home_team"],
         "away_team": ctx["away_team"],
         "league": ctx.get("league"),
@@ -193,6 +242,9 @@ def _build_response(
         "home_team_id": ctx.get("home_team_id"),
         "away_team_id": ctx.get("away_team_id"),
     }
+    if analysis_recap is not None:
+        resp["analysis_recap"] = analysis_recap
+    return resp
 
 
 def run_predict_with_progress(
@@ -215,16 +267,19 @@ def run_predict_with_progress(
     report("Computing probabilities…", 62)
 
     # Mode API : uniquement les données API-Football Predictions, aucune donnée de notre modèle
+    used_api_predictions = False
     if payload.use_api_predictions and ctx.get("fixture_id"):
         api_pred = api_get_predictions(ctx["fixture_id"])
         if api_pred:
             out = _out_from_api_predictions(api_pred)
+            used_api_predictions = True
         else:
             out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
     else:
         out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
 
     ai: dict = {}
+    news_included = False
     report("Generating AI summary…", 75)
     try:
         prompt_ctx = build_prompt_context(
@@ -246,6 +301,7 @@ def run_predict_with_progress(
             ctx.get("league"),
         )
         if news_text:
+            news_included = True
             prompt_ctx = prompt_ctx + "\n\n" + news_text
         ai = generate_ai_analysis(
             prompt_ctx,
@@ -256,8 +312,10 @@ def run_predict_with_progress(
     except Exception:
         ai = {"quick_summary": None, "scenario_1": None}
 
+    prob_source = "API-Football Predictions" if used_api_predictions else "Poisson"
+    analysis_recap = _build_analysis_recap(ctx, out, prob_source, news_included)
     report("Done", 100)
-    return _build_response(ctx, out, ai)
+    return _build_response(ctx, out, ai, analysis_recap)
 
 
 @router.get("/match-result")
