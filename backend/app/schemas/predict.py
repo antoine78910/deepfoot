@@ -100,6 +100,7 @@ class PredictResponse(BaseModel):
     scenario_4: Optional[dict] = None
     key_forces_home: Optional[list[str]] = None
     key_forces_away: Optional[list[str]] = None
+    professional_analysis: Optional[str] = None  # Full 8-section analysis (Sportmonks)
     ai_confidence: Optional[str] = None  # "Very high"
 
     # Stats comparatives (pour barres)
@@ -121,6 +122,10 @@ class PredictResponse(BaseModel):
 
     # Récap détaillé des données utilisées pour cette analyse (source, matchs forme, H2H, modèle, etc.)
     analysis_recap: Optional[dict] = None
+
+    # News scraping + motivation analysis (fiabilité prédictions)
+    scraped_news_count: Optional[int] = None
+    motivation_analysis: Optional[str] = None  # Full GPT motivation analysis text
 
 
 class TranslateRequest(BaseModel):

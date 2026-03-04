@@ -53,6 +53,8 @@ type Result = {
   scenario_4?: { title?: string; body?: string; probability_pct?: number | null } | null;
   key_forces_home?: string[] | null;
   key_forces_away?: string[] | null;
+  /** Full 8-section professional analysis (Sportmonks) */
+  professional_analysis?: string | null;
   ai_confidence?: string | null;
   attack_home_pct?: number;
   defense_home_pct?: number;
@@ -103,9 +105,53 @@ type Result = {
     };
     api_requests_estimate?: string | null;
     pipeline_steps?: { order: number; title_key: string; detail: string }[];
+    stats_period?: string;
+    how_bars_work?: Record<string, string>;
+    how_score_prediction_works?: string;
+    raw_data?: {
+      home_goals_for_last5?: number[];
+      home_goals_against_last5?: number[];
+      away_goals_for_last5?: number[];
+      away_goals_against_last5?: number[];
+      home_form_last5?: string[];
+      away_form_last5?: string[];
+      averages?: Record<string, number | undefined>;
+      lambdas?: Record<string, number | undefined>;
+      comparison_pcts?: Record<string, number | undefined>;
+      h2h?: Record<string, number | undefined>;
+    };
+    scraped_news_count?: number;
+    motivation_analysis_used?: boolean;
   } | null;
+  scraped_news_count?: number;
+  motivation_analysis?: string | null;
   [k: string]: unknown;
 };
+
+/** Professional analysis (Sportmonks 8-section) — expandable block */
+function ProfessionalAnalysisBlock({ content, t }: { content: string; t: (key: string) => string }) {
+  const [expanded, setExpanded] = useState(false);
+  const previewLen = 320;
+  const hasMore = (content || "").length > previewLen;
+  const display = expanded || !hasMore ? content : content.slice(0, previewLen) + "...";
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+        <span className="text-[#00ffe8]">📋</span> {t("analysis.professional_analysis")}
+      </h2>
+      <div className="text-zinc-300 leading-relaxed whitespace-pre-line text-sm">{display}</div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="text-[#00ffe8] hover:underline text-sm font-medium"
+        >
+          {expanded ? t("analysis.show_less") : t("analysis.show_full_analysis")}
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** Grand indicateur de forme (Great = flamme orange, Poor = graph violet/rose, Average = barres) */
 function FormLabelBlock({ label, compact }: { label: string; compact?: boolean }) {
@@ -527,6 +573,13 @@ export function AnalysisResult({ result }: { result: Result }) {
           </div>
         </div>
       </section>
+
+      {/* Professional analysis (Sportmonks) - full 8-section text */}
+      {result.professional_analysis && (
+        <section className="pt-6 border-t border-white/5">
+          <ProfessionalAnalysisBlock content={result.professional_analysis} t={t} />
+        </section>
+      )}
 
       {/* Quick summary - visible for free plan */}
       {result.quick_summary && (
@@ -979,6 +1032,84 @@ export function AnalysisResult({ result }: { result: Result }) {
                     ? t("analysis.recapAiWithNews")
                     : t("analysis.recapAiNoNews")}
                 </p>
+              </div>
+            )}
+            {result.analysis_recap.stats_period && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapStatsPeriod")}</h3>
+                <p className="text-zinc-300 text-xs">{result.analysis_recap.stats_period}</p>
+              </div>
+            )}
+            {result.analysis_recap.how_bars_work && Object.keys(result.analysis_recap.how_bars_work).length > 0 && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-2">{t("analysis.recapHowBars")}</h3>
+                <ul className="space-y-1.5 text-xs text-zinc-300 list-none">
+                  {(["attack", "defense", "goals", "form", "h2h", "overall"] as const).map((key) => {
+                    const label = t(`analysis.recapBarLabel.${key}`);
+                    const text = result.analysis_recap!.how_bars_work![key];
+                    return text ? <li key={key}><span className="text-white font-medium">{label}:</span> {text}</li> : null;
+                  })}
+                </ul>
+              </div>
+            )}
+            {result.analysis_recap.how_score_prediction_works && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapHowScore")}</h3>
+                <p className="text-zinc-300 text-xs whitespace-pre-line">{result.analysis_recap.how_score_prediction_works}</p>
+              </div>
+            )}
+            {result.analysis_recap.raw_data && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-2">{t("analysis.recapRawData")}</h3>
+                <div className="rounded bg-black/20 p-3 text-xs text-zinc-400 font-mono space-y-2 overflow-x-auto">
+                  {result.analysis_recap.raw_data.home_goals_for_last5 && (
+                    <p><span className="text-zinc-500">home_goals_for (last 5):</span> [{result.analysis_recap.raw_data.home_goals_for_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.home_goals_against_last5 && (
+                    <p><span className="text-zinc-500">home_goals_against (last 5):</span> [{result.analysis_recap.raw_data.home_goals_against_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.away_goals_for_last5 && (
+                    <p><span className="text-zinc-500">away_goals_for (last 5):</span> [{result.analysis_recap.raw_data.away_goals_for_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.away_goals_against_last5 && (
+                    <p><span className="text-zinc-500">away_goals_against (last 5):</span> [{result.analysis_recap.raw_data.away_goals_against_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.home_form_last5 && result.analysis_recap.raw_data.home_form_last5.length > 0 && (
+                    <p><span className="text-zinc-500">home_form (last 5):</span> [{result.analysis_recap.raw_data.home_form_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.away_form_last5 && result.analysis_recap.raw_data.away_form_last5.length > 0 && (
+                    <p><span className="text-zinc-500">away_form (last 5):</span> [{result.analysis_recap.raw_data.away_form_last5.join(", ")}]</p>
+                  )}
+                  {result.analysis_recap.raw_data.averages && (
+                    <p><span className="text-zinc-500">averages:</span> home_for={result.analysis_recap.raw_data.averages.home_goals_for ?? "—"}, home_against={result.analysis_recap.raw_data.averages.home_goals_against ?? "—"}, away_for={result.analysis_recap.raw_data.averages.away_goals_for ?? "—"}, away_against={result.analysis_recap.raw_data.averages.away_goals_against ?? "—"}</p>
+                  )}
+                  {result.analysis_recap.raw_data.lambdas && (
+                    <p><span className="text-zinc-500">lambdas:</span> lambda_home={result.analysis_recap.raw_data.lambdas.lambda_home ?? "—"}, lambda_away={result.analysis_recap.raw_data.lambdas.lambda_away ?? "—"}</p>
+                  )}
+                  {result.analysis_recap.raw_data.comparison_pcts && (
+                    <p><span className="text-zinc-500">comparison_pcts (bar %):</span> attack={result.analysis_recap.raw_data.comparison_pcts.attack_home_pct ?? "—"}%, defense={result.analysis_recap.raw_data.comparison_pcts.defense_home_pct ?? "—"}%, form={result.analysis_recap.raw_data.comparison_pcts.form_home_pct ?? "—"}%, h2h={result.analysis_recap.raw_data.comparison_pcts.h2h_home_pct ?? "—"}%, goals={result.analysis_recap.raw_data.comparison_pcts.goals_home_pct ?? "—"}%, overall={result.analysis_recap.raw_data.comparison_pcts.overall_home_pct ?? "—"}%</p>
+                  )}
+                  {result.analysis_recap.raw_data.h2h && (
+                    <p><span className="text-zinc-500">h2h:</span> home_wins={result.analysis_recap.raw_data.h2h.home_wins ?? "—"}, draws={result.analysis_recap.raw_data.h2h.draws ?? "—"}, away_wins={result.analysis_recap.raw_data.h2h.away_wins ?? "—"}, matches={result.analysis_recap.raw_data.h2h.matches_count ?? "—"}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {(result.scraped_news_count != null && result.scraped_news_count > 0) && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapScrapedNews")}</h3>
+                <p className="text-zinc-300 text-xs">{t("analysis.recapScrapedNewsCount").replace("{count}", String(result.scraped_news_count))}</p>
+              </div>
+            )}
+            {result.motivation_analysis && result.motivation_analysis.trim() && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapMotivationAnalysis")}</h3>
+                <details className="text-xs">
+                  <summary className="text-zinc-400 cursor-pointer">{t("analysis.recapMotivationExpand")}</summary>
+                  <pre className="mt-2 p-3 rounded bg-black/20 text-zinc-300 whitespace-pre-wrap font-sans text-xs overflow-x-auto max-h-96 overflow-y-auto">
+                    {result.motivation_analysis}
+                  </pre>
+                </details>
               </div>
             )}
           </div>

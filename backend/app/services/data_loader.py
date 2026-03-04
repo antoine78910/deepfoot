@@ -1,7 +1,7 @@
 # backend/app/services/data_loader.py
 """
 Charge les données équipes/matchs pour le feature engineering.
-Priorité: 1) API-Football (api-sports.io) si clé configurée, 2) Supabase, 3) démo.
+Priorité: 1) Sportmonks (nouveau modèle) si token configuré, 2) API-Football (legacy), 3) Supabase, 4) démo.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional
@@ -17,6 +17,10 @@ from app.ml.features import (
 
 def normalize_team_name(name: str) -> str:
     return name.strip().lower().replace(" ", "_") if name else ""
+
+
+def _use_sportmonks() -> bool:
+    return bool((get_settings().sportmonks_api_token or "").strip())
 
 
 def _use_api_football() -> bool:
@@ -384,6 +388,12 @@ def _load_match_context_api_football(
         "league": league,
         "venue": venue,
         "pipeline_steps": steps,
+        "raw_home_goals_for": home_goals_for,
+        "raw_home_goals_against": home_goals_against,
+        "raw_away_goals_for": away_goals_for,
+        "raw_away_goals_against": away_goals_against,
+        "raw_home_form": home_form,
+        "raw_away_form": away_form,
     }
     return {
         "home_team": home_team,
@@ -423,12 +433,21 @@ def load_match_context(
 ) -> dict[str, Any]:
     """
     Charge tout le contexte pour un match : form, goals for/against home/away, H2H.
-    Priorité: API-Football si clé → Supabase → démo.
-    Si home_team_id/away_team_id sont fournis (sélection autocomplete), ils sont utilisés en priorité.
+    Priorité: Sportmonks (si token) → API-Football (legacy) → Supabase → démo.
+    Si home_team_id/away_team_id sont fournis (sélection autocomplete), ils sont utilisés en priorité (API-Football/Supabase).
     """
     def report(step: str, percent: int) -> None:
         if progress_callback:
             progress_callback(step, percent)
+
+    if _use_sportmonks():
+        try:
+            from app.services.sportmonks import load_match_context_sportmonks
+            ctx = load_match_context_sportmonks(home_team, away_team, progress_callback=progress_callback)
+            if ctx is not None:
+                return ctx
+        except Exception:
+            pass
 
     if _use_api_football():
         ctx = _load_match_context_api_football(
@@ -495,6 +514,12 @@ def load_match_context(
         "league": None,
         "venue": None,
         "pipeline_steps": steps_supabase,
+        "raw_home_goals_for": home_goals_for,
+        "raw_home_goals_against": home_goals_against,
+        "raw_away_goals_for": away_goals_for,
+        "raw_away_goals_against": away_goals_against,
+        "raw_home_form": list(home_form) if isinstance(home_form, (list, tuple)) else [],
+        "raw_away_form": list(away_form) if isinstance(away_form, (list, tuple)) else [],
     }
     return {
         "home_team": home_team,

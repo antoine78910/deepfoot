@@ -18,12 +18,51 @@ from app.schemas.predict import (
 )
 from app.services.data_loader import load_match_context
 from app.ml.poisson import predict_all
-from app.services.openai_summary import build_prompt_context, generate_ai_analysis, translate_analysis
+from app.services.openai_summary import build_prompt_context, generate_ai_analysis, generate_ai_analysis_sportmonks, translate_analysis
 from app.services.news_fetcher import fetch_football_news
+from app.services.news_scraper import fetch_news_multi_source, format_news_for_prompt
+from app.services.motivation_analysis import run_motivation_analysis
 from app.services.api_football import get_predictions as api_get_predictions
 from app.services.subscription import can_analyze, consume_analysis
 
 router = APIRouter(prefix="/predict", tags=["predict"])
+
+
+def _save_analysis_news(
+    home_team: str,
+    away_team: str,
+    league: Optional[str],
+    scraped_items: list,
+    motivation_text: str,
+) -> None:
+    """Persist scraped news and motivation analysis to Supabase (analysis_news + analysis_motivation tables)."""
+    try:
+        from app.core.config import get_settings
+        from app.core.supabase_client import get_supabase
+        s = get_settings()
+        if not (s.supabase_url and s.supabase_key):
+            return
+        supabase = get_supabase()
+        for it in scraped_items:
+            supabase.table("analysis_news").insert({
+                "home_team": home_team,
+                "away_team": away_team,
+                "league": league or "",
+                "source": it.get("source") or "",
+                "title": (it.get("title") or "")[:500],
+                "snippet": (it.get("snippet") or "")[:2000],
+                "url": (it.get("url") or "")[:1000],
+                "keywords_found": it.get("keywords_found") or [],
+            }).execute()
+        if motivation_text and motivation_text.strip():
+            supabase.table("analysis_motivation").insert({
+                "home_team": home_team,
+                "away_team": away_team,
+                "league": league or "",
+                "analysis_text": motivation_text.strip()[:15000],
+            }).execute()
+    except Exception:
+        pass
 
 
 def _parse_pct(s: str) -> float:
@@ -38,6 +77,61 @@ def _parse_pct(s: str) -> float:
 
 def _implied_odds(p: float) -> float:
     return round(100 / max(p, 0.5), 2) if p else 0.0
+
+
+def _out_from_sportmonks(ctx: dict) -> dict:
+    """Construit l'objet `out` à partir du contexte Sportmonks (data_recap.sportmonks_predictions)."""
+    recap = ctx.get("data_recap") or {}
+    sp = recap.get("sportmonks_predictions") or {}
+    prob_home = round(float(sp.get("home_win") or 33.33), 1)
+    prob_draw = round(float(sp.get("draw") or 33.33), 1)
+    prob_away = round(float(sp.get("away_win") or 33.33), 1)
+    xg_home = round(float(sp.get("xg_home") or 1.2), 2)
+    xg_away = round(float(sp.get("xg_away") or 1.2), 2)
+    xg_total = round(xg_home + xg_away, 2)
+    over_25 = float(sp.get("over_2_5") or 50)
+    under_25 = float(sp.get("under_2_5") or 50)
+    btts_yes = float(sp.get("btts_yes") or 50)
+    btts_no = float(sp.get("btts_no") or 50)
+    over_under = [
+        {"line": "0.5", "over_pct": 85.0, "under_pct": 15.0},
+        {"line": "1.5", "over_pct": 65.0, "under_pct": 35.0},
+        {"line": "2.5", "over_pct": over_25, "under_pct": under_25},
+        {"line": "3.5", "over_pct": 35.0, "under_pct": 65.0},
+    ]
+    double_chance_1x = round(prob_home + prob_draw, 1)
+    double_chance_x2 = round(prob_draw + prob_away, 1)
+    double_chance_12 = round(prob_home + prob_away, 1)
+    upset = round(min(prob_home, prob_away), 1)
+    return {
+        "xg_home": xg_home,
+        "xg_away": xg_away,
+        "xg_total": xg_total,
+        "prob_home": prob_home,
+        "prob_draw": prob_draw,
+        "prob_away": prob_away,
+        "implied_odds_home": _implied_odds(prob_home),
+        "implied_odds_draw": _implied_odds(prob_draw),
+        "implied_odds_away": _implied_odds(prob_away),
+        "btts_yes_pct": btts_yes,
+        "btts_no_pct": btts_no,
+        "over_under": over_under,
+        "exact_scores": [],
+        "most_likely_score": {"home": 1, "away": 1, "probability": 0.0},
+        "total_goals_distribution": {"0": 20.0, "1": 25.0, "2": 30.0, "3+": 25.0},
+        "goal_difference_dist": {"1": 40.0, "2": 35.0, "3+": 25.0},
+        "double_chance_1x": double_chance_1x,
+        "double_chance_x2": double_chance_x2,
+        "double_chance_12": double_chance_12,
+        "asian_handicap": {
+            "home_neg1_pct": 50.0,
+            "home_plus1_pct": 50.0,
+            "away_neg1_pct": 50.0,
+            "away_plus1_pct": 50.0,
+        },
+        "upset_probability": upset,
+        "api_advice": None,
+    }
 
 
 def _out_from_api_predictions(api_pred: dict) -> dict:
@@ -163,7 +257,7 @@ def _build_analysis_recap(
         steps.append({
             "order": 12,
             "title_key": "recap.step.news",
-            "detail": "NewsAPI: GET /v2/everything (search team names + league, last 7 days, up to 3 articles per team). Snippets added to context.",
+            "detail": "NewsAPI + Google News RSS (team, injury, lineup, rotation). Twitter insiders via Nitter RSS (league-based: Ornstein, Romano, Laurens, etc.) for lineup/injury/rotation leaks. Snippets + keyword detection added to context.",
         })
     steps.append({
         "order": 13,
@@ -171,8 +265,71 @@ def _build_analysis_recap(
         "detail": "1 request: OpenAI chat.completions (gpt-4o-mini). Response: quick_summary, scenario_1–4, key_forces_home, key_forces_away.",
     })
     steps.sort(key=lambda s: (s["order"], s.get("title_key", "")))
+    pcts = ctx.get("comparison_pcts") or {}
+
+    # Period for all form-based stats (Attack, Defense, Goals, Form)
+    stats_period = (
+        "Attack, Defense, Goals, Form: last 5 matches per team (all competitions). "
+        "H2H: all head-to-head matches found over up to 5 seasons (recent seasons weighted higher: 1.0, 0.8, 0.6, 0.4, 0.2)."
+    )
+    # How we compute each comparison bar
+    how_bars_work = {
+        "attack": "Home % = 100 × (home avg goals scored) / (home + away avg goals scored). Higher = more goals in last 5.",
+        "defense": "Home % = 100 × (1 / home avg goals conceded) / (1/home conceded + 1/away conceded). Higher = fewer goals conceded (stronger defense).",
+        "goals": "Same formula as Attack: share of total goals scored (last 5 each).",
+        "form": "Home % = 100 × (home points) / (home + away points), with points = 3×W + 1×D + 0×L over last 5.",
+        "h2h": "Home % = (home wins + 0.5×draws) / total H2H × 100, or weighted by season (recent = 1.0, older = 0.8, 0.6, 0.4, 0.2).",
+        "overall": "Average of the 5 bars above (attack, defense, form, h2h, goals), each with weight 1/5.",
+    }
+    # How we predict the score
+    how_score_prediction_works = (
+        "Poisson model. λ_home = (home_goals_for_avg × away_goals_against_avg) / (league_avg/2), "
+        "λ_away = (away_goals_for_avg × home_goals_against_avg) / (league_avg/2). league_avg = 2.7. "
+        "Lambdas clamped between 0.2 and 4.0. "
+        "P(score i–j) = Poisson(i | λ_home) × Poisson(j | λ_away). "
+        "1X2: P(Home)=sum i>j, P(Draw)=sum i=j, P(Away)=sum i<j. "
+        "BTTS Yes = sum P(i,j) for i≥1, j≥1. Over/Under = sum P(i,j) for i+j > line. "
+        "Exact scores = grid sorted by probability; most likely = highest P(i,j)."
+    )
+    # All raw data we have from API + computed values (so user sees every number used)
+    raw_data = {
+        "home_goals_for_last5": recap.get("raw_home_goals_for") or [],
+        "home_goals_against_last5": recap.get("raw_home_goals_against") or [],
+        "away_goals_for_last5": recap.get("raw_away_goals_for") or [],
+        "away_goals_against_last5": recap.get("raw_away_goals_against") or [],
+        "home_form_last5": recap.get("raw_home_form") or [],
+        "away_form_last5": recap.get("raw_away_form") or [],
+        "averages": {
+            "home_goals_for": recap.get("home_goals_for_avg"),
+            "home_goals_against": recap.get("home_goals_against_avg"),
+            "away_goals_for": recap.get("away_goals_for_avg"),
+            "away_goals_against": recap.get("away_goals_against_avg"),
+        },
+        "lambdas": {
+            "lambda_home": ctx.get("lambda_home"),
+            "lambda_away": ctx.get("lambda_away"),
+        },
+        "comparison_pcts": {
+            "attack_home_pct": pcts.get("attack_home_pct"),
+            "defense_home_pct": pcts.get("defense_home_pct"),
+            "form_home_pct": pcts.get("form_home_pct"),
+            "h2h_home_pct": pcts.get("h2h_home_pct"),
+            "goals_home_pct": pcts.get("goals_home_pct"),
+            "overall_home_pct": pcts.get("overall_home_pct"),
+        },
+        "h2h": {
+            "home_wins": recap.get("h2h_home_wins"),
+            "draws": recap.get("h2h_draws"),
+            "away_wins": recap.get("h2h_away_wins"),
+            "matches_count": recap.get("h2h_matches_count"),
+        },
+    }
     return {
         "data_source": recap.get("data_source", "Unknown"),
+        "stats_period": stats_period,
+        "how_bars_work": how_bars_work,
+        "how_score_prediction_works": how_score_prediction_works,
+        "raw_data": raw_data,
         "form": {
             "home_matches_used": recap.get("form_home_matches"),
             "away_matches_used": recap.get("form_away_matches"),
@@ -262,6 +419,7 @@ def _build_response(
         "scenario_4": ai.get("scenario_4"),
         "key_forces_home": ai.get("key_forces_home") or [],
         "key_forces_away": ai.get("key_forces_away") or [],
+        "professional_analysis": ai.get("professional_analysis"),
         "api_advice": out.get("api_advice"),
         "ai_confidence": "Very high",
         "attack_home_pct": pcts.get("attack_home_pct"),
@@ -301,9 +459,10 @@ def run_predict_with_progress(
     )
     report("Computing probabilities…", 62)
 
-    # Mode API : uniquement les données API-Football Predictions, aucune donnée de notre modèle
     used_api_predictions = False
-    if payload.use_api_predictions and ctx.get("fixture_id"):
+    if ctx.get("_sportmonks_use_predictions"):
+        out = _out_from_sportmonks(ctx)
+    elif payload.use_api_predictions and ctx.get("fixture_id"):
         api_pred = api_get_predictions(ctx["fixture_id"])
         if api_pred:
             out = _out_from_api_predictions(api_pred)
@@ -315,42 +474,90 @@ def run_predict_with_progress(
 
     ai: dict = {}
     news_included = False
+    scraped_items: list = []
+    motivation_text = ""
+    report("Scraping news…", 68)
+    try:
+        scraped_items = fetch_news_multi_source(
+            ctx["home_team"],
+            ctx["away_team"],
+            ctx.get("league"),
+            max_items_total=25,
+            max_age_days=7,
+        )
+        if scraped_items:
+            news_included = True
+            news_for_motivation = format_news_for_prompt(scraped_items)
+            report("Analyzing motivation…", 72)
+            motivation_text = run_motivation_analysis(
+                news_for_motivation,
+                ctx["home_team"],
+                ctx["away_team"],
+                league=ctx.get("league"),
+                home_form_label=ctx.get("home_form_label"),
+                away_form_label=ctx.get("away_form_label"),
+                venue=ctx.get("venue"),
+                language=payload.language,
+            )
+    except Exception:
+        scraped_items = []
+        motivation_text = ""
     report("Generating AI summary…", 75)
     try:
-        prompt_ctx = build_prompt_context(
+        if ctx.get("_sportmonks_use_predictions"):
+            ai = generate_ai_analysis_sportmonks(ctx, out, language=payload.language)
+        else:
+            scraped_news_formatted = format_news_for_prompt(scraped_items) if scraped_items else None
+            if not scraped_news_formatted and not motivation_text:
+                legacy_news = fetch_football_news(
+                    ctx["home_team"],
+                    ctx["away_team"],
+                    ctx.get("league"),
+                )
+                if legacy_news:
+                    news_included = True
+                    scraped_news_formatted = legacy_news
+            prompt_ctx = build_prompt_context(
+                ctx["home_team"],
+                ctx["away_team"],
+                out["xg_home"],
+                out["xg_away"],
+                out["prob_home"],
+                out["prob_draw"],
+                out["prob_away"],
+                ctx.get("home_form_label"),
+                ctx.get("away_form_label"),
+                ctx.get("league"),
+                ctx.get("venue"),
+                motivation_analysis=motivation_text or None,
+                scraped_news_formatted=scraped_news_formatted,
+            )
+            ai = generate_ai_analysis(
+                prompt_ctx,
+                ctx["home_team"],
+                ctx["away_team"],
+                language=payload.language,
+            )
+        _save_analysis_news(
             ctx["home_team"],
             ctx["away_team"],
-            out["xg_home"],
-            out["xg_away"],
-            out["prob_home"],
-            out["prob_draw"],
-            out["prob_away"],
-            ctx.get("home_form_label"),
-            ctx.get("away_form_label"),
             ctx.get("league"),
-            ctx.get("venue"),
-        )
-        news_text = fetch_football_news(
-            ctx["home_team"],
-            ctx["away_team"],
-            ctx.get("league"),
-        )
-        if news_text:
-            news_included = True
-            prompt_ctx = prompt_ctx + "\n\n" + news_text
-        ai = generate_ai_analysis(
-            prompt_ctx,
-            ctx["home_team"],
-            ctx["away_team"],
-            language=payload.language,
+            scraped_items,
+            motivation_text,
         )
     except Exception:
         ai = {"quick_summary": None, "scenario_1": None}
 
-    prob_source = "API-Football Predictions" if used_api_predictions else "Poisson"
+    prob_source = "Sportmonks" if ctx.get("_sportmonks_use_predictions") else ("API-Football Predictions" if used_api_predictions else "Poisson")
     analysis_recap = _build_analysis_recap(ctx, out, prob_source, news_included)
+    if analysis_recap:
+        analysis_recap["scraped_news_count"] = len(scraped_items)
+        analysis_recap["motivation_analysis_used"] = bool(motivation_text and motivation_text.strip())
     report("Done", 100)
-    return _build_response(ctx, out, ai, analysis_recap)
+    resp = _build_response(ctx, out, ai, analysis_recap)
+    resp["scraped_news_count"] = len(scraped_items)
+    resp["motivation_analysis"] = (motivation_text[:8000] if motivation_text else None) or None
+    return resp
 
 
 @router.get("/match-result")

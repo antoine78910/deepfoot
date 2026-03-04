@@ -13,9 +13,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     free_analyses_per_day: int = 1
     max_score_goals: int = 8  # grille Poisson 0..8
-    # API-Football (https://www.api-football.com/documentation-v3)
+    # API-Football (https://www.api-football.com/documentation-v3) — legacy, utilisé si Sportmonks non configuré
     api_football_key: str = ""
     api_football_base_url: str = "https://v3.football.api-sports.io"
+    # Sportmonks Football API v3 (https://docs.sportmonks.com/v3/) — nouveau modèle data + prédictions
+    # Lit SPORTMONKS_API_TOKEN ou, à défaut, FOOTBALL_API_KEY (même clé possible côté user)
+    sportmonks_api_token: str = ""
     admin_api_key: str = ""  # Si défini, requiert X-Admin-Key pour /admin/*
     # Polling matchs terminés (FT) : intervalle en secondes (10 = test, 3600 = 1h)
     polling_interval_seconds: int = 10
@@ -29,6 +32,16 @@ class Settings(BaseSettings):
     whop_api_key: str = Field(default="", validation_alias="WHOP_API_KEY")
     # Whop — Company ID (biz_xxx) pour annulation par email si pas de membership_id; env: WHOP_COMPANY_ID
     whop_company_id: str = Field(default="", validation_alias="WHOP_COMPANY_ID")
+
+    @model_validator(mode="after")
+    def fill_sportmonks_from_football_key(self: "Settings") -> "Settings":
+        """Si Sportmonks non configuré, utiliser FOOTBALL_API_KEY (user peut avoir renommé la clé)."""
+        token = (self.sportmonks_api_token or "").strip()
+        if not token:
+            token = (os.getenv("FOOTBALL_API_KEY") or os.getenv("SPORTMONKS_API_TOKEN") or "").strip()
+        if token != self.sportmonks_api_token:
+            return self.model_copy(update={"sportmonks_api_token": token})
+        return self
 
     @model_validator(mode="after")
     def fill_supabase_from_next_public(self: "Settings") -> "Settings":

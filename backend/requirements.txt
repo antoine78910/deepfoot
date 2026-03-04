@@ -18,5 +18,8 @@ openai>=1.12.0
 # HTTP
 httpx>=0.26.0
 
+# RSS feeds for news scraping
+feedparser>=6.0.0
+
 # Whop webhook signature (Standard Webhooks)
 standardwebhooks>=1.0.0
