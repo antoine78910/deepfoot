@@ -102,6 +102,7 @@ type Result = {
       context_used?: string;
     };
     api_requests_estimate?: string | null;
+    pipeline_steps?: { order: number; title_key: string; detail: string }[];
   } | null;
   [k: string]: unknown;
 };
@@ -905,10 +906,29 @@ export function AnalysisResult({ result }: { result: Result }) {
         </>
       )}
 
-      {/* Récap des données utilisées pour cette analyse */}
+      {/* Récap: toutes les étapes + données API utilisées pour cette analyse */}
       {result.analysis_recap && (
         <section className="pt-6 mt-6 border-t border-white/10">
-          <h2 className="text-lg font-semibold text-white mb-3">📋 {t("analysis.recapTitle")}</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">📋 {t("analysis.recapTitle")}</h2>
+          <p className="text-zinc-500 text-xs mb-3">{t("analysis.recapSubtitle")}</p>
+          {/* Liste des étapes du pipeline + données prises de l'API */}
+          {result.analysis_recap.pipeline_steps && result.analysis_recap.pipeline_steps.length > 0 && (
+            <div className="rounded-lg bg-white/5 border border-white/10 p-4 mb-4">
+              <h3 className="font-medium text-[#00ffe8] mb-3">{t("analysis.recapPipelineSteps")}</h3>
+              <ol className="space-y-3 list-none">
+                {result.analysis_recap.pipeline_steps
+                  .sort((a, b) => a.order - b.order)
+                  .map((step, idx) => (
+                    <li key={idx} className="text-sm">
+                      <span className="font-medium text-white">
+                        {step.order}. {t(step.title_key)}
+                      </span>
+                      <p className="text-zinc-400 text-xs mt-0.5 pl-0">{step.detail}</p>
+                    </li>
+                  ))}
+              </ol>
+            </div>
+          )}
           <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-sm space-y-4">
             <div>
               <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.recapDataSource")}</h3>

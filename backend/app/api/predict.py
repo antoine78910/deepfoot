@@ -135,8 +135,42 @@ def _build_analysis_recap(
     prob_source: str,
     news_included: bool,
 ) -> dict:
-    """Build a detailed recap of all data used for this analysis (per match)."""
+    """Build a detailed recap of all data used for this analysis (per match): steps + data from API."""
     recap = ctx.get("data_recap") or {}
+    steps = list(recap.get("pipeline_steps") or [])
+    # Append steps done in predict pipeline (probabilities, AI)
+    xg_h = out.get("xg_home")
+    xg_a = out.get("xg_away")
+    ph = out.get("prob_home")
+    pd_ = out.get("prob_draw")
+    pa = out.get("prob_away")
+    ph_s = f"{round(ph, 1)}" if isinstance(ph, (int, float)) else "—"
+    pd_s = f"{round(pd_, 1)}" if isinstance(pd_, (int, float)) else "—"
+    pa_s = f"{round(pa, 1)}" if isinstance(pa, (int, float)) else "—"
+    steps.append({
+        "order": 10,
+        "title_key": "recap.step.probabilities",
+        "detail": f"Model: {prob_source}. Input: lambda_home={ctx.get('lambda_home')}, lambda_away={ctx.get('lambda_away')}. "
+        f"Output: xG {xg_h}–{xg_a}, 1X2 (Home {ph_s}% / Draw {pd_s}% / Away {pa_s}%), "
+        "BTTS, Over/Under 0.5–3.5, exact scores, double chance, Asian handicap.",
+    })
+    steps.append({
+        "order": 11,
+        "title_key": "recap.step.ai_context",
+        "detail": "Context built for AI: match names, xG, 1X2 probabilities, form labels, league, venue.",
+    })
+    if news_included:
+        steps.append({
+            "order": 12,
+            "title_key": "recap.step.news",
+            "detail": "NewsAPI: GET /v2/everything (search team names + league, last 7 days, up to 3 articles per team). Snippets added to context.",
+        })
+    steps.append({
+        "order": 13,
+        "title_key": "recap.step.openai",
+        "detail": "1 request: OpenAI chat.completions (gpt-4o-mini). Response: quick_summary, scenario_1–4, key_forces_home, key_forces_away.",
+    })
+    steps.sort(key=lambda s: (s["order"], s.get("title_key", "")))
     return {
         "data_source": recap.get("data_source", "Unknown"),
         "form": {
@@ -160,8 +194,8 @@ def _build_analysis_recap(
             "model": prob_source,
             "lambda_home": ctx.get("lambda_home"),
             "lambda_away": ctx.get("lambda_away"),
-            "xg_home": out.get("xg_home"),
-            "xg_away": out.get("xg_away"),
+            "xg_home": xg_h,
+            "xg_away": xg_a,
         },
         "match_info": {
             "fixture_id": recap.get("fixture_id"),
@@ -174,6 +208,7 @@ def _build_analysis_recap(
             "context_used": "stats + form + H2H" + (" + football news" if news_included else ""),
         },
         "api_requests_estimate": "~17–21 requests (API-Football)" if recap.get("data_source") == "API-Football" else None,
+        "pipeline_steps": steps,
     }
 
 

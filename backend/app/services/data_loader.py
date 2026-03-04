@@ -305,6 +305,65 @@ def _load_match_context_api_football(
                     else:
                         match_statistics = stats_raw
 
+    # Pipeline steps: every step we do and what data we get (for display at bottom of analysis)
+    steps = []
+    steps.append({
+        "order": 1,
+        "title_key": "recap.step.resolve_teams",
+        "detail": f"Home team ID {home_id}, Away team ID {away_id}. "
+        + ("IDs provided (autocomplete, 0 extra requests)." if home_team_id is not None and away_team_id is not None else "Resolved from team names (cache lookup)."),
+    })
+    steps.append({
+        "order": 2,
+        "title_key": "recap.step.team_info",
+        "detail": "2 requests: GET /teams?id=home_id, GET /teams?id=away_id. Data: logos, official names, stadium.",
+    })
+    steps.append({
+        "order": 3,
+        "title_key": "recap.step.upcoming_fixture",
+        "detail": f"1 request: GET /fixtures?team=home_id&next=15. "
+        + (f"Found next match: fixture_id={fixture_id}, league={league or '—'}, venue={venue or '—'}." if fixture_id else "No upcoming fixture found for this pair."),
+    })
+    steps.append({
+        "order": 4,
+        "title_key": "recap.step.form",
+        "detail": f"2 requests: GET /fixtures?team=home_id&season=...&status=FT (last 10), same for away. "
+        f"Used last 5 matches each. Home: goals_for={home_goals_for}, goals_against={home_goals_against}, form={home_form}. "
+        f"Away: goals_for={away_goals_for}, goals_against={away_goals_against}, form={away_form}. "
+        f"Averages: home {h_for_avg:.2f} scored / {h_against_avg:.2f} conceded, away {a_for_avg:.2f} scored / {a_against_avg:.2f} conceded.",
+    })
+    steps.append({
+        "order": 5,
+        "title_key": "recap.step.h2h",
+        "detail": f"10 requests: GET /fixtures (5 seasons × 2 teams). Found {len(h2h_fixtures)} H2H matches. "
+        f"Results: home wins={h2h_h}, draws={h2h_d}, away wins={h2h_a}. Weighted H2H % used for comparison bar.",
+    })
+    if league is None and h2h_fixtures:
+        steps.append({
+            "order": 6,
+            "title_key": "recap.step.league_venue_fallback",
+            "detail": "League/date/venue missing: taken from last H2H fixture.",
+        })
+    elif league is None:
+        steps.append({
+            "order": 6,
+            "title_key": "recap.step.league_guess",
+            "detail": "2 requests: GET /leagues?team=home_id, GET /leagues?team=away_id. Inferred common league.",
+        })
+    steps.append({
+        "order": 7,
+        "title_key": "recap.step.features",
+        "detail": f"Feature engineering (no API): lambda_home={lambda_home:.2f}, lambda_away={lambda_away:.2f} (from goals averages). "
+        "Comparison percentages: attack, defense, form, H2H, goals, overall.",
+    })
+    if fixture_id is None and h2h_fixtures and match_over:
+        steps.append({
+            "order": 8,
+            "title_key": "recap.step.last_h2h_result",
+            "detail": f"1 request: GET /fixtures?id=last_h2h_id. Status=FT → score {final_score_home}-{final_score_away}. "
+            "1 request: GET /fixtures/statistics?fixture=id. Match statistics (possession, shots, etc.).",
+        })
+
     data_recap = {
         "data_source": "API-Football",
         "form_home_matches": len(home_goals_for),
@@ -324,6 +383,7 @@ def _load_match_context_api_football(
         "has_upcoming_match": fixture_id is not None,
         "league": league,
         "venue": venue,
+        "pipeline_steps": steps,
     }
     return {
         "home_team": home_team,
@@ -409,6 +469,12 @@ def load_match_context(
         h2h_h, h2h_d, h2h_a,
     )
     h2h_total = h2h_h + h2h_d + h2h_a
+    steps_supabase = [
+        {"order": 1, "title_key": "recap.step.data_source_supabase", "detail": "Data from Supabase (results + h2h tables)."},
+        {"order": 2, "title_key": "recap.step.form", "detail": f"Team results: last 5 each. Home goals_for/against avg {h_for_avg:.2f}/{h_against_avg:.2f}, away {a_for_avg:.2f}/{a_against_avg:.2f}. Form W-D-L."},
+        {"order": 3, "title_key": "recap.step.h2h", "detail": f"H2H from table: home_wins={h2h_h}, draws={h2h_d}, away_wins={h2h_a}."},
+        {"order": 4, "title_key": "recap.step.features", "detail": f"Feature engineering: lambda_home={lambda_home:.2f}, lambda_away={lambda_away:.2f}. Comparison percentages."},
+    ]
     data_recap = {
         "data_source": "Supabase",
         "form_home_matches": len(home_goals_for),
@@ -428,6 +494,7 @@ def load_match_context(
         "has_upcoming_match": False,
         "league": None,
         "venue": None,
+        "pipeline_steps": steps_supabase,
     }
     return {
         "home_team": home_team,
