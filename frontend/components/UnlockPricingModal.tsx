@@ -72,7 +72,7 @@ export function UnlockPricingModal({
   if (!open) return null;
 
   const modal = (
-    <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 bg-black/50 backdrop-blur-md">
       <div
         className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[#101217]/90 border border-white/10 shadow-2xl backdrop-blur-md"
         role="dialog"

@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Lock, Target, BarChart3, Sparkles, FileText, Lightbulb, Clock } from "lucide-react";
+import { Lock, Clock } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const ACCENT = "#00ffe8";
 
-const BULLET_ITEMS: { key: "unlockModal1.featureProbableScore" | "unlockModal1.featureDetailedProb" | "unlockModal1.featureScenarios" | "unlockModal1.featureFullAnalysis" | "unlockModal1.featureBookmaker"; Icon: typeof Target; iconColor: string }[] = [
-  { key: "unlockModal1.featureProbableScore", Icon: Target, iconColor: "text-rose-400" },
-  { key: "unlockModal1.featureDetailedProb", Icon: BarChart3, iconColor: "text-[#00ffe8]" },
-  { key: "unlockModal1.featureScenarios", Icon: Sparkles, iconColor: "text-violet-400" },
-  { key: "unlockModal1.featureFullAnalysis", Icon: FileText, iconColor: "text-amber-400" },
-  { key: "unlockModal1.featureBookmaker", Icon: Lightbulb, iconColor: "text-amber-300" },
+const BULLET_ITEMS: { key: "unlockModal1.featureProbableScore" | "unlockModal1.featureDetailedProb" | "unlockModal1.featureScenarios" | "unlockModal1.featureFullAnalysis" | "unlockModal1.featureBookmaker"; emoji: string }[] = [
+  { key: "unlockModal1.featureProbableScore", emoji: "🎯" },
+  { key: "unlockModal1.featureDetailedProb", emoji: "📊" },
+  { key: "unlockModal1.featureScenarios", emoji: "🔮" },
+  { key: "unlockModal1.featureFullAnalysis", emoji: "📝" },
+  { key: "unlockModal1.featureBookmaker", emoji: "💡" },
 ];
 
-const STAGGER_DELAY_MS = 90;
+const STAGGER_DELAY_MS = 200;
 const ANIMATION_DURATION_MS = 450;
 
 /** Format ISO or date string for display (e.g. "15 Mar 2025, 20:00") */
@@ -27,6 +27,22 @@ function formatMatchDate(raw: string): string {
   } catch {
     return raw;
   }
+}
+
+/** Countdown from now to date: "3j 8h" or "5h 30min" or "45min" */
+function countdownTo(date: Date): string {
+  const now = new Date();
+  const ms = date.getTime() - now.getTime();
+  if (ms <= 0) return "—";
+  const totalMinutes = Math.floor(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}j`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 && days === 0) parts.push(`${minutes}min`);
+  return parts.join(" ") || "—";
 }
 
 export function UnlockFullAnalysisModal({
@@ -56,7 +72,7 @@ export function UnlockFullAnalysisModal({
     }
     setVisibleCount(0);
     const delays = BULLET_ITEMS.map((_, i) =>
-      setTimeout(() => setVisibleCount((c) => Math.max(c, i + 1)), 80 + i * STAGGER_DELAY_MS)
+      setTimeout(() => setVisibleCount((c) => Math.max(c, i + 1)), (i + 1) * STAGGER_DELAY_MS)
     );
     return () => delays.forEach(clearTimeout);
   }, [open]);
@@ -84,16 +100,6 @@ export function UnlockFullAnalysisModal({
         aria-modal="true"
         aria-labelledby="unlock-modal-title"
       >
-        {/* Top banner — teal branding */}
-        <div
-          className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white"
-          style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #5EC2A0 100%)` }}
-        >
-          <span className="text-base" aria-hidden>📈</span>
-          <span>{t("unlockModal1.banner")}</span>
-          <span className="text-lg" aria-hidden>🔥</span>
-        </div>
-
         <button
           type="button"
           onClick={onClose}
@@ -106,7 +112,26 @@ export function UnlockFullAnalysisModal({
         </button>
 
         <div className="p-6 pt-5">
-          <h2 id="unlock-modal-title" className="text-xl sm:text-2xl font-bold text-white text-center pr-8">
+          {/* Bulle type toast — pill, pas toute la largeur */}
+          <div className="flex justify-center">
+            <div
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium"
+              style={{
+                background: "rgba(13, 77, 77, 0.85)",
+                border: "1px solid rgba(0, 255, 232, 0.35)",
+                color: "#7ee7d9",
+                boxShadow: "0 0 20px -4px rgba(0, 255, 232, 0.2)",
+              }}
+            >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: "#7ee7d9" }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <span>{t("unlockModal1.banner")}</span>
+            <span className="text-base" aria-hidden>🔥</span>
+            </div>
+          </div>
+
+          <h2 id="unlock-modal-title" className="text-xl sm:text-2xl font-bold text-white text-center mt-5 pr-8">
             {t("unlockModal1.title")}
           </h2>
           <p className="flex items-center justify-center gap-1.5 text-sm mt-2 text-zinc-400">
@@ -120,7 +145,7 @@ export function UnlockFullAnalysisModal({
               {t("unlockModal1.whatYouUnlock")}
             </p>
             <ul className="space-y-0">
-              {BULLET_ITEMS.map(({ key, Icon, iconColor }, index) => (
+              {BULLET_ITEMS.map(({ key, emoji }, index) => (
                 <li
                   key={key}
                   className="flex items-center gap-3 py-2.5 text-sm text-white transition-all ease-out border-b border-white/5 last:border-0 last:pb-0"
@@ -135,28 +160,33 @@ export function UnlockFullAnalysisModal({
                     strokeWidth={2}
                     aria-hidden
                   />
-                  <span className={`w-5 h-5 flex-shrink-0 flex items-center justify-center ${iconColor}`}>
-                    <Icon className="w-full h-full" strokeWidth={2} />
-                  </span>
+                  <span className="text-lg flex-shrink-0" aria-hidden>{emoji}</span>
                   <span className="flex-1 min-w-0">{t(key)}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Match start block — orange/amber style */}
+          {/* Match start block — "Paris SG vs Monaco starts in" puis "3j 8h" */}
           {(matchLabel || matchDate || matchCountdown) && (
             <div className="mt-4 rounded-xl px-4 py-3.5 flex items-center gap-3 bg-[#381F1A] border border-amber-500/30 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]">
               <Clock className="w-5 h-5 flex-shrink-0 text-amber-400" strokeWidth={2} aria-hidden />
-              <div className="min-w-0">
-                {matchLabel && <p className="text-white text-sm font-medium truncate">{matchLabel}</p>}
-                {(matchDate || matchCountdown) && (
-                  <p className="text-amber-200/95 text-sm mt-0.5">
-                    {matchDate ? (
-                      <>Starts: <span className="font-semibold text-amber-200">{formatMatchDate(matchDate)}</span></>
-                    ) : (
-                      <>{t("unlockModal1.matchStartsIn")} <span className="font-semibold text-amber-200">{matchCountdown}</span></>
-                    )}
+              <div className="min-w-0 flex-1">
+                {matchLabel && (
+                  <p className="text-white text-sm font-medium truncate">
+                    {matchLabel} {t("unlockModal1.matchStartsIn")}
+                  </p>
+                )}
+                {(matchCountdown || matchDate) && (
+                  <p className="text-amber-200 font-semibold text-sm mt-1">
+                    {matchCountdown ?? (matchDate ? (() => {
+                      try {
+                        const d = new Date(matchDate);
+                        return Number.isNaN(d.getTime()) ? formatMatchDate(matchDate) : countdownTo(d);
+                      } catch {
+                        return formatMatchDate(matchDate);
+                      }
+                    })() : null)}
                   </p>
                 )}
               </div>
