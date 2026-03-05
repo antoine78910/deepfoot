@@ -1076,13 +1076,22 @@ export function AnalysisResult({ result }: { result: Result }) {
                 {result.analysis_recap.h2h.season_breakdown && result.analysis_recap.h2h.season_breakdown.length > 0 && (
                   <div className="text-zinc-400 text-xs mt-2 space-y-1">
                     <p>{t("analysis.recapH2hSeasonBreakdown")}</p>
-                    {result.analysis_recap.h2h.season_breakdown.map((s, idx) => (
-                      <p key={idx}>
-                        {String((s as Record<string, unknown>).season ?? "—")}: raw {(s as Record<string, unknown>).raw_home_wins ?? 0}-{(s as Record<string, unknown>).raw_draws ?? 0}-{(s as Record<string, unknown>).raw_away_wins ?? 0}
-                        {" · "}weighted {(Number((s as Record<string, unknown>).weighted_home_wins ?? 0)).toFixed(1)}-{(Number((s as Record<string, unknown>).weighted_draws ?? 0)).toFixed(1)}-{(Number((s as Record<string, unknown>).weighted_away_wins ?? 0)).toFixed(1)}
-                        {" · "}w={String((s as Record<string, unknown>).weight ?? "—")}
-                      </p>
-                    ))}
+                    {result.analysis_recap.h2h.season_breakdown.map((s, idx) => {
+                      const row = s as { season?: string; weight?: number; raw_home_wins?: number; raw_draws?: number; raw_away_wins?: number; weighted_home_wins?: number; weighted_draws?: number; weighted_away_wins?: number };
+                      const rH = row.raw_home_wins ?? 0;
+                      const rD = row.raw_draws ?? 0;
+                      const rA = row.raw_away_wins ?? 0;
+                      const wH = Number(row.weighted_home_wins ?? 0).toFixed(1);
+                      const wD = Number(row.weighted_draws ?? 0).toFixed(1);
+                      const wA = Number(row.weighted_away_wins ?? 0).toFixed(1);
+                      return (
+                        <p key={idx}>
+                          {String(row.season ?? "—")}: raw {rH}-{rD}-{rA}
+                          {" · "}weighted {wH}-{wD}-{wA}
+                          {" · "}w={String(row.weight ?? "—")}
+                        </p>
+                      );
+                    })}
                   </div>
                 )}
               </div>
