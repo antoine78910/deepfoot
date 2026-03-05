@@ -60,6 +60,9 @@ class PredictResponse(BaseModel):
     implied_odds_home: Optional[float] = None
     implied_odds_draw: Optional[float] = None
     implied_odds_away: Optional[float] = None
+    internal_prob_home: Optional[float] = None
+    internal_prob_draw: Optional[float] = None
+    internal_prob_away: Optional[float] = None
 
     # Score le plus probable
     most_likely_score: Optional[MostLikelyScoreItem] = None

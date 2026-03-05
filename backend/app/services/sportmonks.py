@@ -1468,7 +1468,8 @@ def get_match_news_and_comments(
 def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Parse le tableau predictions de l'API Sportmonks (Fulltime Result, Over/Under 2.5, BTTS, Correct Score).
-    Retourne dict avec home_win, draw, away_win, over_2_5, under_2_5, btts_yes, btts_no, xg_home, xg_away.
+    Retourne dict avec home_win, draw, away_win, over_2_5, under_2_5, btts_yes, btts_no, xg_home, xg_away,
+    over_under_lines (0.5/1.5/2.5/3.5... si dispo) et exact_scores (top 5).
     Retourne 0 ou None pour les valeurs non disponibles (pas d'approximation).
     """
     out: dict[str, Any] = {
@@ -1481,9 +1482,28 @@ def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) 
         "btts_no": 0.0,
         "xg_home": 0.0,
         "xg_away": 0.0,
+        "over_under_lines": [],
+        "exact_scores": [],
     }
     if not predictions_list or not isinstance(predictions_list, list):
         return out
+
+    ou_map: dict[str, dict[str, float]] = {}
+
+    def _extract_ou_line(type_obj: dict[str, Any]) -> Optional[str]:
+        import re
+        if not isinstance(type_obj, dict):
+            return None
+        candidates = [
+            str(type_obj.get("code") or ""),
+            str(type_obj.get("developer_name") or ""),
+            str(type_obj.get("name") or ""),
+        ]
+        for text in candidates:
+            m = re.search(r"(\d+(?:[._]\d+)?)", text)
+            if m:
+                return m.group(1).replace("_", ".")
+        return None
 
     for p in predictions_list:
         if not isinstance(p, dict):
@@ -1501,10 +1521,15 @@ def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) 
                 out["home_win"] = float(pred_vals.get("home") or 0)
                 out["draw"] = float(pred_vals.get("draw") or 0)
                 out["away_win"] = float(pred_vals.get("away") or 0)
-        elif type_id == 235 or ("over" in code and "2" in code and "5" in code):
+        elif type_id == 235 or ("over" in code and ("under" in code or "ou" in code)):
             if "yes" in pred_vals and "no" in pred_vals:
-                out["over_2_5"] = float(pred_vals.get("yes") or 0)
-                out["under_2_5"] = float(pred_vals.get("no") or 0)
+                line = _extract_ou_line(type_obj) or "2.5"
+                yes = float(pred_vals.get("yes") or 0)
+                no = float(pred_vals.get("no") or 0)
+                if line == "2.5":
+                    out["over_2_5"] = yes
+                    out["under_2_5"] = no
+                ou_map[line] = {"over_pct": yes, "under_pct": no}
         elif type_id == 231 or "btts" in code or "both" in code:
             if "yes" in pred_vals and "no" in pred_vals:
                 out["btts_yes"] = float(pred_vals.get("yes") or 0)
@@ -1512,6 +1537,7 @@ def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) 
         elif type_id == 240 or "correct" in code or "correct_score" in dev_name:
             scores = pred_vals.get("scores")
             if isinstance(scores, dict):
+                top_scores: list[dict[str, Any]] = []
                 xg_h = 0.0
                 xg_a = 0.0
                 total_p = 0.0
@@ -1529,9 +1555,23 @@ def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) 
                     xg_h += i * pct
                     xg_a += j * pct
                     total_p += pct
+                    top_scores.append({"home": i, "away": j, "probability": round(float(prob), 2)})
+                top_scores.sort(key=lambda x: x["probability"], reverse=True)
+                out["exact_scores"] = top_scores[:5]
                 if total_p > 0:
                     out["xg_home"] = round(xg_h, 2)
                     out["xg_away"] = round(xg_a, 2)
+
+    if ou_map:
+        def _line_key(item: tuple[str, dict[str, float]]) -> float:
+            try:
+                return float(item[0])
+            except Exception:
+                return 99.0
+        out["over_under_lines"] = [
+            {"line": line, "over_pct": vals["over_pct"], "under_pct": vals["under_pct"]}
+            for line, vals in sorted(ou_map.items(), key=_line_key)
+        ]
 
     print(f"[sportmonks] Parsed predictions: home_win={out['home_win']}%, draw={out['draw']}%, away_win={out['away_win']}%, over2.5={out['over_2_5']}%, btts_yes={out['btts_yes']}%")
     return out
@@ -1668,8 +1708,10 @@ def load_match_context_sportmonks(
 
     home_win = draw = away_win = 33.33
     over_25 = under_25 = 50.0
+    over_under_lines: list[dict[str, Any]] = []
     btts_yes = btts_no = 50.0
     xg_home = xg_away = 1.2
+    exact_scores_api: list[dict[str, Any]] = []
     if predictions_fixture_data:
         pred_obj = predictions_fixture_data.get("predictions") or {}
         if isinstance(pred_obj, dict):
@@ -1690,10 +1732,12 @@ def load_match_context_sportmonks(
         away_win = parsed["away_win"]
         over_25 = parsed["over_2_5"]
         under_25 = parsed["under_2_5"]
+        over_under_lines = parsed.get("over_under_lines") or []
         btts_yes = parsed["btts_yes"]
         btts_no = parsed["btts_no"]
         xg_home = parsed["xg_home"]
         xg_away = parsed["xg_away"]
+        exact_scores_api = parsed.get("exact_scores") or []
 
     home_goals_for: list[int] = []
     home_goals_against: list[int] = []
@@ -1886,10 +1930,12 @@ def load_match_context_sportmonks(
             "away_win": away_win,
             "over_2_5": over_25,
             "under_2_5": under_25,
+            "over_under_lines": over_under_lines,
             "btts_yes": btts_yes,
             "btts_no": btts_no,
             "xg_home": xg_home,
             "xg_away": xg_away,
+            "exact_scores": exact_scores_api,
         },
         "raw_home_goals_for": home_goals_for,
         "raw_home_goals_against": home_goals_against,

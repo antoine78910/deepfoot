@@ -28,6 +28,9 @@ type Result = {
   implied_odds_home?: number;
   implied_odds_draw?: number;
   implied_odds_away?: number;
+  internal_prob_home?: number;
+  internal_prob_draw?: number;
+  internal_prob_away?: number;
   most_likely_score?: { home: number; away: number; probability: number };
   total_goals_distribution?: Record<string, number>;
   goal_difference_dist?: Record<string, number>;
@@ -744,6 +747,34 @@ export function AnalysisResult({ result }: { result: Result }) {
                 <span className="text-[#ef4444] font-semibold text-sm w-10 text-right flex-shrink-0">{result.prob_away ?? 0}%</span>
               </div>
             </div>
+            {(result.internal_prob_home != null || result.internal_prob_draw != null || result.internal_prob_away != null) && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 mb-4">
+                <p className="text-zinc-400 text-xs mb-2">Our model (all data) - 1X2 comparison</p>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{home} win</span>
+                    <div className="flex-1 h-2.5 bg-dark-input rounded-full overflow-hidden min-w-0">
+                      <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_home ?? 0}%` }} />
+                    </div>
+                    <span className="text-[#00ffe8] font-semibold text-xs w-10 text-right flex-shrink-0">{result.internal_prob_home ?? 0}%</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-zinc-300 text-sm w-28 flex-shrink-0">Draw</span>
+                    <div className="flex-1 h-2.5 bg-dark-input rounded-full overflow-hidden min-w-0">
+                      <div className="h-full bg-[#a3a3a3] rounded-full" style={{ width: `${result.internal_prob_draw ?? 0}%` }} />
+                    </div>
+                    <span className="text-zinc-300 font-semibold text-xs w-10 text-right flex-shrink-0">{result.internal_prob_draw ?? 0}%</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{away} win</span>
+                    <div className="flex-1 h-2.5 bg-dark-input rounded-full overflow-hidden min-w-0">
+                      <div className="h-full bg-[#ef4444] rounded-full" style={{ width: `${result.internal_prob_away ?? 0}%` }} />
+                    </div>
+                    <span className="text-[#ef4444] font-semibold text-xs w-10 text-right flex-shrink-0">{result.internal_prob_away ?? 0}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {result.implied_odds_home != null && (
               <>
                 <p className="text-zinc-500 text-xs mb-2">{t("betting.impliedOdds")} (decimal, compare with bookmakers)</p>
@@ -985,13 +1016,20 @@ export function AnalysisResult({ result }: { result: Result }) {
             />
           )}
           {result.over_under && result.over_under.length > 0 && (
-            <SplitBar
-              leftPct={(result.over_under.find((r) => r.line === "2.5") ?? result.over_under[0]).over_pct}
-              leftLabel="Over 2.5"
-              rightLabel="Under 2.5"
-              leftColor="bg-[#00ffe8]"
-              rightColor="bg-[#ef4444]/60"
-            />
+            <>
+              {[...result.over_under]
+                .sort((a, b) => Number(a.line) - Number(b.line))
+                .map((ou) => (
+                  <SplitBar
+                    key={ou.line}
+                    leftPct={ou.over_pct}
+                    leftLabel={`Over ${ou.line}`}
+                    rightLabel={`Under ${ou.line}`}
+                    leftColor="bg-[#00ffe8]"
+                    rightColor="bg-[#ef4444]/60"
+                  />
+                ))}
+            </>
           )}
         </div>
         <p className="text-xs text-zinc-500">

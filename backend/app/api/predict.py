@@ -96,16 +96,33 @@ def _out_from_sportmonks(ctx: dict) -> dict:
     xg_away = round(float(sp.get("xg_away") or 0), 2)
     xg_total = round(xg_home + xg_away, 2)
 
-    # Over/Under : uniquement 2.5 de l'API
+    # Over/Under : lignes disponibles de l'API (0.5/1.5/2.5/3.5...), fallback sur 2.5
     over_25 = float(sp.get("over_2_5") or 0)
     under_25 = float(sp.get("under_2_5") or 0)
-    over_under = [
-        {"line": "2.5", "over_pct": over_25, "under_pct": under_25},
-    ]
+    over_under_raw = sp.get("over_under_lines")
+    over_under: list[dict] = []
+    if isinstance(over_under_raw, list):
+        for row in over_under_raw:
+            if not isinstance(row, dict):
+                continue
+            line = str(row.get("line") or "").strip()
+            try:
+                over_pct = float(row.get("over_pct") or 0)
+                under_pct = float(row.get("under_pct") or 0)
+            except Exception:
+                continue
+            if line:
+                over_under.append({"line": line, "over_pct": round(over_pct, 2), "under_pct": round(under_pct, 2)})
+    if not over_under:
+        over_under = [{"line": "2.5", "over_pct": over_25, "under_pct": under_25}]
+    over_under.sort(key=lambda x: float(x["line"]) if str(x.get("line", "")).replace(".", "", 1).isdigit() else 99.0)
 
     # BTTS de l'API
     btts_yes = float(sp.get("btts_yes") or 0)
     btts_no = float(sp.get("btts_no") or 0)
+
+    exact_scores = sp.get("exact_scores") if isinstance(sp.get("exact_scores"), list) else []
+    most_likely_score = exact_scores[0] if exact_scores else None
 
     return {
         "xg_home": xg_home,
@@ -120,16 +137,15 @@ def _out_from_sportmonks(ctx: dict) -> dict:
         "btts_yes_pct": btts_yes,
         "btts_no_pct": btts_no,
         "over_under": over_under,
-        # Champs non calculés (pas d'approximation Poisson)
-        "exact_scores": [],
-        "most_likely_score": None,
+        "exact_scores": exact_scores,
+        "most_likely_score": most_likely_score,
         "total_goals_distribution": None,
         "goal_difference_dist": None,
-        "double_chance_1x": None,
-        "double_chance_x2": None,
-        "double_chance_12": None,
+        "double_chance_1x": round(prob_home + prob_draw, 1),
+        "double_chance_x2": round(prob_draw + prob_away, 1),
+        "double_chance_12": round(prob_home + prob_away, 1),
         "asian_handicap": None,
-        "upset_probability": None,
+        "upset_probability": round(min(prob_home, prob_away), 1),
         "api_advice": None,
     }
 
@@ -422,6 +438,9 @@ def _build_response(
         "implied_odds_home": out.get("implied_odds_home"),
         "implied_odds_draw": out.get("implied_odds_draw"),
         "implied_odds_away": out.get("implied_odds_away"),
+        "internal_prob_home": out.get("internal_prob_home"),
+        "internal_prob_draw": out.get("internal_prob_draw"),
+        "internal_prob_away": out.get("internal_prob_away"),
         "most_likely_score": out.get("most_likely_score"),
         "total_goals_distribution": out.get("total_goals_distribution"),
         "goal_difference_dist": out.get("goal_difference_dist"),
@@ -515,6 +534,12 @@ def run_predict_with_progress(
             out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
     else:
         out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
+
+    # Toujours calculer notre modèle interne pour comparer avec Sportmonks / API.
+    internal_out = predict_all(ctx["lambda_home"], ctx["lambda_away"])
+    out["internal_prob_home"] = round(float(internal_out.get("prob_home") or 0), 1)
+    out["internal_prob_draw"] = round(float(internal_out.get("prob_draw") or 0), 1)
+    out["internal_prob_away"] = round(float(internal_out.get("prob_away") or 0), 1)
 
     ai: dict = {}
     news_included = False
