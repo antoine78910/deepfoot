@@ -73,14 +73,19 @@ function SignInPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-app-gradient flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
+    <div className="min-h-screen bg-app-gradient flex flex-col items-center px-4 pt-24 pb-12 relative overflow-hidden">
+      <header className="fixed top-0 left-0 right-0 z-20 w-full flex items-center px-5 sm:px-8 py-3 sm:py-4 border-b border-white/10 bg-[#0a0a0e]/60 backdrop-blur-md">
+        <Link href="/" className="flex items-center gap-2">
+          <img src="/logo.png" alt="DEEPFOOT" className="h-10 sm:h-12 w-auto object-contain" />
+        </Link>
+      </header>
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-[#00ffe8]/18 blur-[120px]" />
         <div className="absolute top-1/3 -right-32 w-[520px] h-[520px] rounded-full bg-emerald-400/12 blur-[140px]" />
         <div className="absolute -bottom-48 left-1/3 w-[520px] h-[520px] rounded-full bg-sky-400/10 blur-[150px]" />
       </div>
 
-      <div className="relative w-full max-w-md isolate">
+      <div className="relative w-full max-w-md isolate flex-1 flex flex-col items-center justify-center">
         {/* Tight glow that follows the card contour (LP input-style) */}
         <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-[#00ffe8]/35 via-transparent to-emerald-400/30 blur-xl opacity-90" aria-hidden />
         <div className="relative rounded-2xl p-[1px] bg-gradient-to-r from-[#00ffe8]/70 via-white/10 to-emerald-400/60">
