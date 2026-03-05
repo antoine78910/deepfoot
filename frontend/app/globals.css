@@ -61,13 +61,21 @@ body {
   }
 }
 
-/* Logo cloud / infinite slider: loop infini sans retour à zéro (contenu dupliqué 2×, -50% = 1× largeur) */
+/* Logo cloud / infinite slider: loop infini (2× = -50%, 3× = -33.33%) */
 @keyframes infinite-slider-scroll {
   0% {
     transform: translateX(0);
   }
   100% {
     transform: translateX(-50%);
+  }
+}
+@keyframes infinite-slider-scroll-3 {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-33.333%);
   }
 }
 

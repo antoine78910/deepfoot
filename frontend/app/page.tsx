@@ -49,26 +49,24 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col items-center px-4 pt-24 pb-12 sm:pt-28 sm:pb-16">
-        <section className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
-          <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-4 sm:whitespace-nowrap">
+      <main className="relative z-10 flex-1 flex flex-col items-center px-4 pt-16 pb-12 sm:pt-20 sm:pb-16">
+        <section className="text-center max-w-3xl mx-auto mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-3 sm:whitespace-nowrap">
             Predicts all football matches <span className="text-[#00ffe8]">with AI!</span>
           </h1>
-          <p className="text-zinc-400 text-lg sm:text-xl mb-8">
+          <p className="text-zinc-400 text-base sm:text-lg mb-6">
             Enter a team to see its upcoming matches, then get an AI-powered analysis in seconds.
           </p>
           <LandingMatchSearch analyseHref={ANALYSE_HREF} />
         </section>
 
-        <section className="relative mx-auto mt-12 sm:mt-16 w-full max-w-6xl px-4">
-          <h2 className="mb-5 text-center font-medium text-xl tracking-tight md:text-3xl">
-            <span className="text-zinc-500">Trusted by experts.</span>
-            <br />
-            <span className="font-semibold text-white">Used by the leaders.</span>
+        <section className="relative mx-auto mt-6 sm:mt-8 w-full max-w-6xl px-4 flex-shrink-0">
+          <h2 className="mb-2 text-center text-sm font-medium tracking-wide text-zinc-500 sm:text-base">
+            27 Major European Football Leagues Covered
           </h2>
-          <div className="mx-auto my-5 h-px max-w-sm bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="mx-auto my-2 h-px max-w-xs bg-gradient-to-r from-transparent via-white/20 to-transparent" />
           <LogoCloud />
-          <div className="mt-5 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="mt-2 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         </section>
 
         {/* Banner: Based on millions of data points */}

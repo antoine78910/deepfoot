@@ -35,20 +35,20 @@ const LEAGUE_LOGOS = [
 export function LogoCloud() {
   return (
     <div
-      className="w-full overflow-hidden py-6 [--logo-size:3.5rem] sm:[--logo-size:4.5rem] md:[--logo-size:5rem]"
+      className="w-full overflow-hidden py-3 [--logo-size:2.25rem] sm:[--logo-size:2.75rem] md:[--logo-size:3rem]"
       style={{
-        maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
-        WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+        maskImage: "linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%)",
       }}
     >
-      <InfiniteSlider gap={40} reverse speed={18} className="flex items-center">
+      <InfiniteSlider gap={24} reverse speed={22} copies={3} className="flex items-center">
         {LEAGUE_LOGOS.map((logo) => (
           <img
             alt={logo.alt}
-            className="pointer-events-none h-[var(--logo-size)] w-[var(--logo-size)] select-none object-contain opacity-90 transition-opacity hover:opacity-100"
+            className="pointer-events-none h-[var(--logo-size)] w-[var(--logo-size)] flex-shrink-0 select-none object-contain opacity-95"
             height={48}
             key={logo.src}
-            loading="lazy"
+            loading="eager"
             src={logo.src}
             width={48}
             onError={(e) => {

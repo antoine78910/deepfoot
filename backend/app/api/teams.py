@@ -185,15 +185,58 @@ def _format_sportmonks_fixture_for_upcoming(f: dict) -> Optional[dict]:
     }
 
 
+def _resolve_team_id_sportmonks(team_name: str):
+    """Résout le nom en Sportmonks ID via l'API Sportmonks (évite mélange avec anciens ids API-Football)."""
+    from app.services.sportmonks import _use_sportmonks, teams_search, TEAM_SEARCH_ALIASES
+    if not _use_sportmonks() or not (team_name or "").strip():
+        return None
+    name = team_name.strip().lower()
+    search_term = name
+    if name in TEAM_SEARCH_ALIASES:
+        search_term = TEAM_SEARCH_ALIASES[name][0]
+    results = teams_search(search_term if search_term != name else team_name.strip(), limit=10)
+    if not results:
+        results = teams_search(team_name.strip(), limit=10)
+    if not results:
+        return None
+    name_norm = name.replace("é", "e").replace("è", "e")
+    for t in results:
+        tname = (t.get("name") or "").strip().lower()
+        tname_norm = tname.replace("é", "e").replace("è", "e")
+        if tname == name or tname_norm == name_norm:
+            try:
+                return int(t.get("id"))
+            except (TypeError, ValueError):
+                pass
+        if name in tname or name_norm in tname_norm:
+            if "women" not in tname and " u1" not in tname and " u2" not in tname:
+                try:
+                    return int(t.get("id"))
+                except (TypeError, ValueError):
+                    pass
+    try:
+        return int(results[0].get("id"))
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("/upcoming")
 def upcoming_fixtures(team: Optional[str] = None, team_id: Optional[int] = None, limit: int = 10):
-    """Prochains matchs de l'équipe. team_id = Sportmonks ID (autocomplete) ou API-Football selon config."""
+    """Prochains matchs de l'équipe. Avec Sportmonks on résout toujours par nom (API) pour éviter ids API-Football."""
     from app.services.sportmonks import _use_sportmonks, team_upcoming_fixtures
     from app.services.api_football import _use_api, get_team_upcoming_fixtures
 
-    tid = team_id
-    if tid is None and (team or "").strip():
-        tid = _resolve_team_id_fast(team.strip())
+    tid = None
+    team_name_clean = (team or "").strip()
+    if _use_sportmonks():
+        if team_name_clean:
+            tid = _resolve_team_id_sportmonks(team_name_clean)
+        if tid is None and team_id is not None:
+            tid = int(team_id)
+    else:
+        tid = team_id
+        if tid is None and team_name_clean:
+            tid = _resolve_team_id_fast(team_name_clean)
     if not tid:
         return {"fixtures": []}
 

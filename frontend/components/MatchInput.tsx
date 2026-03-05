@@ -143,10 +143,11 @@ export function MatchInput({
     }
     setLoadingUpcoming(true);
     const params = new URLSearchParams({ limit: "10" });
+    if (selectedHomeTeam?.trim()) {
+      params.set("team", selectedHomeTeam.trim());
+    }
     if (selectedHomeTeamId != null && selectedHomeTeamId !== "") {
       params.set("team_id", String(selectedHomeTeamId));
-    } else if (selectedHomeTeam?.trim()) {
-      params.set("team", selectedHomeTeam.trim());
     }
     fetch(`${API_URL}/teams/upcoming?${params}`)
       .then((res) => res.json())
