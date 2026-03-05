@@ -473,6 +473,18 @@ def fixture_by_id(
     return inner
 
 
+def predictions_fixture(fixture_id: int) -> Optional[dict[str, Any]]:
+    """
+    GET /predictions/fixtures/{fixture_id} — endpoint principal prédictions.
+    Retourne { fixture_id, predictions: { home_win, draw, away_win }, winner, expected_goals? }.
+    """
+    data = _get(f"/predictions/fixtures/{fixture_id}")
+    raw = data.get("data")
+    if raw is None or not isinstance(raw, dict):
+        return None
+    return raw
+
+
 def predictions_probabilities_by_fixture(
     fixture_id: int, include_type: bool = True
 ) -> Optional[list[dict[str, Any]]]:
@@ -727,11 +739,23 @@ def load_match_context_sportmonks(
     report("Loading Sportmonks predictions…", 25)
     # 1) Prédictions via include sur le fixture (souvent disponible quand l’endpoint dédié renvoie vide)
     probs_list: Optional[list[dict[str, Any]]] = None
-    if fixture_data.get("predictions") and isinstance(fixture_data["predictions"], list):
+    predictions_fixture_data: Optional[dict[str, Any]] = None
+    if fixture_id:
+        predictions_fixture_data = predictions_fixture(int(fixture_id))
+        if predictions_fixture_data:
+            pred_obj = predictions_fixture_data.get("predictions")
+            if isinstance(pred_obj, dict) and (
+                pred_obj.get("home_win") is not None
+                or pred_obj.get("draw") is not None
+                or pred_obj.get("win_probability_home") is not None
+            ):
+                print(f"[sportmonks] predictions from GET /predictions/fixtures/{fixture_id} -> home_win/draw/away_win")
+            else:
+                predictions_fixture_data = None
+    if not predictions_fixture_data and fixture_data.get("predictions") and isinstance(fixture_data["predictions"], list):
         probs_list = fixture_data["predictions"]
         print(f"[sportmonks] predictions from fixture include -> {len(probs_list)} items")
-    # 2) Sinon GET /predictions/probabilities/fixtures/{id} (nécessite add-on Predictions)
-    if not probs_list and fixture_id:
+    if not probs_list and not predictions_fixture_data and fixture_id:
         probs_list = predictions_probabilities_by_fixture(int(fixture_id))
         if probs_list:
             print(f"[sportmonks] predictions from probabilities endpoint -> {len(probs_list)} items")
@@ -742,7 +766,20 @@ def load_match_context_sportmonks(
     over_25 = under_25 = 50.0
     btts_yes = btts_no = 50.0
     xg_home = xg_away = 1.2
-    if probs_list and isinstance(probs_list, list):
+    if predictions_fixture_data:
+        pred_obj = predictions_fixture_data.get("predictions") or {}
+        if isinstance(pred_obj, dict):
+            home_win = float(pred_obj.get("home_win") or pred_obj.get("home") or pred_obj.get("win_probability_home") or 33.33)
+            draw = float(pred_obj.get("draw") or pred_obj.get("win_probability_draw") or 33.33)
+            away_win = float(pred_obj.get("away_win") or pred_obj.get("away") or pred_obj.get("win_probability_away") or 33.33)
+        eg = predictions_fixture_data.get("expected_goals")
+        if isinstance(eg, dict):
+            xg_home = float(eg.get("home") or eg.get("home_goals") or 1.2)
+            xg_away = float(eg.get("away") or eg.get("away_goals") or 1.2)
+        elif isinstance(eg, (list, tuple)) and len(eg) >= 2:
+            xg_home = float(eg[0]) if eg[0] is not None else 1.2
+            xg_away = float(eg[1]) if eg[1] is not None else 1.2
+    elif probs_list and isinstance(probs_list, list):
         parsed = _parse_sportmonks_predictions_array(probs_list)
         home_win = parsed["home_win"]
         draw = parsed["draw"]
@@ -754,7 +791,7 @@ def load_match_context_sportmonks(
         xg_home = parsed["xg_home"]
         xg_away = parsed["xg_away"]
 
-    home_goals_for: list[int] = []
+    home_goals_for: list[int] = [] list[int] = []
     home_goals_against: list[int] = []
     away_goals_for: list[int] = []
     away_goals_against: list[int] = []
@@ -812,7 +849,7 @@ def load_match_context_sportmonks(
         except Exception:
             pass
 
-    use_api_probs = bool(probs_list)
+    use_api_probs = bool(probs_list or predictions_fixture_data)
     # Selon la doc Sportmonks : si metadata.predictable === false, les prédictions ne sont pas dispo.
     # On pose une erreur pour que l'API renvoie 503 au lieu de fallback Poisson.
     # https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions
@@ -840,11 +877,15 @@ def load_match_context_sportmonks(
                 "Predictions not available for this fixture (Predictions add-on required, or fixture not predictable)."
             )
 
-    # Format fixture + predictions pour la réponse API (doc Sportmonks Probabilities)
+    # Format fixture + predictions pour la réponse API (endpoint principal ou Probabilities)
     sportmonks_fixture_with_predictions: Optional[dict[str, Any]] = None
-    if fixture_id and fixture_data and probs_list:
+    if fixture_id and fixture_data:
         fixture_flat = {k: v for k, v in fixture_data.items() if k not in ("participants", "league", "venue")}
-        sportmonks_fixture_with_predictions = {"data": {**fixture_flat, "predictions": probs_list}}
+        if predictions_fixture_data:
+            # GET /predictions/fixtures/{id} : home_win, draw, away_win, winner, expected_goals
+            sportmonks_fixture_with_predictions = {"data": {**fixture_flat, **predictions_fixture_data}}
+        elif probs_list:
+            sportmonks_fixture_with_predictions = {"data": {**fixture_flat, "predictions": probs_list}}
 
     # Value Bets : uniquement quand on a des prédictions (évite de bloquer le flux 503)
     sportmonks_value_bets: Optional[list[dict[str, Any]]] = None
