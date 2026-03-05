@@ -401,8 +401,7 @@ def team_past_fixtures(
 def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]]:
     """
     Prochains matchs de l'équipe (Sportmonks).
-    1) GET /fixtures?filters=team_id:{id};starting_after:{date}&include=participants;league
-    2) Si vide ou erreur, fallback GET /fixtures/between/{today}/{today+90j}/{team_id}
+    GET /fixtures/between/{today}/{today+90j}/{team_id} (starting_after n'est pas un filtre valide en v3).
     """
     if not _use_sportmonks() or not team_id:
         return []
@@ -410,28 +409,13 @@ def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]
     now = datetime.now(timezone.utc)
     start_date = now.strftime("%Y-%m-%d")
     end_date_future = (now + timedelta(days=90)).strftime("%Y-%m-%d")
-    raw: list = []
-    data: dict = {}
-    filters = f"team_id:{team_id};starting_after:{start_date}"
-    data = _get(
-        "/fixtures",
-        params={"per_page": min(limit * 2, 50), "filters": filters},
-        include="participants;league",
-    )
+    path_between = f"/fixtures/between/{start_date}/{end_date_future}/{team_id}"
+    data = _get(path_between, params={"per_page": min(limit * 2, 50)}, include="participants;league")
     raw = data.get("data")
     if isinstance(raw, dict):
         raw = raw.get("data") if isinstance(raw.get("data"), list) else []
     if not isinstance(raw, list):
         raw = []
-    # Fallback: endpoint between (dates futures) si filtre vide ou 400
-    if not raw:
-        path_between = f"/fixtures/between/{start_date}/{end_date_future}/{team_id}"
-        data = _get(path_between, params={"per_page": min(limit * 2, 50)}, include="participants;league")
-        raw = data.get("data")
-        if isinstance(raw, dict):
-            raw = raw.get("data") if isinstance(raw.get("data"), list) else []
-        if not isinstance(raw, list):
-            raw = []
     # Inclure les participants à la racine (format list endpoint Sportmonks) dans chaque fixture
     if raw and (not raw[0] or "participants" not in raw[0]) and isinstance(data.get("participants"), list):
         by_fid: dict[int, list] = {}
@@ -754,27 +738,81 @@ def compute_motivation_context(
 
 def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[str, Any]]:
     """
-    Trouve un prochain match entre les deux équipes et retourne fixture + infos équipes (logos).
-    Retourne None si pas trouvé ou API non configurée.
+    Trouve un prochain match entre les deux équipes (Sportmonks).
+    Utilise /fixtures/between/{start}/{end}/{team_id} pour éviter les 404 (IDs de search sont parfois invalides).
+    Une seule requête with include=participants;league;venue;predictions;metadata;h2h → H2H et prédictions inclus.
     """
     if not _use_sportmonks():
         return None
-    query = f"{home_team} vs {away_team}"
-    fixtures = fixtures_search(query, limit=15)
-    for f in fixtures:
-        name = (f.get("name") or "").strip()
-        if not name:
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    start_date = now.strftime("%Y-%m-%d")
+    end_date = (now + timedelta(days=120)).strftime("%Y-%m-%d")
+
+    # Résoudre les IDs équipe par nom
+    home_candidates = teams_search((home_team or "").strip(), limit=5)
+    away_candidates = teams_search((away_team or "").strip(), limit=5)
+    home_team_id = int(home_candidates[0]["id"]) if home_candidates and home_candidates[0].get("id") is not None else None
+    away_team_id = int(away_candidates[0]["id"]) if away_candidates and away_candidates[0].get("id") is not None else None
+
+    include = "participants;league;venue;predictions;metadata;h2h"
+    for primary_id, other_id in [(home_team_id, away_team_id), (away_team_id, home_team_id)]:
+        if primary_id is None or other_id is None:
             continue
-        # Vérifier que les deux noms d'équipes apparaissent
-        h = (home_team or "").lower()
-        a = (away_team or "").lower()
-        n = name.lower()
-        if h in n and a in n:
+        path = f"/fixtures/between/{start_date}/{end_date}/{primary_id}"
+        data = _get(path, params={"per_page": 50}, include=include)
+        raw = data.get("data")
+        if isinstance(raw, dict):
+            raw = raw.get("data") if isinstance(raw.get("data"), list) else []
+        if not isinstance(raw, list):
+            raw = []
+        # Attacher les includes à la racine (même logique que fixture_by_id)
+        for f in raw:
+            if not _fixture_involves_team(f, other_id):
+                continue
+            # Match futur uniquement
+            sat = f.get("starting_at") or ""
+            if sat:
+                try:
+                    dt_str = sat.replace("T", " ")[:19].strip()
+                    fd = datetime.fromisoformat(dt_str.replace(" ", "T").replace("Z", "+00:00"))
+                    if fd.tzinfo is None:
+                        fd = fd.replace(tzinfo=timezone.utc)
+                    if fd < now:
+                        continue
+                except Exception:
+                    pass
+            inner = dict(f)
             fid = f.get("id")
-            if fid:
-                full = fixture_by_id(int(fid))
-                if full:
-                    return full
+            # Attacher les includes : participants filtrés par fixture_id (between renvoie une liste plate)
+            if isinstance(data.get("participants"), list):
+                by_fid: dict[int, list] = {}
+                for p in data.get("participants", []):
+                    if isinstance(p, dict) and p.get("fixture_id") is not None:
+                        by_fid.setdefault(int(p["fixture_id"]), []).append(p)
+                inner["participants"] = by_fid.get(int(fid or 0), []) if fid else []
+            elif data.get("participants"):
+                inner["participants"] = data.get("participants")
+            if "league" not in inner and data.get("league"):
+                inner["league"] = data.get("league")
+            if "venue" not in inner and data.get("venue"):
+                inner["venue"] = data.get("venue")
+            if "predictions" not in inner and data.get("predictions"):
+                inner["predictions"] = data.get("predictions")
+            if "metadata" not in inner and data.get("metadata"):
+                inner["metadata"] = data.get("metadata")
+            if "h2h" not in inner and data.get("h2h"):
+                inner["h2h"] = data.get("h2h")
+            # Si between ne renvoie pas h2h (selon plan), 1 appel GET /fixtures/{id}?include=h2h (id valide = pas de 404)
+            if not inner.get("h2h") and fid:
+                try:
+                    h2h_data = _get(f"/fixtures/{fid}", include="h2h")
+                    h2h_list = h2h_data.get("h2h") or (h2h_data.get("data") or {}).get("h2h")
+                    if h2h_list:
+                        inner["h2h"] = h2h_list
+                except Exception:
+                    pass
+            return inner
     return None
 
 
