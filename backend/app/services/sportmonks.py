@@ -517,5 +517,5 @@ def load_match_context_sportmonks(
             },
         },
         "_sportmonks_raw_probs": probs,
-        "_sportmonks_use_predictions": True,
+        "_sportmonks_use_predictions": bool(probs),
     }

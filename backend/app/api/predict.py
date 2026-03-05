@@ -476,47 +476,12 @@ def run_predict_with_progress(
     news_included = False
     scraped_items: list = []
     motivation_text = ""
-    report("Scraping news…", 68)
-    try:
-        scraped_items = fetch_news_multi_source(
-            ctx["home_team"],
-            ctx["away_team"],
-            ctx.get("league"),
-            max_items_total=25,
-            max_age_days=7,
-        )
-        if scraped_items:
-            news_included = True
-            news_for_motivation = format_news_for_prompt(scraped_items)
-            report("Analyzing motivation…", 72)
-            motivation_text = run_motivation_analysis(
-                news_for_motivation,
-                ctx["home_team"],
-                ctx["away_team"],
-                league=ctx.get("league"),
-                home_form_label=ctx.get("home_form_label"),
-                away_form_label=ctx.get("away_form_label"),
-                venue=ctx.get("venue"),
-                language=payload.language,
-            )
-    except Exception:
-        scraped_items = []
-        motivation_text = ""
+    # News scraping and motivation analysis disabled: use only API predictions for now.
     report("Generating AI summary…", 75)
     try:
         if ctx.get("_sportmonks_use_predictions"):
             ai = generate_ai_analysis_sportmonks(ctx, out, language=payload.language)
         else:
-            scraped_news_formatted = format_news_for_prompt(scraped_items) if scraped_items else None
-            if not scraped_news_formatted and not motivation_text:
-                legacy_news = fetch_football_news(
-                    ctx["home_team"],
-                    ctx["away_team"],
-                    ctx.get("league"),
-                )
-                if legacy_news:
-                    news_included = True
-                    scraped_news_formatted = legacy_news
             prompt_ctx = build_prompt_context(
                 ctx["home_team"],
                 ctx["away_team"],
@@ -529,8 +494,8 @@ def run_predict_with_progress(
                 ctx.get("away_form_label"),
                 ctx.get("league"),
                 ctx.get("venue"),
-                motivation_analysis=motivation_text or None,
-                scraped_news_formatted=scraped_news_formatted,
+                motivation_analysis=None,
+                scraped_news_formatted=None,
             )
             ai = generate_ai_analysis(
                 prompt_ctx,
@@ -538,13 +503,6 @@ def run_predict_with_progress(
                 ctx["away_team"],
                 language=payload.language,
             )
-        _save_analysis_news(
-            ctx["home_team"],
-            ctx["away_team"],
-            ctx.get("league"),
-            scraped_items,
-            motivation_text,
-        )
     except Exception:
         ai = {"quick_summary": None, "scenario_1": None}
 

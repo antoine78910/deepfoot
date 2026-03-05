@@ -29,11 +29,11 @@ export default function LandingPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[400px] rounded-full bg-[#00ffe8]/5 blur-[150px]" />
       </div>
 
-      <header className="fixed top-0 left-0 right-0 z-20 w-full flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 bg-[#0a0a0e]/60 backdrop-blur-md">
+      <header className="fixed top-0 left-0 right-0 z-20 w-full flex items-center justify-between px-6 sm:px-10 py-4 sm:py-5 border-b border-white/10 bg-[#0a0a0e]/60 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2">
           <img src="/logo.png" alt="DEEPFOOT" className="h-12 sm:h-14 w-auto object-contain" />
         </Link>
-        <nav className="flex items-center gap-3 sm:gap-4">
+        <nav className="flex items-center gap-4 sm:gap-6">
           <Link
             href={SIGN_IN_HREF}
             className="text-sm font-medium text-zinc-300 hover:text-white transition"
@@ -49,12 +49,12 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col items-center px-4 pt-16 pb-12 sm:pt-20 sm:pb-16">
-        <section className="text-center max-w-3xl mx-auto mb-6 sm:mb-8">
-          <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-3 sm:whitespace-nowrap">
+      <main className="relative z-10 flex-1 flex flex-col items-center px-4 pt-24 pb-12 sm:pt-28 sm:pb-16">
+        <section className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 pt-4">
+          <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-4 sm:mb-5 sm:whitespace-nowrap">
             Predicts all football matches <span className="text-[#00ffe8]">with AI!</span>
           </h1>
-          <p className="text-zinc-400 text-base sm:text-lg mb-6">
+          <p className="text-zinc-400 text-base sm:text-lg mb-8">
             Enter a team to see its upcoming matches, then get an AI-powered analysis in seconds.
           </p>
           <LandingMatchSearch analyseHref={ANALYSE_HREF} />

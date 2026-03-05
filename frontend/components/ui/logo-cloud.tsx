@@ -35,7 +35,7 @@ const LEAGUE_LOGOS = [
 export function LogoCloud() {
   return (
     <div
-      className="w-full overflow-hidden py-3 [--logo-size:2.25rem] sm:[--logo-size:2.75rem] md:[--logo-size:3rem]"
+      className="w-full overflow-hidden py-4 [--logo-size:4.5rem] sm:[--logo-size:5.5rem] md:[--logo-size:6rem]"
       style={{
         maskImage: "linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%)",
         WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%)",
