@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TeamAutocomplete, type TeamOption } from "./TeamAutocomplete";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/api";
 
 type UpcomingFixture = {
   date: string;
@@ -26,24 +25,27 @@ export function LandingMatchSearch({ analyseHref = "/analyse" }: LandingMatchSea
   const [upcoming, setUpcoming] = useState<UpcomingFixture[]>([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState(false);
 
+  const [apiUrl, setApiUrl] = useState("");
   useEffect(() => {
+    setApiUrl(getApiUrl());
+  }, []);
+
+  useEffect(() => {
+    if (!apiUrl) return;
     if (!selectedTeam?.trim() && selectedTeamId == null) {
       setUpcoming([]);
       return;
     }
     setLoadingUpcoming(true);
     const params = new URLSearchParams({ limit: "10" });
-    if (selectedTeamId != null && selectedTeamId !== "") {
-      params.set("team_id", String(selectedTeamId));
-    } else if (selectedTeam?.trim()) {
-      params.set("team", selectedTeam.trim());
-    }
-    fetch(`${API_URL}/teams/upcoming?${params}`)
+    if (selectedTeam?.trim()) params.set("team", selectedTeam.trim());
+    if (selectedTeamId != null && selectedTeamId !== "") params.set("team_id", String(selectedTeamId));
+    fetch(`${apiUrl}/teams/upcoming?${params}`)
       .then((res) => res.json())
       .then((data) => setUpcoming(data.fixtures || []))
       .catch(() => setUpcoming([]))
       .finally(() => setLoadingUpcoming(false));
-  }, [selectedTeam, selectedTeamId]);
+  }, [apiUrl, selectedTeam, selectedTeamId]);
 
   return (
     <div className="w-full max-w-xl mx-auto">

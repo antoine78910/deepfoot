@@ -186,6 +186,23 @@ def _format_sportmonks_fixture_for_upcoming(f: dict) -> Optional[dict]:
     }
 
 
+def _short_name_fallback(team_name: str) -> list[str]:
+    """Pour recherche Sportmonks: si le nom complet ne matche pas, essayer des variantes (ex. FC Basel 1893 -> Basel)."""
+    s = (team_name or "").strip()
+    if not s:
+        return []
+    parts = s.split()
+    out = []
+    # Ignorer préfixes courants et années (4 chiffres)
+    skip = {"fc", "ac", "sc", "ssv", "fk", "cf", "cf", "ogc", "as", "rc", "us", "nk", "fk", "fc"}
+    main_words = [p for p in parts if p.lower() not in skip and not (len(p) == 4 and p.isdigit())]
+    if main_words:
+        out.append(main_words[0].strip())
+    if len(main_words) >= 2:
+        out.append(" ".join(main_words[:2]).strip())
+    return out[:3]
+
+
 def _resolve_team_id_sportmonks(team_name: str):
     """Résout le nom en Sportmonks ID via l'API Sportmonks (évite mélange avec anciens ids API-Football)."""
     from app.services.sportmonks import _use_sportmonks, teams_search, TEAM_SEARCH_ALIASES
@@ -195,9 +212,18 @@ def _resolve_team_id_sportmonks(team_name: str):
     search_term = name
     if name in TEAM_SEARCH_ALIASES:
         search_term = TEAM_SEARCH_ALIASES[name][0]
-    results = teams_search(search_term if search_term != name else team_name.strip(), limit=10)
+    query = search_term if search_term != name else team_name.strip()
+    results = teams_search(query, limit=10)
     if not results:
         results = teams_search(team_name.strip(), limit=10)
+    # Fallback: nom court (ex. "Basel" pour "FC Basel 1893") pour ligue suisse etc.
+    if not results:
+        for short in _short_name_fallback(team_name):
+            if not short or short.lower() == name:
+                continue
+            results = teams_search(short, limit=10)
+            if results:
+                break
     if not results:
         return None
     name_norm = name.replace("é", "e").replace("è", "e")

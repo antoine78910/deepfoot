@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/api";
 
 export type TeamOption = { id: number | string | null; name: string; crest: string | null; country?: string | null };
 
@@ -148,7 +147,7 @@ export function TeamAutocomplete({
       let data: { teams?: TeamOption[] } = {};
       try {
         const res = await fetch(
-          `${API_URL}/teams?q=${encodeURIComponent(qTrim)}&limit=${fetchLimit}`,
+          `${getApiUrl()}/teams?q=${encodeURIComponent(qTrim)}&limit=${fetchLimit}`,
           {}
         );
         if (!res.ok) {
@@ -186,7 +185,7 @@ export function TeamAutocomplete({
     }
     const preload = async () => {
       try {
-        const res = await fetch(`${API_URL}/teams?limit=${preloadLimit}`);
+        const res = await fetch(`${getApiUrl()}/teams?limit=${preloadLimit}`);
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
