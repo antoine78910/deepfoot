@@ -451,8 +451,10 @@ def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]
     return upcoming[:limit]
 
 
-def fixture_by_id(fixture_id: int, include: str = "participants;league;venue") -> Optional[dict[str, Any]]:
-    """GET /fixtures/{id} avec participants (équipes + image_path pour blasons), league, venue."""
+def fixture_by_id(
+    fixture_id: int, include: str = "participants;league;venue;predictions;metadata"
+) -> Optional[dict[str, Any]]:
+    """GET /fixtures/{id} avec participants, league, venue, predictions et metadata (predictable)."""
     data = _get(f"/fixtures/{fixture_id}", include=include)
     inner = data.get("data") if isinstance(data.get("data"), dict) else None
     if not inner:
@@ -464,6 +466,10 @@ def fixture_by_id(fixture_id: int, include: str = "participants;league;venue") -
         inner = {**inner, "league": data.get("league")}
     if "venue" not in inner and data.get("venue"):
         inner = {**inner, "venue": data.get("venue")}
+    if "predictions" not in inner and data.get("predictions"):
+        inner = {**inner, "predictions": data.get("predictions")}
+    if "metadata" not in inner and data.get("metadata"):
+        inner = {**inner, "metadata": data.get("metadata")}
     return inner
 
 
@@ -687,7 +693,18 @@ def load_match_context_sportmonks(
     fixture_id = fixture_data.get("id")
 
     report("Loading Sportmonks predictions…", 25)
-    probs_list = predictions_probabilities_by_fixture(int(fixture_id)) if fixture_id else None
+    # 1) Prédictions via include sur le fixture (souvent disponible quand l’endpoint dédié renvoie vide)
+    probs_list: Optional[list[dict[str, Any]]] = None
+    if fixture_data.get("predictions") and isinstance(fixture_data["predictions"], list):
+        probs_list = fixture_data["predictions"]
+        print(f"[sportmonks] predictions from fixture include -> {len(probs_list)} items")
+    # 2) Sinon GET /predictions/probabilities/fixtures/{id} (nécessite add-on Predictions)
+    if not probs_list and fixture_id:
+        probs_list = predictions_probabilities_by_fixture(int(fixture_id))
+        if probs_list:
+            print(f"[sportmonks] predictions from probabilities endpoint -> {len(probs_list)} items")
+        else:
+            print(f"[sportmonks] no predictions for fixture {fixture_id} (Predictions add-on or fixture not predictable). Using Poisson from form.")
 
     home_win = draw = away_win = 33.33
     over_25 = under_25 = 50.0
@@ -764,9 +781,32 @@ def load_match_context_sportmonks(
             pass
 
     use_api_probs = bool(probs_list)
+    # Selon la doc Sportmonks : si metadata.predictable === false, les prédictions ne sont pas dispo.
+    # On pose une erreur pour que l'API renvoie 503 au lieu de fallback Poisson.
+    # https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions
+    _sportmonks_predictions_unavailable_error: Optional[str] = None
     if not use_api_probs:
         xg_home = lambda_home_calc
         xg_away = lambda_away_calc
+        pipeline_steps.append({
+            "order": 4,
+            "title_key": "recap.step.sportmonks_no_predictions",
+            "detail": "No Sportmonks predictions for this fixture (Predictions add-on required, or fixture not predictable). Probabilities from Poisson model using form data.",
+        })
+        meta = fixture_data.get("metadata")
+        if isinstance(meta, list) and meta:
+            meta = meta[0] if isinstance(meta[0], dict) else {}
+        elif not isinstance(meta, dict):
+            meta = {}
+        predictable = meta.get("predictable") if isinstance(meta, dict) else None
+        if predictable is False:
+            _sportmonks_predictions_unavailable_error = (
+                "Predictions not available for this fixture (predictable: false — insufficient data for the model)."
+            )
+        else:
+            _sportmonks_predictions_unavailable_error = (
+                "Predictions not available for this fixture (Predictions add-on required, or fixture not predictable)."
+            )
 
     # Format fixture + predictions pour la réponse API (doc Sportmonks Probabilities)
     sportmonks_fixture_with_predictions: Optional[dict[str, Any]] = None
@@ -777,6 +817,7 @@ def load_match_context_sportmonks(
     data_recap: dict[str, Any] = {
         "data_source": "Sportmonks",
         "pipeline_steps": pipeline_steps,
+        "sportmonks_predictions_unavailable_reason": None if use_api_probs else "Predictions add-on or fixture not predictable",
         "sportmonks_fixture_with_predictions": sportmonks_fixture_with_predictions,
         "sportmonks_predictions": {
             "home_win": home_win,
@@ -835,4 +876,5 @@ def load_match_context_sportmonks(
         "data_recap": data_recap,
         "_sportmonks_raw_probs": probs_list,
         "_sportmonks_use_predictions": use_api_probs,
+        "_sportmonks_predictions_unavailable_error": _sportmonks_predictions_unavailable_error,
     }

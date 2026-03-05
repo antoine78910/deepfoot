@@ -92,6 +92,7 @@ type Result = {
       lambda_away?: number;
       xg_home?: number;
       xg_away?: number;
+      sportmonks_unavailable_reason?: string | null;
     };
     match_info?: {
       fixture_id?: number | null;
@@ -1022,6 +1023,11 @@ export function AnalysisResult({ result }: { result: Result }) {
                     .replace("{xgHome}", typeof result.analysis_recap.probabilities.xg_home === "number" ? result.analysis_recap.probabilities.xg_home.toFixed(2) : "—")
                     .replace("{xgAway}", typeof result.analysis_recap.probabilities.xg_away === "number" ? result.analysis_recap.probabilities.xg_away.toFixed(2) : "—")}
                 </p>
+                {"sportmonks_unavailable_reason" in result.analysis_recap.probabilities && result.analysis_recap.probabilities.sportmonks_unavailable_reason && (
+                  <p className="text-zinc-400 text-xs mt-1">
+                    {t("analysis.recapProbSportmonksUnavailable").replace("{reason}", result.analysis_recap.probabilities.sportmonks_unavailable_reason)}
+                  </p>
+                )}
               </div>
             )}
             {result.analysis_recap.ai_summary && (

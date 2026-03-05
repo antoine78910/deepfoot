@@ -353,6 +353,7 @@ def _build_analysis_recap(
             "lambda_away": ctx.get("lambda_away"),
             "xg_home": xg_h,
             "xg_away": xg_a,
+            "sportmonks_unavailable_reason": recap.get("sportmonks_predictions_unavailable_reason"),
         },
         "match_info": {
             "fixture_id": recap.get("fixture_id"),
@@ -462,6 +463,10 @@ def run_predict_with_progress(
         home_team_id=payload.home_team_id,
         away_team_id=payload.away_team_id,
     )
+    # Sportmonks : si les prédictions ne sont pas dispo (predictable: false ou add-on manquant), erreur 503
+    err = ctx.get("_sportmonks_predictions_unavailable_error")
+    if err:
+        raise HTTPException(status_code=503, detail=err)
     report("Computing probabilities…", 62)
 
     used_api_predictions = False
