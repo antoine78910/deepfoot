@@ -306,8 +306,10 @@ def fixtures_search(query: str, limit: int = 10) -> list[dict[str, Any]]:
     return data.get("data") or []
 
 
-# Coefficients H2H par saison (saison la plus récente = 1.0, puis 0.8, 0.6, 0.4, 0.2)
-H2H_SEASON_WEIGHTS = (1.0, 0.8, 0.6, 0.4, 0.2)
+# H2H recency model (5 seasons): weight = 0.6^years_ago
+H2H_DECAY_BASE = 0.6
+H2H_MAX_SEASONS = 5
+H2H_SEASON_WEIGHTS = tuple(H2H_DECAY_BASE ** i for i in range(H2H_MAX_SEASONS))
 
 
 def get_h2h_last_5_seasons(
@@ -317,12 +319,12 @@ def get_h2h_last_5_seasons(
     """
     Récupère les confrontations directes sur les 5 dernières saisons via /fixtures/between (par saison).
     Retourne (h2h_home_wins_weighted, h2h_draws_weighted, h2h_away_wins_weighted).
-    Coefficients: 1.0, 0.8, 0.6, 0.4, 0.2 (saison la plus récente à la plus ancienne).
+    Coefficients: 0.6^years_ago (saison la plus récente à la plus ancienne).
     """
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     hw, hd, ha = 0.0, 0.0, 0.0
-    for i in range(min(5, len(H2H_SEASON_WEIGHTS))):
+    for i in range(min(H2H_MAX_SEASONS, len(H2H_SEASON_WEIGHTS))):
         weight = H2H_SEASON_WEIGHTS[i]
         season_end_year = now.year - i  # 2026, 2025, 2024, ...
         start_date = f"{season_end_year - 1}-08-01"
@@ -392,7 +394,7 @@ def get_h2h_last_5_seasons(
             else:
                 hd += weight
     if hw or hd or ha:
-        print(f"[sportmonks] H2H last 5 seasons (weighted): home_wins={hw:.1f}, draws={hd:.1f}, away_wins={ha:.1f}")
+        print(f"[sportmonks] H2H last {H2H_MAX_SEASONS} seasons (weighted): home_wins={hw:.1f}, draws={hd:.1f}, away_wins={ha:.1f}")
     return (hw, hd, ha)
 
 
@@ -418,14 +420,14 @@ def get_h2h_last_5_seasons_details(
         "raw_away_wins": 0,
         "raw_matches_count": 0,
         "season_breakdown": [],
-        "seasons_used": 5,
+        "seasons_used": H2H_MAX_SEASONS,
     }
     if not _use_sportmonks() or not home_team_id or not away_team_id:
         return out
 
     now = datetime.now(timezone.utc)
     current_season_end_year = now.year + 1 if now.month >= 7 else now.year
-    season_end_years = [current_season_end_year - i for i in range(5)]
+    season_end_years = [current_season_end_year - i for i in range(H2H_MAX_SEASONS)]
     season_weights = {year: H2H_SEASON_WEIGHTS[idx] for idx, year in enumerate(season_end_years)}
     season_stats: dict[int, dict[str, Any]] = {
         y: {
@@ -672,6 +674,197 @@ def team_past_fixtures(
         form_list.append(res)
         seen += 1
     return (goals_for_list, goals_against_list, form_list)
+
+
+def _extract_fixture_xg_by_team(fixture_data: dict) -> dict[int, float]:
+    """
+    Essaye d'extraire xG par team_id depuis include=statistics.
+    Format Sportmonks pouvant varier, on reste permissif.
+    """
+    out: dict[int, float] = {}
+    stats = fixture_data.get("statistics")
+    if not isinstance(stats, list):
+        return out
+    for st in stats:
+        if not isinstance(st, dict):
+            continue
+        type_name = str(
+            (st.get("type") or st.get("name") or st.get("code") or st.get("developer_name") or "")
+        ).lower()
+        if ("expected" not in type_name or "goal" not in type_name) and st.get("type_id") not in (158, 321):
+            continue
+        pid = st.get("participant_id") or st.get("team_id")
+        if pid is None and isinstance(st.get("participant"), dict):
+            pid = st["participant"].get("id") or st["participant"].get("participant_id")
+        if pid is None:
+            continue
+        value = st.get("data")
+        if isinstance(value, dict):
+            value = value.get("value") or value.get("total") or value.get("xg")
+        if value is None:
+            value = st.get("value") or st.get("total") or st.get("xg")
+        try:
+            out[int(pid)] = float(value)
+        except Exception:
+            continue
+    return out
+
+
+def team_recent_advanced_metrics(team_id: int, last_n: int = 5) -> dict[str, Any]:
+    """
+    Features avancées pour optimisation Poisson:
+    - split domicile/extérieur (buts marqués/encaissés)
+    - fatigue (repos, matchs 7j/14j)
+    - xG moyen récent si récupérable via /fixtures/{id}?include=statistics
+    """
+    from datetime import datetime, timezone, timedelta
+
+    out: dict[str, Any] = {
+        "home_scored_avg": None,
+        "home_conceded_avg": None,
+        "away_scored_avg": None,
+        "away_conceded_avg": None,
+        "matches_last_7d": 0,
+        "matches_last_14d": 0,
+        "rest_days": None,
+        "xg_for_avg": None,
+        "xg_against_avg": None,
+    }
+    if not _use_sportmonks() or not team_id:
+        return out
+
+    now = datetime.now(timezone.utc)
+    end_date = now.strftime("%Y-%m-%d")
+    start_date = (now - timedelta(days=120)).strftime("%Y-%m-%d")
+    path = f"/fixtures/between/{start_date}/{end_date}/{team_id}"
+    data = _get_allow_404(path, params={"per_page": 30}, include="participants;scores")
+    raw = data.get("data")
+    if isinstance(raw, dict):
+        raw = raw.get("data") if isinstance(raw.get("data"), list) else []
+    if not isinstance(raw, list):
+        raw = []
+    raw.sort(key=lambda x: (x.get("starting_at") or ""), reverse=True)
+
+    participants_by_fid: dict[int, list] = {}
+    for p in (data.get("participants") or []):
+        if isinstance(p, dict):
+            fid = p.get("fixture_id")
+            if fid is not None:
+                participants_by_fid.setdefault(int(fid), []).append(p)
+    scores_by_fid: dict[int, list] = {}
+    for s in (data.get("scores") or []):
+        if isinstance(s, dict):
+            fid = s.get("fixture_id")
+            if fid is not None:
+                scores_by_fid.setdefault(int(fid), []).append(s)
+
+    recent: list[dict[str, Any]] = []
+    tid = int(team_id)
+    for f in raw:
+        if len(recent) >= last_n:
+            break
+        fid = f.get("id")
+        if fid is None:
+            continue
+        sat = f.get("starting_at") or ""
+        try:
+            dt_str = sat.replace("T", " ")[:19].strip()
+            fixture_dt = datetime.fromisoformat(dt_str.replace(" ", "T").replace("Z", "+00:00"))
+            if fixture_dt.tzinfo is None:
+                fixture_dt = fixture_dt.replace(tzinfo=timezone.utc)
+            if fixture_dt >= now:
+                continue
+        except Exception:
+            continue
+
+        participants = f.get("participants") or participants_by_fid.get(int(fid), [])
+        scores = f.get("scores") or scores_by_fid.get(int(fid), [])
+        if not participants or not scores:
+            continue
+
+        home_goals = sum(
+            int((s.get("score") or {}).get("goals", 0) or 0)
+            for s in scores
+            if (s.get("score") or {}).get("participant") == "home"
+        )
+        away_goals = sum(
+            int((s.get("score") or {}).get("goals", 0) or 0)
+            for s in scores
+            if (s.get("score") or {}).get("participant") == "away"
+        )
+        home_p, away_p = None, None
+        for p in participants:
+            if not isinstance(p, dict):
+                continue
+            meta = p.get("meta") or {}
+            loc = (meta.get("location") or "").lower()
+            if loc == "home":
+                home_p = p
+            elif loc == "away":
+                away_p = p
+        if not home_p and len(participants) >= 2:
+            home_p = participants[0]
+            away_p = participants[1]
+        if not home_p or not away_p:
+            continue
+        pid_home = int(home_p.get("team_id") or home_p.get("id") or 0)
+        pid_away = int(away_p.get("team_id") or away_p.get("id") or 0)
+        is_home = pid_home == tid
+        is_away = pid_away == tid
+        if not (is_home or is_away):
+            continue
+
+        recent.append({
+            "fixture_id": int(fid),
+            "dt": fixture_dt,
+            "is_home": is_home,
+            "goals_for": home_goals if is_home else away_goals,
+            "goals_against": away_goals if is_home else home_goals,
+            "opponent_id": pid_away if is_home else pid_home,
+        })
+
+    if not recent:
+        return out
+
+    home_rows = [r for r in recent if r["is_home"]]
+    away_rows = [r for r in recent if not r["is_home"]]
+    if home_rows:
+        out["home_scored_avg"] = round(sum(r["goals_for"] for r in home_rows) / len(home_rows), 3)
+        out["home_conceded_avg"] = round(sum(r["goals_against"] for r in home_rows) / len(home_rows), 3)
+    if away_rows:
+        out["away_scored_avg"] = round(sum(r["goals_for"] for r in away_rows) / len(away_rows), 3)
+        out["away_conceded_avg"] = round(sum(r["goals_against"] for r in away_rows) / len(away_rows), 3)
+
+    out["matches_last_7d"] = sum(1 for r in recent if (now - r["dt"]).total_seconds() <= 7 * 86400)
+    out["matches_last_14d"] = sum(1 for r in recent if (now - r["dt"]).total_seconds() <= 14 * 86400)
+    out["rest_days"] = int((now - recent[0]["dt"]).total_seconds() // 86400)
+
+    # xG moyen récent (optionnel, selon disponibilité de statistics)
+    xg_for_vals: list[float] = []
+    xg_against_vals: list[float] = []
+    for r in recent[:last_n]:
+        fd = _get_allow_404(f"/fixtures/{r['fixture_id']}", include="statistics;participants")
+        fixture = fd.get("data") if isinstance(fd.get("data"), dict) else {}
+        if not fixture:
+            continue
+        if "participants" not in fixture and isinstance(fd.get("participants"), list):
+            fixture["participants"] = fd.get("participants")
+        if "statistics" not in fixture and isinstance(fd.get("statistics"), list):
+            fixture["statistics"] = fd.get("statistics")
+        xg_map = _extract_fixture_xg_by_team(fixture)
+        if not xg_map:
+            continue
+        team_xg = xg_map.get(tid)
+        opp_xg = xg_map.get(int(r["opponent_id"]))
+        if isinstance(team_xg, (int, float)):
+            xg_for_vals.append(float(team_xg))
+        if isinstance(opp_xg, (int, float)):
+            xg_against_vals.append(float(opp_xg))
+    if xg_for_vals:
+        out["xg_for_avg"] = round(sum(xg_for_vals) / len(xg_for_vals), 3)
+    if xg_against_vals:
+        out["xg_against_avg"] = round(sum(xg_against_vals) / len(xg_against_vals), 3)
+    return out
 
 
 def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]]:
@@ -1512,6 +1705,8 @@ def load_match_context_sportmonks(
     aw, ad, al = 0, 0, 0
     h2h_hw, h2h_hd, h2h_ha = 0.0, 0.0, 0.0
     h2h_home_pct_override: Optional[float] = None
+    home_adv: dict[str, Any] = {}
+    away_adv: dict[str, Any] = {}
 
     h2h_details: dict[str, Any] = {}
     if home_team_id and away_team_id:
@@ -1551,6 +1746,8 @@ def load_match_context_sportmonks(
             )
             home_goals_for, home_goals_against, home_form = team_past_fixtures(int(home_team_id), last_n=5)
             away_goals_for, away_goals_against, away_form = team_past_fixtures(int(away_team_id), last_n=5)
+            home_adv = team_recent_advanced_metrics(int(home_team_id), last_n=5)
+            away_adv = team_recent_advanced_metrics(int(away_team_id), last_n=5)
             hw = sum(1 for x in home_form if x == "W")
             hd = sum(1 for x in home_form if x == "D")
             hl = sum(1 for x in home_form if x == "L")
@@ -1562,6 +1759,55 @@ def load_match_context_sportmonks(
             lambda_home_calc, lambda_away_calc = compute_lambda_home_away(
                 home_goals_for, home_goals_against, away_goals_for, away_goals_against,
             )
+            # Split domicile/extérieur: blend du lambda global avec une version contextuelle home-vs-away
+            split_home = None
+            split_away = None
+            league_avg_half = 2.7 / 2
+            h_home_for = home_adv.get("home_scored_avg")
+            h_home_against = home_adv.get("home_conceded_avg")
+            a_away_for = away_adv.get("away_scored_avg")
+            a_away_against = away_adv.get("away_conceded_avg")
+            if isinstance(h_home_for, (int, float)) and isinstance(a_away_against, (int, float)) and a_away_against > 0:
+                split_home = float(h_home_for) * float(a_away_against) / league_avg_half
+            if isinstance(a_away_for, (int, float)) and isinstance(h_home_against, (int, float)) and h_home_against > 0:
+                split_away = float(a_away_for) * float(h_home_against) / league_avg_half
+            if split_home is not None and split_away is not None:
+                lambda_home_calc = 0.7 * lambda_home_calc + 0.3 * split_home
+                lambda_away_calc = 0.7 * lambda_away_calc + 0.3 * split_away
+
+            # xG récent: ajuste légèrement les lambdas si dispo
+            h_xg_for = home_adv.get("xg_for_avg")
+            h_xg_against = home_adv.get("xg_against_avg")
+            a_xg_for = away_adv.get("xg_for_avg")
+            a_xg_against = away_adv.get("xg_against_avg")
+            if isinstance(h_xg_for, (int, float)) and isinstance(a_xg_against, (int, float)):
+                lambda_home_calc = 0.75 * lambda_home_calc + 0.25 * ((float(h_xg_for) + float(a_xg_against)) / 2)
+            if isinstance(a_xg_for, (int, float)) and isinstance(h_xg_against, (int, float)):
+                lambda_away_calc = 0.75 * lambda_away_calc + 0.25 * ((float(a_xg_for) + float(h_xg_against)) / 2)
+
+            # Fatigue (repos + densité): petite correction multiplicative
+            def _fatigue_mult(matches_7d: Any, rest_days: Any) -> float:
+                m = 1.0
+                try:
+                    m7 = int(matches_7d or 0)
+                except Exception:
+                    m7 = 0
+                rd = rest_days if isinstance(rest_days, (int, float)) else None
+                if m7 >= 3:
+                    m *= 0.92
+                elif m7 == 2:
+                    m *= 0.96
+                if rd is not None:
+                    if rd <= 2:
+                        m *= 0.95
+                    elif rd >= 6:
+                        m *= 1.03
+                return max(0.85, min(1.08, m))
+
+            lambda_home_calc *= _fatigue_mult(home_adv.get("matches_last_7d"), home_adv.get("rest_days"))
+            lambda_away_calc *= _fatigue_mult(away_adv.get("matches_last_7d"), away_adv.get("rest_days"))
+            lambda_home_calc = max(0.2, min(4.0, float(lambda_home_calc)))
+            lambda_away_calc = max(0.2, min(4.0, float(lambda_away_calc)))
             comparison_pcts = build_comparison_pcts(
                 hw, hd, hl, aw, ad, al,
                 h_for_avg, a_for_avg, h_against_avg, a_against_avg,
@@ -1571,13 +1817,13 @@ def load_match_context_sportmonks(
             pipeline_steps = [
                 {"order": 1, "title_key": "recap.step.data_source_sportmonks", "detail": "Data source: Sportmonks (fixture + predictions + team past fixtures for form)."},
                 {"order": 2, "title_key": "recap.step.form", "detail": f"Team results (Sportmonks last 5): home goals_for/against avg {h_for_avg:.2f}/{h_against_avg:.2f}, away {a_for_avg:.2f}/{a_against_avg:.2f}. Form W-D-L."},
-                {"order": 3, "title_key": "recap.step.features", "detail": f"Feature engineering: lambda_home={lambda_home_calc:.2f}, lambda_away={lambda_away_calc:.2f}. Comparison percentages."},
+                {"order": 3, "title_key": "recap.step.features", "detail": f"Feature engineering: lambda_home={lambda_home_calc:.2f}, lambda_away={lambda_away_calc:.2f}. Added home/away split + fatigue + recent xG (when available). Comparison percentages."},
             ]
             if h2h_hw or h2h_hd or h2h_ha:
                 pipeline_steps.append({
                     "order": 4,
                     "title_key": "recap.step.h2h",
-                    "detail": f"H2H last 5 seasons (weighted 1.0, 0.8, 0.6, 0.4, 0.2): home_wins={h2h_hw:.1f}, draws={h2h_hd:.1f}, away_wins={h2h_ha:.1f}.",
+                    "detail": f"H2H last {H2H_MAX_SEASONS} seasons (weighted by recency: weight=0.6^years_ago): home_wins={h2h_hw:.1f}, draws={h2h_hd:.1f}, away_wins={h2h_ha:.1f}.",
                 })
         except Exception:
             pass
@@ -1657,17 +1903,19 @@ def load_match_context_sportmonks(
         "home_goals_against_avg": round(sum(home_goals_against) / len(home_goals_against), 2) if home_goals_against else None,
         "away_goals_for_avg": round(sum(away_goals_for) / len(away_goals_for), 2) if away_goals_for else None,
         "away_goals_against_avg": round(sum(away_goals_against) / len(away_goals_against), 2) if away_goals_against else None,
+        "home_advanced_metrics": home_adv,
+        "away_advanced_metrics": away_adv,
         "h2h_matches_count": round(h2h_hw + h2h_hd + h2h_ha, 1),
         "h2h_home_wins": round(h2h_hw, 1),
         "h2h_draws": round(h2h_hd, 1),
         "h2h_away_wins": round(h2h_ha, 1),
-        "h2h_seasons_used": 5 if (h2h_hw or h2h_hd or h2h_ha) else None,
+        "h2h_seasons_used": H2H_MAX_SEASONS if (h2h_hw or h2h_hd or h2h_ha) else None,
         "h2h_raw_matches_count": int(h2h_details.get("raw_matches_count") or 0),
         "h2h_raw_home_wins": int(h2h_details.get("raw_home_wins") or 0),
         "h2h_raw_draws": int(h2h_details.get("raw_draws") or 0),
         "h2h_raw_away_wins": int(h2h_details.get("raw_away_wins") or 0),
         "h2h_season_breakdown": h2h_details.get("season_breakdown") or [],
-        "h2h_weighting": list(H2H_SEASON_WEIGHTS),
+        "h2h_weighting": [round(float(w), 4) for w in H2H_SEASON_WEIGHTS],
         "match_context_summary": motivation_ctx.get("match_context_summary"),
         "home_motivation_score": motivation_ctx.get("home_motivation_score"),
         "away_motivation_score": motivation_ctx.get("away_motivation_score"),

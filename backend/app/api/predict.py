@@ -270,7 +270,8 @@ def _build_analysis_recap(
     # Period for all form-based stats (Attack, Defense, Goals, Form)
     stats_period = (
         "Attack, Defense, Goals, Form: last 5 matches per team (all competitions). "
-        "H2H: all head-to-head matches found over up to 5 seasons (recent seasons weighted higher: 1.0, 0.8, 0.6, 0.4, 0.2)."
+        "H2H: all head-to-head matches found over up to 5 seasons (recency weighted with weight = 0.6^years_ago). "
+        "Poisson lambdas also use home/away split and schedule fatigue, with xG blend when available."
     )
     # How we compute each comparison bar
     how_bars_work = {
@@ -278,14 +279,15 @@ def _build_analysis_recap(
         "defense": "Home % = 100 × (1 / home avg goals conceded) / (1/home conceded + 1/away conceded). Higher = fewer goals conceded (stronger defense).",
         "goals": "Same formula as Attack: share of total goals scored (last 5 each).",
         "form": "Home % = 100 × (home points) / (home + away points), with points = 3×W + 1×D + 0×L over last 5.",
-        "h2h": "Home % = (home wins + 0.5×draws) / total H2H × 100, or weighted by season (recent = 1.0, older = 0.8, 0.6, 0.4, 0.2).",
+        "h2h": "Home % = (home wins + 0.5×draws) / total H2H × 100, weighted by recency with weight = 0.6^years_ago.",
         "overall": "Average of the 5 bars above (attack, defense, form, h2h, goals), each with weight 1/5.",
     }
     # How we predict the score
     how_score_prediction_works = (
-        "Poisson model. λ_home = (home_goals_for_avg × away_goals_against_avg) / (league_avg/2), "
-        "λ_away = (away_goals_for_avg × home_goals_against_avg) / (league_avg/2). league_avg = 2.7. "
-        "Lambdas clamped between 0.2 and 4.0. "
+        "Poisson model. Base λ_home = (home_goals_for_avg × away_goals_against_avg) / (league_avg/2), "
+        "base λ_away = (away_goals_for_avg × home_goals_against_avg) / (league_avg/2). league_avg = 2.7. "
+        "Then blend with home/away split (home-at-home vs away-away), apply fatigue multiplier "
+        "(matches in last 7 days + rest days), and blend recent xG when available. Lambdas clamped 0.2 to 4.0. "
         "P(score i–j) = Poisson(i | λ_home) × Poisson(j | λ_away). "
         "1X2: P(Home)=sum i>j, P(Draw)=sum i=j, P(Away)=sum i<j. "
         "BTTS Yes = sum P(i,j) for i≥1, j≥1. Over/Under = sum P(i,j) for i+j > line. "
@@ -308,6 +310,10 @@ def _build_analysis_recap(
         "lambdas": {
             "lambda_home": ctx.get("lambda_home"),
             "lambda_away": ctx.get("lambda_away"),
+        },
+        "advanced_metrics": {
+            "home": recap.get("home_advanced_metrics") or {},
+            "away": recap.get("away_advanced_metrics") or {},
         },
         "comparison_pcts": {
             "attack_home_pct": pcts.get("attack_home_pct"),
