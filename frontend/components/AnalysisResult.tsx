@@ -185,7 +185,38 @@ function FormLabelBlock({ label, compact }: { label: string; compact?: boolean }
   );
 }
 
-const formIconSize = "w-5 h-5 sm:w-6 sm:h-6";
+/** Truncates long text with "Read more" / "Show less". */
+function ReadMore({
+  text,
+  maxChars = 220,
+  className = "",
+  t,
+}: {
+  text: string;
+  maxChars?: number;
+  className?: string;
+  t: (key: string) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const needsTruncation = text.length > maxChars;
+  const display = !needsTruncation || expanded ? text : text.slice(0, maxChars).trim() + (text.length > maxChars ? "…" : "");
+  return (
+    <div className={className}>
+      <p className="text-zinc-300 leading-relaxed text-sm whitespace-pre-line">{display}</p>
+      {needsTruncation && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="mt-1.5 text-sm font-medium text-[#00ffe8] hover:underline"
+        >
+          {expanded ? t("analysis.show_less") : t("analysis.readMore")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+const formIconSize = "w-4 h-4 sm:w-5 sm:h-5";
 function AppleCheck() {
   return (
     <span className={`inline-flex items-center justify-center ${formIconSize} flex-shrink-0`} title="Victoire" aria-hidden>✅</span>
@@ -490,9 +521,9 @@ export function AnalysisResult({ result }: { result: Result }) {
 
   return (
     <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-hidden shadow-lg">
-      <div className="p-6 space-y-0">
+      <div className="p-4 sm:p-6 space-y-0">
       {/* Recap - first section: mobile = logos above, names + VS on new lines; desktop = logo | text | logo */}
-      <div className="pb-6">
+      <div className="pb-4 sm:pb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             {/* Mobile: logos row then label + home / vs / away on new lines */}
@@ -509,8 +540,8 @@ export function AnalysisResult({ result }: { result: Result }) {
                   <div className="w-12 h-12 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm">{away.slice(0, 2)}</div>
                 )}
               </div>
-              <p className="text-zinc-500 text-sm mt-2">{t("analysis.analyzedMatch")}</p>
-              <h1 className="text-xl font-bold mt-0.5 text-white text-center">
+              <p className="text-zinc-500 text-xs sm:text-sm mt-1.5">{t("analysis.analyzedMatch")}</p>
+              <h1 className="text-lg sm:text-xl font-bold mt-0.5 text-white text-center">
                 <span className="text-white block">{home}</span>
                 <span className="text-zinc-500 font-normal block my-0.5">vs</span>
                 <span className="text-white block">{away}</span>
@@ -524,8 +555,8 @@ export function AnalysisResult({ result }: { result: Result }) {
                 <div className="w-14 h-14 rounded-xl bg-[#1c1c28] flex-shrink-0 flex items-center justify-center text-white font-bold">{home.slice(0, 2)}</div>
               )}
               <div className="min-w-0">
-                <p className="text-zinc-500 text-sm">{t("analysis.analyzedMatch")}</p>
-                <h1 className="text-xl md:text-2xl font-bold mt-0.5 text-white">
+                <p className="text-zinc-500 text-xs sm:text-sm">{t("analysis.analyzedMatch")}</p>
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold mt-0.5 text-white">
                   <span className="text-white">{home}</span>
                   <span className="text-zinc-500 font-normal mx-2">vs</span>
                   <span className="text-white">{away}</span>
@@ -538,13 +569,13 @@ export function AnalysisResult({ result }: { result: Result }) {
               )}
             </div>
           </div>
-          <div className="rounded-lg border border-[#00ffe8]/60 px-4 py-2 text-center flex-shrink-0 w-full sm:w-auto">
-            <p className="text-[#00ffe8] font-semibold text-sm">{t("analysis.aiReady")}</p>
-            <p className="text-[#00ffe8]/80 text-xs mt-0.5">{t("analysis.basedOn")}</p>
+          <div className="rounded-lg border border-[#00ffe8]/60 px-3 py-1.5 sm:px-4 sm:py-2 text-center flex-shrink-0 w-full sm:w-auto">
+            <p className="text-[#00ffe8] font-semibold text-xs sm:text-sm">{t("analysis.aiReady")}</p>
+            <p className="text-[#00ffe8]/80 text-[10px] sm:text-xs mt-0.5">{t("analysis.basedOn")}</p>
           </div>
         </div>
         {(result.league || result.match_date || result.venue) && (
-          <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-x-6 gap-y-1 text-sm text-white">
+          <div className="mt-3 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10 flex flex-wrap gap-x-4 sm:gap-x-6 gap-y-1 text-xs sm:text-sm text-white">
             {result.league && (
               <p className="flex items-center gap-2">
                 <span className={FLASHY_GOLD}>🏆</span>
@@ -655,44 +686,44 @@ export function AnalysisResult({ result }: { result: Result }) {
       )}
 
       {/* Recent form — compact single block */}
-      <section className="pt-6 border-t border-white/5">
-        <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <span className="text-zinc-400">📊</span> {t("analysis.recentForm")}
+      <section className="pt-4 sm:pt-6 border-t border-white/5">
+        <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+            <h2 className="text-sm sm:text-base font-semibold text-white flex items-center gap-1.5 sm:gap-2">
+              <span className="text-zinc-400 text-xs sm:text-base">📊</span> {t("analysis.recentForm")}
             </h2>
-            <span className="text-zinc-500 text-xs">{t("analysis.globalForm")}</span>
+            <span className="text-zinc-500 text-[10px] sm:text-xs">{t("analysis.globalForm")}</span>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {result.home_team_logo ? (
-                <img src={result.home_team_logo} alt="" className="w-9 h-9 object-contain flex-shrink-0" />
+                <img src={result.home_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
               ) : (
-                <div className="w-9 h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-xs">{home.slice(0, 2)}</div>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{home.slice(0, 2)}</div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-white text-sm truncate">{home}</p>
+                <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                  <p className="font-semibold text-white text-xs sm:text-sm truncate">{home}</p>
                   <FormLabelBlock label={result.home_form_label ?? ""} compact />
                 </div>
-                <p className="text-xs text-zinc-400 mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+                <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {result.home_form?.map((r, i) => <FormIcon key={i} result={r} />) ?? "—"}
                   <span className="text-zinc-500">W-D-L: {result.home_wdl ?? "—"}</span>
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {result.away_team_logo ? (
-                <img src={result.away_team_logo} alt="" className="w-9 h-9 object-contain flex-shrink-0" />
+                <img src={result.away_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
               ) : (
-                <div className="w-9 h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-xs">{away.slice(0, 2)}</div>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{away.slice(0, 2)}</div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-white text-sm truncate">{away}</p>
+                <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                  <p className="font-semibold text-white text-xs sm:text-sm truncate">{away}</p>
                   <FormLabelBlock label={result.away_form_label ?? ""} compact />
                 </div>
-                <p className="text-xs text-zinc-400 mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+                <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {result.away_form?.map((r, i) => <FormIcon key={i} result={r} />) ?? "—"}
                   <span className="text-zinc-500">W-D-L: {result.away_wdl ?? "—"}</span>
                 </p>
@@ -704,29 +735,29 @@ export function AnalysisResult({ result }: { result: Result }) {
 
       {/* Quick summary - visible for free plan (includes match context / news at top) */}
       {summaryText && (
-        <section className="pt-6 border-t border-white/5">
-          <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <span className="text-[#00ffe8]">🔍</span> {t("analysis.summary")}
+        <section className="pt-4 sm:pt-6 border-t border-white/5">
+          <h2 className="text-sm sm:text-base font-semibold text-white mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
+            <span className="text-[#00ffe8] text-xs sm:text-base">🔍</span> {t("analysis.summary")}
           </h2>
-          <p className="text-zinc-300 leading-relaxed whitespace-pre-line">{summaryText}</p>
-          <p className="text-sm text-[#00ffe8] mt-2">Generated from millions of data points and football news.</p>
+          <ReadMore text={summaryText} maxChars={220} t={t} />
+          <p className="text-[10px] sm:text-xs text-[#00ffe8] mt-1.5 sm:mt-2">Generated from millions of data points and football news.</p>
         </section>
       )}
 
       {/* Match Importance - motivation scores (Sportmonks standings-based) */}
       {(result.home_motivation_label || result.away_motivation_label) && (
-        <section className="pt-6 border-t border-white/5">
-          <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <span className="text-[#00ffe8]">⚔️</span> {t("analysis.matchImportance")}
+        <section className="pt-4 sm:pt-6 border-t border-white/5">
+          <h2 className="text-sm sm:text-base font-semibold text-white mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
+            <span className="text-[#00ffe8] text-xs sm:text-base">⚔️</span> {t("analysis.matchImportance")}
           </h2>
-          <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4 flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-400 text-sm">{result.home_team}</span>
-              <span className="text-white font-medium capitalize">{result.home_motivation_label || "—"}</span>
+          <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-2.5 sm:p-4 flex flex-wrap gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-zinc-400 text-xs sm:text-sm">{result.home_team}</span>
+              <span className="text-white font-medium text-xs sm:text-base capitalize">{result.home_motivation_label || "—"}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-400 text-sm">{result.away_team}</span>
-              <span className="text-white font-medium capitalize">{result.away_motivation_label || "—"}</span>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-zinc-400 text-xs sm:text-sm">{result.away_team}</span>
+              <span className="text-white font-medium text-xs sm:text-base capitalize">{result.away_motivation_label || "—"}</span>
             </div>
           </div>
         </section>
@@ -734,11 +765,11 @@ export function AnalysisResult({ result }: { result: Result }) {
 
       {/* Scenario #1 - visible for free plan */}
       {result.scenario_1 && (
-        <section className="pt-6 border-t border-white/5">
-          <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-            <span>📌</span> {t("analysis.scenario")}
+        <section className="pt-4 sm:pt-6 border-t border-white/5">
+          <h2 className="text-sm sm:text-base font-semibold text-white mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-base">📌</span> {t("analysis.scenario")} #1
           </h2>
-          <p className="text-zinc-300 leading-relaxed text-sm">{result.scenario_1}</p>
+          <ReadMore text={result.scenario_1} maxChars={220} t={t} />
         </section>
       )}
 
