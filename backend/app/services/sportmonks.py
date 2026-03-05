@@ -468,9 +468,9 @@ def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]
 
 
 def fixture_by_id(
-    fixture_id: int, include: str = "participants;league;venue;predictions;metadata"
+    fixture_id: int, include: str = "participants;league;venue;predictions;metadata;h2h"
 ) -> Optional[dict[str, Any]]:
-    """GET /fixtures/{id} avec participants, league, venue, predictions et metadata (predictable)."""
+    """GET /fixtures/{id} avec participants, league, venue, predictions, metadata (predictable) et h2h."""
     data = _get(f"/fixtures/{fixture_id}", include=include)
     inner = data.get("data") if isinstance(data.get("data"), dict) else None
     if not inner:
@@ -486,6 +486,8 @@ def fixture_by_id(
         inner = {**inner, "predictions": data.get("predictions")}
     if "metadata" not in inner and data.get("metadata"):
         inner = {**inner, "metadata": data.get("metadata")}
+    if "h2h" not in inner and data.get("h2h"):
+        inner = {**inner, "h2h": data.get("h2h")}
     return inner
 
 
@@ -815,6 +817,21 @@ def load_match_context_sportmonks(
     away_form: list[str] = []
     hw, hd, hl = 0, 0, 0
     aw, ad, al = 0, 0, 0
+    h2h_hw, h2h_hd, h2h_ha = 0, 0, 0
+    h2h_list = fixture_data.get("h2h")
+    if isinstance(h2h_list, list):
+        for m in h2h_list:
+            if not isinstance(m, dict):
+                continue
+            res = (m.get("result") or "").strip().lower()
+            if res == "home":
+                h2h_hw += 1
+            elif res == "draw":
+                h2h_hd += 1
+            elif res == "away":
+                h2h_ha += 1
+        if h2h_hw or h2h_hd or h2h_ha:
+            print(f"[sportmonks] H2H from fixture include: home_wins={h2h_hw}, draws={h2h_hd}, away_wins={h2h_ha}")
     lambda_home_calc = xg_home
     lambda_away_calc = xg_away
     comparison_pcts: Optional[dict[str, float]] = None
@@ -855,13 +872,19 @@ def load_match_context_sportmonks(
             comparison_pcts = build_comparison_pcts(
                 hw, hd, hl, aw, ad, al,
                 h_for_avg, a_for_avg, h_against_avg, a_against_avg,
-                0, 0, 0,
+                h2h_hw, h2h_hd, h2h_ha,
             )
             pipeline_steps = [
                 {"order": 1, "title_key": "recap.step.data_source_sportmonks", "detail": "Data source: Sportmonks (fixture + predictions + team past fixtures for form)."},
                 {"order": 2, "title_key": "recap.step.form", "detail": f"Team results (Sportmonks last 5): home goals_for/against avg {h_for_avg:.2f}/{h_against_avg:.2f}, away {a_for_avg:.2f}/{a_against_avg:.2f}. Form W-D-L."},
                 {"order": 3, "title_key": "recap.step.features", "detail": f"Feature engineering: lambda_home={lambda_home_calc:.2f}, lambda_away={lambda_away_calc:.2f}. Comparison percentages."},
             ]
+            if h2h_hw or h2h_hd or h2h_ha:
+                pipeline_steps.append({
+                    "order": 4,
+                    "title_key": "recap.step.h2h",
+                    "detail": f"H2H from fixture include: home_wins={h2h_hw}, draws={h2h_hd}, away_wins={h2h_ha}.",
+                })
         except Exception:
             pass
 
@@ -940,10 +963,10 @@ def load_match_context_sportmonks(
         "home_goals_against_avg": round(sum(home_goals_against) / len(home_goals_against), 2) if home_goals_against else None,
         "away_goals_for_avg": round(sum(away_goals_for) / len(away_goals_for), 2) if away_goals_for else None,
         "away_goals_against_avg": round(sum(away_goals_against) / len(away_goals_against), 2) if away_goals_against else None,
-        "h2h_matches_count": 0,
-        "h2h_home_wins": 0,
-        "h2h_draws": 0,
-        "h2h_away_wins": 0,
+        "h2h_matches_count": h2h_hw + h2h_hd + h2h_ha,
+        "h2h_home_wins": h2h_hw,
+        "h2h_draws": h2h_hd,
+        "h2h_away_wins": h2h_ha,
     }
 
     return {
