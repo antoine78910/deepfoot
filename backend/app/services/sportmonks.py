@@ -791,7 +791,7 @@ def load_match_context_sportmonks(
         xg_home = parsed["xg_home"]
         xg_away = parsed["xg_away"]
 
-    home_goals_for: list[int] = [] list[int] = []
+    home_goals_for: list[int] = []
     home_goals_against: list[int] = []
     away_goals_for: list[int] = []
     away_goals_against: list[int] = []
