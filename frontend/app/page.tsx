@@ -60,7 +60,7 @@ export default function LandingPage() {
           <LandingMatchSearch analyseHref={ANALYSE_HREF} />
         </section>
 
-        <section className="relative mx-auto mt-12 sm:mt-16 max-w-3xl w-full px-4">
+        <section className="relative mx-auto mt-12 sm:mt-16 w-full max-w-6xl px-4">
           <h2 className="mb-5 text-center font-medium text-xl tracking-tight md:text-3xl">
             <span className="text-zinc-500">Trusted by experts.</span>
             <br />

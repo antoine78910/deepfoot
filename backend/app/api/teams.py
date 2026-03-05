@@ -5,11 +5,36 @@ from typing import Optional
 router = APIRouter(prefix="/teams", tags=["teams"])
 
 
+def _dedupe_teams_prefer_country(teams: list) -> list:
+    """Supprime les doublons (même nom normalisé), garde une seule entrée par équipe en préférant celle avec country."""
+    if not teams:
+        return teams
+    seen: dict[str, dict] = {}
+    for t in teams:
+        name = (t.get("name") or "").strip()
+        key = name.lower()
+        if not key:
+            continue
+        existing = seen.get(key)
+        has_country = bool((t.get("country") or "").strip())
+        if existing is None:
+            seen[key] = t
+        elif has_country and not (existing.get("country") or "").strip():
+            seen[key] = t
+    return list(seen.values())
+
+
+def _only_teams_with_country(teams: list) -> list:
+    """Ne garde que les équipes avec pays (clubs qu'on a bien dans notre base Sportmonks/Supabase)."""
+    return [t for t in teams if (t.get("country") or "").strip()]
+
+
 @router.get("")
 def list_teams(q: Optional[str] = None, limit: int = 80):
     """
     Liste des équipes pour autocomplete (id, name, crest).
-    Priorité: Sportmonks (suggestion intelligente + alias) → Supabase → API-Football → démo.
+    Avec Sportmonks: uniquement Supabase (clubs synchronisés) ou API Sportmonks, pas API-Football.
+    Doublons supprimés en gardant l'entrée avec country.
     """
     from app.services.sportmonks import _use_sportmonks, get_teams_for_autocomplete_sportmonks
     from app.services.api_football import (
@@ -23,40 +48,50 @@ def list_teams(q: Optional[str] = None, limit: int = 80):
     q_clean = (q or "").strip()
     print(f"[teams] GET /teams q={q_clean!r} limit={limit}")
 
-    # 1) Sportmonks configuré : recherche directe Supabase (rapide) puis cache complet ou API Sportmonks
+    # 1) Sportmonks configuré : uniquement Supabase (nos clubs) ou API Sportmonks, jamais API-Football
     use_sm = _use_sportmonks()
     print(f"[teams] _use_sportmonks() = {use_sm}")
     if use_sm:
-        # Recherche directe par search_terms = une requête, pas de chargement cache complet
         if q_clean:
-            teams_sb = get_teams_from_supabase_direct(q_clean, limit=limit)
+            teams_sb = get_teams_from_supabase_direct(q_clean, limit=limit * 2)
             if teams_sb:
-                print(f"[teams] Supabase direct -> {len(teams_sb)} teams")
-                return {"teams": teams_sb, "leagues": LEAGUES}
-        # Sinon cache complet (preload) ou API Sportmonks
-        teams_sb = get_teams_from_supabase(q=q, limit=limit, allow_fetch=True)
+                teams_sb = _only_teams_with_country(teams_sb)
+                teams_sb = _dedupe_teams_prefer_country(teams_sb)[:limit]
+                if teams_sb:
+                    print(f"[teams] Supabase direct -> {len(teams_sb)} teams")
+                    return {"teams": teams_sb, "leagues": LEAGUES}
+        teams_sb = get_teams_from_supabase(q=q, limit=limit * 2, allow_fetch=True)
         sb_count = len(teams_sb) if teams_sb is not None else -1
         print(f"[teams] Supabase cache -> {'ok' if teams_sb else 'None/empty'} (count={sb_count})")
         if teams_sb:
-            return {"teams": teams_sb, "leagues": LEAGUES}
+            teams_sb = _only_teams_with_country(teams_sb)
+            teams_sb = _dedupe_teams_prefer_country(teams_sb)[:limit]
+            if teams_sb:
+                return {"teams": teams_sb, "leagues": LEAGUES}
         teams_sm = get_teams_for_autocomplete_sportmonks(q=q, limit=limit)
-        print(f"[teams] Sportmonks API -> {len(teams_sm)} teams")
-        return {"teams": teams_sm, "leagues": LEAGUES}
+        if teams_sm:
+            teams_sm = _dedupe_teams_prefer_country(teams_sm)[:limit]
+            print(f"[teams] Sportmonks API -> {len(teams_sm)} teams")
+            return {"teams": teams_sm, "leagues": LEAGUES}
+        return {"teams": [], "leagues": LEAGUES}
 
     print("[teams] Sportmonks inactif -> Supabase / API-Football")
-    # 2) Supabase : recherche rapide avec alias + blasons
+    # 2) Sans Sportmonks : Supabase puis API-Football
     teams_sb = get_teams_from_supabase(q=q, limit=limit)
     if teams_sb is not None:
         if teams_sb:
+            teams_sb = _dedupe_teams_prefer_country(teams_sb)[:limit]
             return {"teams": teams_sb, "leagues": LEAGUES}
         if _use_api():
             teams = get_teams_for_autocomplete(q=q, limit=limit)
+            teams = _dedupe_teams_prefer_country(teams)[:limit]
             return {"teams": teams, "leagues": LEAGUES}
-        return {"teams": teams_sb, "leagues": LEAGUES}
+        return {"teams": [], "leagues": LEAGUES}
 
-    # 3) Pas de Supabase : fallback API-Football
+    # 3) Fallback API-Football
     if _use_api():
         teams = get_teams_for_autocomplete(q=q, limit=limit)
+        teams = _dedupe_teams_prefer_country(teams)[:limit]
         return {"teams": teams, "leagues": LEAGUES}
 
     from app.core.config import get_settings
@@ -69,24 +104,18 @@ def list_teams(q: Optional[str] = None, limit: int = 80):
         return {"teams": [{"id": None, "name": n, "crest": None} for n in demo], "leagues": []}
     from app.core.supabase_client import get_supabase
     supabase = get_supabase()
-    r = supabase.table("teams").select("slug, name, logo_url, country").ilike("name", f"{q_clean}%").limit(limit).execute()
-    return {
-        "teams": [
-            {
-                "id": x.get("slug"),
-                "name": x.get("name") or x.get("slug"),
-                "crest": x.get("logo_url"),
-                "country": (x.get("country") or "").strip() or None,
-            }
-            for x in (r.data or [])
-            if x.get("logo_url")
-        ],
-        "leagues": LEAGUES,
-    }
+    r = supabase.table("teams").select("slug, name, logo_url, country").ilike("name", f"{q_clean}%").limit(limit * 2).execute()
+    raw = [
+        {"id": x.get("slug"), "name": (x.get("name") or x.get("slug")).strip(), "crest": x.get("logo_url"), "country": (x.get("country") or "").strip() or None}
+        for x in (r.data or [])
+        if x.get("logo_url")
+    ]
+    raw = _dedupe_teams_prefer_country(raw)[:limit]
+    return {"teams": raw, "leagues": LEAGUES}
 
 
 def _resolve_team_id_fast(team_name: str):
-    """Résout le nom en ID sans remplir le cache (Supabase d'abord, puis API resolve)."""
+    """Résout le nom en ID (Supabase). Préfère la ligne dont le nom correspond (ex. Olympique Marseille pas Antalyaspor)."""
     from app.core.config import get_settings
     s = get_settings()
     if s.supabase_url and s.supabase_key and (team_name or "").strip():
@@ -94,14 +123,35 @@ def _resolve_team_id_fast(team_name: str):
             from app.core.supabase_client import get_supabase
             supabase = get_supabase()
             name = team_name.strip()
-            r = supabase.table("teams").select("slug").ilike("search_terms", f"%{name}%").limit(1).execute()
-            if r.data and len(r.data) > 0:
-                slug = r.data[0].get("slug")
+            r = supabase.table("teams").select("slug, name, country").ilike("search_terms", f"%{name}%").limit(15).execute()
+            rows = list(r.data or [])
+            if not rows:
+                return None
+            name_lower = name.lower()
+            name_words = set(name_lower.split())
+
+            def score(row):
+                row_name = (row.get("name") or "").strip().lower()
+                if not row_name:
+                    return (2, 0)
+                has_country = 1 if (row.get("country") or "").strip() else 0
+                if row_name == name_lower:
+                    return (0, has_country)
+                if name_lower in row_name or row_name in name_lower:
+                    return (1, has_country)
+                row_words = set(row_name.split())
+                if name_words & row_words:
+                    return (2, has_country)
+                return (3, has_country)
+
+            rows.sort(key=lambda row: score(row))
+            for row in rows:
+                slug = row.get("slug")
                 if slug is not None:
                     try:
                         return int(slug)
                     except (ValueError, TypeError):
-                        return None
+                        pass
         except Exception:
             pass
     from app.services.api_football import resolve_team_name_to_id
@@ -148,13 +198,23 @@ def upcoming_fixtures(team: Optional[str] = None, team_id: Optional[int] = None,
         return {"fixtures": []}
 
     if _use_sportmonks():
-        raw = team_upcoming_fixtures(int(tid), limit=limit)
+        raw = team_upcoming_fixtures(int(tid), limit=limit * 2)
         fixtures = []
+        team_name_clean = (team or "").strip()
+        team_norm = team_name_clean.lower() if team_name_clean else ""
+        team_words = [w for w in team_norm.replace("é", "e").replace("è", "e").split() if len(w) > 2]
         for f in raw:
             row = _format_sportmonks_fixture_for_upcoming(f)
-            if row:
-                fixtures.append(row)
-        return {"fixtures": fixtures}
+            if not row:
+                continue
+            if team_norm:
+                home_n = ((row.get("home") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
+                away_n = ((row.get("away") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
+                if team_norm not in home_n and team_norm not in away_n:
+                    if not team_words or not any(w in home_n or w in away_n for w in team_words):
+                        continue
+            fixtures.append(row)
+        return {"fixtures": fixtures[:limit]}
 
     if not _use_api():
         return {"fixtures": []}

@@ -35,13 +35,13 @@ const LEAGUE_LOGOS = [
 export function LogoCloud() {
   return (
     <div
-      className="overflow-hidden py-6 [--logo-size:3.5rem] sm:[--logo-size:4.5rem] md:[--logo-size:5rem]"
+      className="w-full overflow-hidden py-6 [--logo-size:3.5rem] sm:[--logo-size:4.5rem] md:[--logo-size:5rem]"
       style={{
-        maskImage: "linear-gradient(to right, transparent, black, transparent)",
-        WebkitMaskImage: "linear-gradient(to right, transparent, black, transparent)",
+        maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
       }}
     >
-      <InfiniteSlider gap={40} reverse speed={28} className="flex items-center">
+      <InfiniteSlider gap={40} reverse speed={18} className="flex items-center">
         {LEAGUE_LOGOS.map((logo) => (
           <img
             alt={logo.alt}

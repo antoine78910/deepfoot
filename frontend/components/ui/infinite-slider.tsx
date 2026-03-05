@@ -31,14 +31,11 @@ export function InfiniteSlider({
     gap: `${gap}px`,
     animation: `infinite-slider-scroll ${duration}s linear infinite`,
     animationDirection: reverse ? "reverse" : "normal",
+    willChange: "transform",
   };
 
   return (
-    <div
-      className={className}
-      onMouseEnter={speedOnHover != null ? () => setDuration(speedOnHover) : undefined}
-      onMouseLeave={speedOnHover != null ? () => setDuration(speed) : undefined}
-    >
+    <div className={className}>
       <div style={style}>
         {children}
         {children}

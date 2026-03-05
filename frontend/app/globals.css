@@ -61,7 +61,7 @@ body {
   }
 }
 
-/* Logo cloud / infinite slider (same motion, used by LogoCloud) */
+/* Logo cloud / infinite slider: loop infini sans retour à zéro (contenu dupliqué 2×, -50% = 1× largeur) */
 @keyframes infinite-slider-scroll {
   0% {
     transform: translateX(0);
