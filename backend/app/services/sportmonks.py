@@ -568,6 +568,190 @@ def value_bets_by_fixture(
     return raw
 
 
+def standings_by_season(season_id: int) -> list[dict[str, Any]]:
+    """
+    GET /standings/seasons/{season_id}. Returns list of { participant_id, position, points, games_played }.
+    games_played from details (type overall-matches-played / type_id 129) if available; else None.
+    """
+    if not _use_sportmonks() or not season_id:
+        return []
+    data = _get(
+        f"/standings/seasons/{season_id}",
+        include="details",
+    )
+    raw = data.get("data")
+    if not isinstance(raw, list):
+        return []
+    # Resolve details from include (can be list in data.details keyed by standing id)
+    details_list = data.get("details")
+    if isinstance(details_list, dict):
+        details_list = list(details_list.values()) if details_list else []
+    elif not isinstance(details_list, list):
+        details_list = []
+    # Build id -> [details] for each standing
+    details_by_standing_id: dict[int, list] = {}
+    for d in details_list:
+        if not isinstance(d, dict):
+            continue
+        sid = d.get("standing_id") or d.get("id")
+        if sid is not None:
+            details_by_standing_id.setdefault(int(sid), []).append(d)
+    out = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        pid = row.get("participant_id")
+        pos = row.get("position")
+        pts = row.get("points")
+        if pid is None:
+            continue
+        games_played = None
+        for det in details_by_standing_id.get(int(row.get("id") or 0), []):
+            if not isinstance(det, dict):
+                continue
+            if det.get("type_id") == 129 or (det.get("type") or "").lower().find("matches") >= 0 or (det.get("type") or "").lower().find("played") >= 0:
+                try:
+                    games_played = int(det.get("value") or det.get("total") or 0)
+                except (TypeError, ValueError):
+                    pass
+                break
+        if games_played is None and isinstance(row.get("details"), list):
+            for det in row.get("details", []):
+                if not isinstance(det, dict):
+                    continue
+                if det.get("type_id") == 129 or (det.get("type") or "").lower().find("matches") >= 0 or (det.get("type") or "").lower().find("played") >= 0:
+                    try:
+                        games_played = int(det.get("value") or det.get("total") or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    break
+        out.append({
+            "participant_id": int(pid),
+            "position": int(pos) if pos is not None else 0,
+            "points": int(pts) if pts is not None else 0,
+            "games_played": games_played,
+        })
+    return out
+
+
+def _score_to_motivation_label(score: int) -> str:
+    """Map motivation score to display label."""
+    if score >= 3:
+        return "very high"
+    if score >= 2:
+        return "high"
+    if score >= 1:
+        return "medium"
+    if score >= 0:
+        return "low"
+    return "very low"
+
+
+def compute_motivation_context(
+    standings_list: list[dict[str, Any]],
+    home_team_id: Optional[int],
+    away_team_id: Optional[int],
+    home_name: str,
+    away_name: str,
+    league_name: Optional[str],
+) -> dict[str, Any]:
+    """
+    From standings (position, points, games_played), compute motivation score and narrative.
+    - title_race: +3 if gap to leader <= matches_remaining * 3
+    - europe_race: +2 if close to European spots (e.g. positions 2–7, within 3 pts)
+    - relegation_battle: +3 if close to relegation zone (within 3 pts or in zone)
+    - mid_table_safe: 0
+    - nothing_to_play_for: -1
+    Returns: home_motivation_score, away_motivation_score, home_motivation_label, away_motivation_label, match_context_summary.
+    """
+    standings_list = sorted(standings_list, key=lambda x: x.get("position") or 99)
+    n_teams = len(standings_list)
+    total_matches = (n_teams - 1) * 2 if n_teams > 1 else 38
+    by_id = {s["participant_id"]: s for s in standings_list}
+    leader_points = standings_list[0]["points"] if standings_list else 0
+    # Relegation line: 18th in 20-team league, or last 3 positions
+    relegation_start = max(1, n_teams - 2)  # 18 in 20, 17 in 18, etc.
+    relegation_line_points = None
+    for s in standings_list:
+        if s["position"] == relegation_start:
+            relegation_line_points = s["points"]
+            break
+    if relegation_line_points is None and standings_list and relegation_start <= len(standings_list):
+        relegation_line_points = standings_list[relegation_start - 1]["points"]
+    if relegation_line_points is None:
+        relegation_line_points = 0
+
+    def _team_motivation(participant_id: Optional[int], team_name: str) -> tuple[int, list[str]]:
+        if participant_id is None:
+            return 0, []
+        s = by_id.get(int(participant_id))
+        if not s:
+            return 0, []
+        pos = s["position"]
+        pts = s["points"]
+        gp = s.get("games_played")
+        matches_remaining = (total_matches - gp) if gp is not None else max(0, total_matches - 19)
+        max_possible = matches_remaining * 3
+        reasons = []
+        score = 0
+        # Title race
+        gap_leader = leader_points - pts
+        if gap_leader <= max_possible and gap_leader > 0 and pos <= 5:
+            score += 3
+            reasons.append("in title race")
+        elif gap_leader > max_possible and pos <= 5:
+            reasons.append("cannot catch leader")
+        # Relegation
+        gap_relegation = pts - relegation_line_points
+        if pos >= relegation_start - 3 and (gap_relegation <= 3 or gap_relegation < 0):
+            score += 3
+            reasons.append("relegation battle")
+        elif gap_relegation > max_possible and pos < relegation_start:
+            reasons.append("safe from relegation")
+        # Europe (positions 2–7 roughly, close to next)
+        if 2 <= pos <= 8:
+            idx = next((i for i, r in enumerate(standings_list) if r["participant_id"] == participant_id), -1)
+            if idx >= 0 and idx + 1 < len(standings_list):
+                next_pts = standings_list[idx + 1]["points"]
+                if abs(pts - next_pts) <= 3:
+                    score = max(score, 2)
+                    reasons.append("european qualification race")
+        if score == 0 and not reasons:
+            if 5 <= pos <= relegation_start - 2:
+                reasons.append("mid-table")
+            else:
+                score = -1
+                reasons.append("nothing to play for")
+        return score, reasons
+
+    home_score, home_reasons = _team_motivation(home_team_id, home_name)
+    away_score, away_reasons = _team_motivation(away_team_id, away_name)
+
+    league_str = league_name or "the league"
+    parts = []
+    if home_team_id and home_team_id in by_id:
+        h = by_id[home_team_id]
+        parts.append(
+            f"{home_name} sit {h['position']}th in {league_str} with {h['points']} points."
+            + (" " + "; ".join(home_reasons) + "." if home_reasons else "")
+        )
+    if away_team_id and away_team_id in by_id:
+        a = by_id[away_team_id]
+        parts.append(
+            f"{away_name} are {a['position']}th with {a['points']} points."
+            + (" " + "; ".join(away_reasons) + "." if away_reasons else "")
+        )
+    match_context_summary = " ".join(parts).strip() if parts else ""
+
+    return {
+        "home_motivation_score": home_score,
+        "away_motivation_score": away_score,
+        "home_motivation_label": _score_to_motivation_label(home_score),
+        "away_motivation_label": _score_to_motivation_label(away_score),
+        "match_context_summary": match_context_summary,
+    }
+
+
 def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[str, Any]]:
     """
     Trouve un prochain match entre les deux équipes et retourne fixture + infos équipes (logos).
@@ -753,6 +937,25 @@ def load_match_context_sportmonks(
     match_date_iso = starting_at
     match_date = starting_at
     fixture_id = fixture_data.get("id")
+
+    # Standings + motivation context (title race, relegation, europe)
+    motivation_ctx: dict[str, Any] = {}
+    season_id = fixture_data.get("season_id")
+    if season_id and (home_team_id or away_team_id):
+        report("Loading standings…", 18)
+        try:
+            standings_list = standings_by_season(int(season_id))
+            if standings_list:
+                motivation_ctx = compute_motivation_context(
+                    standings_list,
+                    int(home_team_id) if home_team_id else None,
+                    int(away_team_id) if away_team_id else None,
+                    home_name,
+                    away_name,
+                    league_name,
+                )
+        except Exception as e:
+            print(f"[sportmonks] standings/motivation: {e}")
 
     report("Loading Sportmonks predictions…", 25)
     # 1) Prédictions via include sur le fixture (souvent disponible quand l’endpoint dédié renvoie vide)
@@ -967,6 +1170,11 @@ def load_match_context_sportmonks(
         "h2h_home_wins": h2h_hw,
         "h2h_draws": h2h_hd,
         "h2h_away_wins": h2h_ha,
+        "match_context_summary": motivation_ctx.get("match_context_summary"),
+        "home_motivation_score": motivation_ctx.get("home_motivation_score"),
+        "away_motivation_score": motivation_ctx.get("away_motivation_score"),
+        "home_motivation_label": motivation_ctx.get("home_motivation_label"),
+        "away_motivation_label": motivation_ctx.get("away_motivation_label"),
     }
 
     return {
@@ -995,6 +1203,11 @@ def load_match_context_sportmonks(
         "final_score_away": None,
         "match_statistics": None,
         "data_recap": data_recap,
+        "match_context_summary": motivation_ctx.get("match_context_summary"),
+        "home_motivation_score": motivation_ctx.get("home_motivation_score"),
+        "away_motivation_score": motivation_ctx.get("away_motivation_score"),
+        "home_motivation_label": motivation_ctx.get("home_motivation_label"),
+        "away_motivation_label": motivation_ctx.get("away_motivation_label"),
         "_sportmonks_raw_probs": probs_list,
         "_sportmonks_use_predictions": use_api_probs,
         "_sportmonks_predictions_unavailable_error": _sportmonks_predictions_unavailable_error,

@@ -361,6 +361,13 @@ def _build_analysis_recap(
             "league": recap.get("league") or ctx.get("league"),
             "venue": recap.get("venue") or ctx.get("venue"),
         },
+        "motivation": {
+            "match_context_summary": recap.get("match_context_summary") or ctx.get("match_context_summary"),
+            "home_motivation_score": recap.get("home_motivation_score") or ctx.get("home_motivation_score"),
+            "away_motivation_score": recap.get("away_motivation_score") or ctx.get("away_motivation_score"),
+            "home_motivation_label": recap.get("home_motivation_label") or ctx.get("home_motivation_label"),
+            "away_motivation_label": recap.get("away_motivation_label") or ctx.get("away_motivation_label"),
+        },
         "ai_summary": {
             "news_included": news_included,
             "context_used": "stats + form + H2H" + (" + football news" if news_included else ""),
@@ -437,6 +444,11 @@ def _build_response(
         "match_statistics": ctx.get("match_statistics"),
         "home_team_id": ctx.get("home_team_id"),
         "away_team_id": ctx.get("away_team_id"),
+        "match_context_summary": ctx.get("match_context_summary"),
+        "home_motivation_score": ctx.get("home_motivation_score"),
+        "away_motivation_score": ctx.get("away_motivation_score"),
+        "home_motivation_label": ctx.get("home_motivation_label"),
+        "away_motivation_label": ctx.get("away_motivation_label"),
     }
     if analysis_recap is not None:
         resp["analysis_recap"] = analysis_recap
@@ -495,6 +507,11 @@ def run_predict_with_progress(
     try:
         if ctx.get("_sportmonks_use_predictions"):
             ai = generate_ai_analysis_sportmonks(ctx, out, language=payload.language)
+            # Put news-style match context at the top of quick_summary when available
+            if ctx.get("match_context_summary") and ai.get("quick_summary"):
+                ai["quick_summary"] = (ctx["match_context_summary"].strip() + "\n\n" + ai["quick_summary"].strip()).strip()
+            elif ctx.get("match_context_summary"):
+                ai["quick_summary"] = ctx["match_context_summary"].strip()
         else:
             prompt_ctx = build_prompt_context(
                 ctx["home_team"],

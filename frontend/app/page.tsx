@@ -29,9 +29,9 @@ export default function LandingPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[400px] rounded-full bg-[#00ffe8]/5 blur-[150px]" />
       </div>
 
-      <header className="fixed top-0 left-0 right-0 z-20 w-full flex items-center justify-between px-6 sm:px-10 py-4 sm:py-5 border-b border-white/10 bg-[#0a0a0e]/60 backdrop-blur-md">
+      <header className="fixed top-0 left-0 right-0 z-20 w-full flex items-center justify-between px-5 sm:px-8 py-3 sm:py-4 border-b border-white/10 bg-[#0a0a0e]/60 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="DEEPFOOT" className="h-12 sm:h-14 w-auto object-contain" />
+          <img src="/logo.png" alt="DEEPFOOT" className="h-10 sm:h-12 w-auto object-contain" />
         </Link>
         <nav className="flex items-center gap-4 sm:gap-6">
           <Link

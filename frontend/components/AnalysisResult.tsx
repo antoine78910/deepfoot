@@ -56,6 +56,12 @@ type Result = {
   /** Full 8-section professional analysis (Sportmonks) */
   professional_analysis?: string | null;
   ai_confidence?: string | null;
+  /** News-style context (position, stakes); shown at top with quick_summary */
+  match_context_summary?: string | null;
+  home_motivation_score?: number;
+  away_motivation_score?: number;
+  home_motivation_label?: string | null;
+  away_motivation_label?: string | null;
   attack_home_pct?: number;
   defense_home_pct?: number;
   form_home_pct?: number;
@@ -99,6 +105,13 @@ type Result = {
       has_upcoming_match?: boolean;
       league?: string | null;
       venue?: string | null;
+    };
+    motivation?: {
+      match_context_summary?: string | null;
+      home_motivation_score?: number;
+      away_motivation_score?: number;
+      home_motivation_label?: string | null;
+      away_motivation_label?: string | null;
     };
     ai_summary?: {
       news_included?: boolean;
@@ -582,14 +595,33 @@ export function AnalysisResult({ result }: { result: Result }) {
         </section>
       )}
 
-      {/* Quick summary - visible for free plan */}
+      {/* Quick summary - visible for free plan (includes match context / news at top) */}
       {result.quick_summary && (
         <section className="pt-6 border-t border-white/5">
           <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
             <span className="text-[#00ffe8]">🔍</span> {t("analysis.summary")}
           </h2>
-          <p className="text-zinc-300 leading-relaxed">{result.quick_summary}</p>
+          <p className="text-zinc-300 leading-relaxed whitespace-pre-line">{result.quick_summary}</p>
           <p className="text-sm text-[#00ffe8] mt-2">Generated from millions of data points and football news.</p>
+        </section>
+      )}
+
+      {/* Match Importance - motivation scores (Sportmonks standings-based) */}
+      {(result.home_motivation_label || result.away_motivation_label) && (
+        <section className="pt-6 border-t border-white/5">
+          <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+            <span className="text-[#00ffe8]">⚔️</span> {t("analysis.matchImportance")}
+          </h2>
+          <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4 flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-400 text-sm">{result.home_team}</span>
+              <span className="text-white font-medium capitalize">{result.home_motivation_label || "—"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-400 text-sm">{result.away_team}</span>
+              <span className="text-white font-medium capitalize">{result.away_motivation_label || "—"}</span>
+            </div>
+          </div>
         </section>
       )}
 
@@ -1037,6 +1069,21 @@ export function AnalysisResult({ result }: { result: Result }) {
                   {result.analysis_recap.ai_summary.news_included
                     ? t("analysis.recapAiWithNews")
                     : t("analysis.recapAiNoNews")}
+                </p>
+              </div>
+            )}
+            {result.analysis_recap.motivation && (result.analysis_recap.motivation.match_context_summary || result.analysis_recap.motivation.home_motivation_label) && (
+              <div>
+                <h3 className="font-medium text-[#00ffe8] mb-1">{t("analysis.matchImportance")}</h3>
+                {result.analysis_recap.motivation.match_context_summary && (
+                  <p className="text-zinc-300 text-xs mb-2">{result.analysis_recap.motivation.match_context_summary}</p>
+                )}
+                <p className="text-zinc-400 text-xs">
+                  Home motivation: {result.analysis_recap.motivation.home_motivation_label ?? "—"}
+                  {result.analysis_recap.motivation.home_motivation_score != null && ` (score ${result.analysis_recap.motivation.home_motivation_score})`}
+                  {" · "}
+                  Away motivation: {result.analysis_recap.motivation.away_motivation_label ?? "—"}
+                  {result.analysis_recap.motivation.away_motivation_score != null && ` (score ${result.analysis_recap.motivation.away_motivation_score})`}
                 </p>
               </div>
             )}

@@ -52,6 +52,10 @@ ANALYSIS REQUIREMENTS:
 
 STYLE: Professional sports analysis. Clear and concise. Do not invent information. Use probabilities to support conclusions. Avoid overly long explanations.
 
+If the input includes "match_context_summary" and "motivation" (home_motivation_label, away_motivation_label), you MUST use them:
+- The quick_summary (and match_overview) must be a credible news-style summary: mention league position, points gap, matches remaining, and stakes (title race, relegation battle, european qualification). Example: "Team A sit 2nd but cannot catch the leader with 2 games left. Team B are 1 point above the relegation zone, making this crucial for survival."
+- Reflect Match Importance: home motivation (e.g. medium/high/very high), away motivation.
+
 OUTPUT: Return a JSON object with exactly these keys (each a string, 1-3 short paragraphs):
 - match_overview
 - win_probability_analysis
@@ -190,6 +194,12 @@ def generate_ai_analysis_sportmonks(
         "expected_goals": {"home": out.get("xg_home"), "away": out.get("xg_away")},
         "form": {"home": ctx.get("home_form_label"), "away": ctx.get("away_form_label")},
     }
+    if ctx.get("match_context_summary") or ctx.get("home_motivation_label"):
+        input_json["match_context_summary"] = ctx.get("match_context_summary") or ""
+        input_json["motivation"] = {
+            "home": ctx.get("home_motivation_label") or "medium",
+            "away": ctx.get("away_motivation_label") or "medium",
+        }
     try:
         r = client.chat.completions.create(
             model="gpt-4o-mini",

@@ -262,7 +262,8 @@ export function MatchInput({
                 setLoading(false);
                 return;
               }
-              throw new Error(event.message ?? "Analysis failed.");
+              const msg = event.message ?? "Analysis failed.";
+              throw new Error(typeof msg === "string" ? msg : "Analysis failed.");
             }
           } catch (parseErr) {
             if (parseErr instanceof Error && parseErr.message !== "Analysis failed.") {
@@ -271,7 +272,7 @@ export function MatchInput({
           }
         }
       }
-      if (!data) throw new Error("No result from server.");
+      if (!data) throw new Error("No result from server. The match may not have predictions available yet, or the server may have timed out.");
 
       // Si une nouvelle soumission a été lancée entre-temps, on ignore ce résultat
       if (submitId !== submitIdRef.current) return;
