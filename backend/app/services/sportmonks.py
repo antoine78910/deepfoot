@@ -514,6 +514,74 @@ def _team_logo(participant: Optional[dict]) -> Optional[str]:
     return f"https://cdn.sportmonks.com/images/soccer/teams/{s}" if s else None
 
 
+def _parse_sportmonks_predictions_array(predictions_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Parse le tableau predictions de l'API Sportmonks (Fulltime Result, Over/Under 2.5, BTTS, Correct Score).
+    Retourne dict avec home_win, draw, away_win, over_2_5, under_2_5, btts_yes, btts_no, xg_home, xg_away (optionnel).
+    """
+    out: dict[str, Any] = {
+        "home_win": 33.33,
+        "draw": 33.33,
+        "away_win": 33.33,
+        "over_2_5": 50.0,
+        "under_2_5": 50.0,
+        "btts_yes": 50.0,
+        "btts_no": 50.0,
+        "xg_home": 1.2,
+        "xg_away": 1.2,
+    }
+    if not predictions_list or not isinstance(predictions_list, list):
+        return out
+    for p in predictions_list:
+        if not isinstance(p, dict):
+            continue
+        pred_vals = p.get("predictions")
+        if not isinstance(pred_vals, dict):
+            continue
+        type_obj = p.get("type")
+        code = (type_obj.get("code") or "").lower() if isinstance(type_obj, dict) else ""
+        dev_name = (type_obj.get("developer_name") or "").lower() if isinstance(type_obj, dict) else ""
+        type_id = p.get("type_id")
+
+        if type_id == 237 or "fulltime" in code or "fulltime_result" in dev_name:
+            if "home" in pred_vals and "draw" in pred_vals and "away" in pred_vals:
+                out["home_win"] = float(pred_vals.get("home") or 33.33)
+                out["draw"] = float(pred_vals.get("draw") or 33.33)
+                out["away_win"] = float(pred_vals.get("away") or 33.33)
+        elif type_id == 235 or ("over" in code and "2" in code and "5" in code):
+            if "yes" in pred_vals and "no" in pred_vals:
+                out["over_2_5"] = float(pred_vals.get("yes") or 50)
+                out["under_2_5"] = float(pred_vals.get("no") or 50)
+        elif type_id == 231 or "btts" in code or "both" in code:
+            if "yes" in pred_vals and "no" in pred_vals:
+                out["btts_yes"] = float(pred_vals.get("yes") or 50)
+                out["btts_no"] = float(pred_vals.get("no") or 50)
+        elif type_id == 240 or "correct" in code or "correct_score" in dev_name:
+            scores = pred_vals.get("scores")
+            if isinstance(scores, dict):
+                xg_h = 0.0
+                xg_a = 0.0
+                total_p = 0.0
+                for key, prob in scores.items():
+                    if key.startswith("Other") or not isinstance(prob, (int, float)):
+                        continue
+                    parts = str(key).split("-")
+                    if len(parts) != 2:
+                        continue
+                    try:
+                        i, j = int(parts[0]), int(parts[1])
+                    except (ValueError, TypeError):
+                        continue
+                    pct = float(prob) / 100.0
+                    xg_h += i * pct
+                    xg_a += j * pct
+                    total_p += pct
+                if total_p > 0:
+                    out["xg_home"] = round(xg_h, 2)
+                    out["xg_away"] = round(xg_a, 2)
+    return out
+
+
 def load_match_context_sportmonks(
     home_team: str,
     away_team: str,
@@ -563,25 +631,22 @@ def load_match_context_sportmonks(
     btts_yes = btts_no = 50.0
     xg_home = xg_away = 1.2
     if probs:
-        if isinstance(probs, list):
-            for p in probs:
-                pred_type = (p.get("type") or p.get("prediction_type") or "").lower()
-                if "1x2" in pred_type or "winner" in pred_type or "match" in pred_type:
-                    v = p.get("predictions") or p.get("values") or p
-                    if isinstance(v, dict):
-                        home_win = float(v.get("home") or v.get("1") or 33.33)
-                        draw = float(v.get("draw") or v.get("X") or 33.33)
-                        away_win = float(v.get("away") or v.get("2") or 33.33)
-                elif "over" in pred_type or "total" in pred_type:
-                    v = p.get("predictions") or p.get("values") or p
-                    if isinstance(v, dict):
-                        over_25 = float(v.get("over") or v.get("over_2_5") or 50)
-                        under_25 = float(v.get("under") or v.get("under_2_5") or 50)
-                elif "btts" in pred_type or "both_teams" in pred_type:
-                    v = p.get("predictions") or p.get("values") or p
-                    if isinstance(v, dict):
-                        btts_yes = float(v.get("yes") or v.get("btts_yes") or 50)
-                        btts_no = float(v.get("no") or v.get("btts_no") or 50)
+        predictions_array = None
+        if isinstance(probs, dict) and "predictions" in probs and isinstance(probs["predictions"], list):
+            predictions_array = probs["predictions"]
+        elif isinstance(probs, list):
+            predictions_array = probs
+        if predictions_array is not None:
+            parsed = _parse_sportmonks_predictions_array(predictions_array)
+            home_win = parsed["home_win"]
+            draw = parsed["draw"]
+            away_win = parsed["away_win"]
+            over_25 = parsed["over_2_5"]
+            under_25 = parsed["under_2_5"]
+            btts_yes = parsed["btts_yes"]
+            btts_no = parsed["btts_no"]
+            xg_home = parsed["xg_home"]
+            xg_away = parsed["xg_away"]
         elif isinstance(probs, dict):
             home_win = float(probs.get("home_win") or probs.get("home") or 33.33)
             draw = float(probs.get("draw") or 33.33)
