@@ -659,9 +659,6 @@ export function AnalysisResult({ result }: { result: Result }) {
             <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-zinc-400 text-sm font-medium">🧠 AI confidence</span>
-                <svg className="w-5 h-5 text-rose-400/90 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 9 9 0 0 0 6.003 5.997 9 9 0 0 0 6.003-5.997 4 4 0 0 0-2.526-5.77 3 3 0 0 0-5.997-.125z" />
-                </svg>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden">
