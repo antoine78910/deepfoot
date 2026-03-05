@@ -366,6 +366,7 @@ def _build_analysis_recap(
         },
         "api_requests_estimate": "~17–21 requests (API-Football)" if recap.get("data_source") == "API-Football" else None,
         "pipeline_steps": steps,
+        "sportmonks_fixture_with_predictions": recap.get("sportmonks_fixture_with_predictions"),
     }
 
 
@@ -437,6 +438,10 @@ def _build_response(
     }
     if analysis_recap is not None:
         resp["analysis_recap"] = analysis_recap
+    # Format Sportmonks (fixture + predictions avec type) pour affichage / réutilisation
+    sportmonks_fixture = (ctx.get("data_recap") or {}).get("sportmonks_fixture_with_predictions")
+    if sportmonks_fixture is not None:
+        resp["sportmonks_fixture_with_predictions"] = sportmonks_fixture
     return resp
 
 

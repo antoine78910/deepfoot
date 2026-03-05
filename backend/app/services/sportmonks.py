@@ -467,10 +467,37 @@ def fixture_by_id(fixture_id: int, include: str = "participants;league;venue") -
     return inner
 
 
-def predictions_probabilities_by_fixture(fixture_id: int) -> Optional[dict[str, Any]]:
-    """GET /predictions/probabilities/fixtures/{id}. Retourne probas (structure dépend de l'API)."""
-    data = _get(f"/predictions/probabilities/fixtures/{fixture_id}")
-    return data.get("data") if data.get("data") is not None else None
+def predictions_probabilities_by_fixture(
+    fixture_id: int, include_type: bool = True
+) -> Optional[list[dict[str, Any]]]:
+    """
+    GET /predictions/probabilities/fixtures/{id}.
+    Retourne la liste des prédictions (chaque item: id, fixture_id, predictions, type_id, type si include_type).
+    Doc: https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/odds-and-predictions/predictions/probabilities
+    """
+    data = _get(
+        f"/predictions/probabilities/fixtures/{fixture_id}",
+        include="type" if include_type else None,
+    )
+    raw = data.get("data")
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        return [raw] if isinstance(raw, dict) else None
+    # Si l'API renvoie type au niveau racine (liste d'objets type), attacher par type_id
+    type_list = data.get("type")
+    if isinstance(type_list, dict):
+        type_list = [type_list] if type_list.get("id") is not None else []
+    elif not isinstance(type_list, list):
+        type_list = []
+    type_by_id = {int(t["id"]): t for t in type_list if isinstance(t, dict) and t.get("id") is not None}
+    if type_by_id:
+        for p in raw:
+            if isinstance(p, dict) and p.get("type_id") is not None and "type" not in p:
+                tid = int(p.get("type_id"))
+                if tid in type_by_id:
+                    p["type"] = type_by_id[tid]
+    return raw
 
 
 def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[str, Any]]:
@@ -660,39 +687,23 @@ def load_match_context_sportmonks(
     fixture_id = fixture_data.get("id")
 
     report("Loading Sportmonks predictions…", 25)
-    probs = predictions_probabilities_by_fixture(int(fixture_id)) if fixture_id else None
+    probs_list = predictions_probabilities_by_fixture(int(fixture_id)) if fixture_id else None
 
     home_win = draw = away_win = 33.33
     over_25 = under_25 = 50.0
     btts_yes = btts_no = 50.0
     xg_home = xg_away = 1.2
-    if probs:
-        predictions_array = None
-        if isinstance(probs, dict) and "predictions" in probs and isinstance(probs["predictions"], list):
-            predictions_array = probs["predictions"]
-        elif isinstance(probs, list):
-            predictions_array = probs
-        if predictions_array is not None:
-            parsed = _parse_sportmonks_predictions_array(predictions_array)
-            home_win = parsed["home_win"]
-            draw = parsed["draw"]
-            away_win = parsed["away_win"]
-            over_25 = parsed["over_2_5"]
-            under_25 = parsed["under_2_5"]
-            btts_yes = parsed["btts_yes"]
-            btts_no = parsed["btts_no"]
-            xg_home = parsed["xg_home"]
-            xg_away = parsed["xg_away"]
-        elif isinstance(probs, dict):
-            home_win = float(probs.get("home_win") or probs.get("home") or 33.33)
-            draw = float(probs.get("draw") or 33.33)
-            away_win = float(probs.get("away_win") or probs.get("away") or 33.33)
-            over_25 = float(probs.get("over_2_5") or probs.get("over_2.5") or 50)
-            under_25 = float(probs.get("under_2_5") or probs.get("under_2.5") or 50)
-            btts_yes = float(probs.get("btts_yes") or probs.get("btts_yes") or 50)
-            btts_no = float(probs.get("btts_no") or probs.get("btts_no") or 50)
-            xg_home = float(probs.get("expected_goals_home") or probs.get("xg_home") or 1.2)
-            xg_away = float(probs.get("expected_goals_away") or probs.get("xg_away") or 1.2)
+    if probs_list and isinstance(probs_list, list):
+        parsed = _parse_sportmonks_predictions_array(probs_list)
+        home_win = parsed["home_win"]
+        draw = parsed["draw"]
+        away_win = parsed["away_win"]
+        over_25 = parsed["over_2_5"]
+        under_25 = parsed["under_2_5"]
+        btts_yes = parsed["btts_yes"]
+        btts_no = parsed["btts_no"]
+        xg_home = parsed["xg_home"]
+        xg_away = parsed["xg_away"]
 
     home_goals_for: list[int] = []
     home_goals_against: list[int] = []
@@ -752,14 +763,21 @@ def load_match_context_sportmonks(
         except Exception:
             pass
 
-    use_api_probs = bool(probs)
+    use_api_probs = bool(probs_list)
     if not use_api_probs:
         xg_home = lambda_home_calc
         xg_away = lambda_away_calc
 
+    # Format fixture + predictions pour la réponse API (doc Sportmonks Probabilities)
+    sportmonks_fixture_with_predictions: Optional[dict[str, Any]] = None
+    if fixture_id and fixture_data and probs_list:
+        fixture_flat = {k: v for k, v in fixture_data.items() if k not in ("participants", "league", "venue")}
+        sportmonks_fixture_with_predictions = {"data": {**fixture_flat, "predictions": probs_list}}
+
     data_recap: dict[str, Any] = {
         "data_source": "Sportmonks",
         "pipeline_steps": pipeline_steps,
+        "sportmonks_fixture_with_predictions": sportmonks_fixture_with_predictions,
         "sportmonks_predictions": {
             "home_win": home_win,
             "draw": draw,
@@ -815,6 +833,6 @@ def load_match_context_sportmonks(
         "final_score_away": None,
         "match_statistics": None,
         "data_recap": data_recap,
-        "_sportmonks_raw_probs": probs,
+        "_sportmonks_raw_probs": probs_list,
         "_sportmonks_use_predictions": use_api_probs,
     }
