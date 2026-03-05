@@ -401,21 +401,37 @@ def team_past_fixtures(
 def team_upcoming_fixtures(team_id: int, limit: int = 10) -> list[dict[str, Any]]:
     """
     Prochains matchs de l'équipe (Sportmonks).
-    Utilise l'endpoint dédié: GET /fixtures/between/{start_date}/{end_date}/{team_id}
+    1) GET /fixtures?filters=team_id:{id};starting_after:{date}&include=participants;league
+    2) Si vide ou erreur, fallback GET /fixtures/between/{today}/{today+90j}/{team_id}
     """
     if not _use_sportmonks() or not team_id:
         return []
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
     start_date = now.strftime("%Y-%m-%d")
-    end_date = (now + timedelta(days=90)).strftime("%Y-%m-%d")
-    path = f"/fixtures/between/{start_date}/{end_date}/{team_id}"
-    data = _get(path, params={"per_page": min(limit, 50)}, include="participants;league")
+    end_date_future = (now + timedelta(days=90)).strftime("%Y-%m-%d")
+    raw: list = []
+    data: dict = {}
+    filters = f"team_id:{team_id};starting_after:{start_date}"
+    data = _get(
+        "/fixtures",
+        params={"per_page": min(limit * 2, 50), "filters": filters},
+        include="participants;league",
+    )
     raw = data.get("data")
     if isinstance(raw, dict):
         raw = raw.get("data") if isinstance(raw.get("data"), list) else []
     if not isinstance(raw, list):
         raw = []
+    # Fallback: endpoint between (dates futures) si filtre vide ou 400
+    if not raw:
+        path_between = f"/fixtures/between/{start_date}/{end_date_future}/{team_id}"
+        data = _get(path_between, params={"per_page": min(limit * 2, 50)}, include="participants;league")
+        raw = data.get("data")
+        if isinstance(raw, dict):
+            raw = raw.get("data") if isinstance(raw.get("data"), list) else []
+        if not isinstance(raw, list):
+            raw = []
     # Inclure les participants à la racine (format list endpoint Sportmonks) dans chaque fixture
     if raw and (not raw[0] or "participants" not in raw[0]) and isinstance(data.get("participants"), list):
         by_fid: dict[int, list] = {}

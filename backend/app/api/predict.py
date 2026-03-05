@@ -470,10 +470,7 @@ def run_predict_with_progress(
     )
     if not ctx:
         raise HTTPException(status_code=404, detail="No fixture found for this match.")
-    # Sportmonks : si les prédictions ne sont pas dispo (predictable: false ou add-on manquant), erreur 503
-    err = ctx.get("_sportmonks_predictions_unavailable_error")
-    if err:
-        raise HTTPException(status_code=503, detail=err)
+    # On ne bloque plus en 503 si prédictions API absentes : on continue avec Poisson (form + xG) et on affiche l'analyse
     report("Computing probabilities…", 62)
 
     used_api_predictions = False
@@ -627,9 +624,9 @@ def predict_stream(
             progress_queue.put({"type": "result", "data": result})
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, str) else (str(e.detail) if e.detail else str(e))
-            progress_queue.put({"type": "error", "message": detail, "code": "predictions_unavailable" if e.status_code == 503 else None})
+            progress_queue.put({"type": "error", "message": detail or "Service unavailable.", "code": "predictions_unavailable" if e.status_code == 503 else None})
         except Exception as e:  # noqa: BLE001
-            progress_queue.put({"type": "error", "message": str(e)})
+            progress_queue.put({"type": "error", "message": str(e) or "Analysis failed.", "code": None})
 
     thread = threading.Thread(target=run)
     thread.start()
