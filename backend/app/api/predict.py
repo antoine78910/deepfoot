@@ -502,11 +502,31 @@ def run_predict_with_progress(
     news_included = False
     scraped_items: list = []
     motivation_text = ""
-    # News scraping and motivation analysis disabled: use only API predictions for now.
+
+    # Scrape news for context (if NewsAPI configured)
+    report("Fetching news…", 68)
+    try:
+        scraped_items = fetch_news_multi_source(
+            ctx.get("home_team", ""),
+            ctx.get("away_team", ""),
+            ctx.get("league"),
+        )
+        if scraped_items:
+            news_included = True
+            print(f"[predict] Scraped {len(scraped_items)} news items")
+    except Exception as e:
+        print(f"[predict] News scraping failed: {e}")
+
+    # Generate AI summary with news context
     report("Generating AI summary…", 75)
     try:
         if ctx.get("_sportmonks_use_predictions"):
-            ai = generate_ai_analysis_sportmonks(ctx, out, language=payload.language)
+            # Build news context for Sportmonks
+            scraped_news_formatted = format_news_for_prompt(scraped_items) if news_included else None
+
+            # Generate AI analysis (we'll need to modify generate_ai_analysis_sportmonks to accept news)
+            ai = generate_ai_analysis_sportmonks(ctx, out, language=payload.language, news_context=scraped_news_formatted)
+
             # Put news-style match context + Match Importance at the top of quick_summary when available
             top_parts = []
             if ctx.get("match_context_summary"):

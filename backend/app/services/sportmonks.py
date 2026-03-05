@@ -871,7 +871,7 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
         if primary_id is None or other_id is None:
             continue
         path = f"/fixtures/between/{start_date}/{end_date}/{primary_id}"
-        data = _get(path, params={"per_page": 50}, include=include)
+        data = _get_allow_404(path, params={"per_page": 50}, include=include)
         raw = data.get("data")
         if isinstance(raw, dict):
             raw = raw.get("data") if isinstance(raw.get("data"), list) else []
@@ -914,16 +914,72 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
                 inner["metadata"] = data.get("metadata")
             if "h2h" not in inner and data.get("h2h"):
                 inner["h2h"] = data.get("h2h")
-            # Si between ne renvoie pas h2h (selon plan), 1 appel GET /fixtures/{id}?include=h2h (id valide = pas de 404)
-            if not inner.get("h2h") and fid:
-                try:
-                    h2h_data = _get(f"/fixtures/{fid}", include="h2h")
-                    h2h_list = h2h_data.get("h2h") or (h2h_data.get("data") or {}).get("h2h")
-                    if h2h_list:
-                        inner["h2h"] = h2h_list
-                except Exception:
-                    pass
+            # Récupérer H2H via endpoint dédié /fixtures/head-to-head/{home}/{away}
+            if not inner.get("h2h") and home_team_id and away_team_id:
+                print(f"[sportmonks] Fetching H2H for {home_team_id} vs {away_team_id}")
+                h2h_data = _get_allow_404(f"/fixtures/head-to-head/{home_team_id}/{away_team_id}", params={"per_page": 10})
+                h2h_list = h2h_data.get("data") if isinstance(h2h_data.get("data"), list) else []
+                if h2h_list:
+                    inner["h2h"] = h2h_list
+                    print(f"[sportmonks] H2H found: {len(h2h_list)} matches")
             return inner
+    # Fallback quand between renvoie 404 (aucun match dans la période) : search + GET /fixtures/{id}
+    query = f"{home_team or ''} vs {away_team or ''}".strip()
+    if not query:
+        return None
+    search_list = fixtures_search(query, limit=15)
+    h_lower = (home_team or "").lower()
+    a_lower = (away_team or "").lower()
+    for f in search_list:
+        name = (f.get("name") or "").lower()
+        if not name or h_lower not in name or a_lower not in name:
+            continue
+        fid = f.get("id")
+        if not fid:
+            continue
+        sat = f.get("starting_at") or ""
+        if sat:
+            try:
+                dt_str = sat.replace("T", " ")[:19].strip()
+                fd = datetime.fromisoformat(dt_str.replace(" ", "T").replace("Z", "+00:00"))
+                if fd.tzinfo is None:
+                    fd = fd.replace(tzinfo=timezone.utc)
+                if fd < now:
+                    continue
+            except Exception:
+                continue
+        full = _get_allow_404(f"/fixtures/{fid}", include=include)
+        if not full or not full.get("data"):
+            continue
+        inner = full.get("data") if isinstance(full.get("data"), dict) else None
+        if not inner:
+            continue
+        inner = dict(inner)
+        if "participants" not in inner and full.get("participants"):
+            inner["participants"] = full.get("participants")
+        if "league" not in inner and full.get("league"):
+            inner["league"] = full.get("league")
+        if "venue" not in inner and full.get("venue"):
+            inner["venue"] = full.get("venue")
+        if "predictions" not in inner and full.get("predictions"):
+            inner["predictions"] = full.get("predictions")
+        if "metadata" not in inner and full.get("metadata"):
+            inner["metadata"] = full.get("metadata")
+        if "h2h" not in inner and full.get("h2h"):
+            inner["h2h"] = full.get("h2h")
+        if home_team_id and away_team_id:
+            if not _fixture_involves_team(inner, home_team_id) or not _fixture_involves_team(inner, away_team_id):
+                continue
+            # Récupérer H2H via endpoint dédié
+            if not inner.get("h2h"):
+                print(f"[sportmonks] Fetching H2H (fallback) for {home_team_id} vs {away_team_id}")
+                h2h_data = _get_allow_404(f"/fixtures/head-to-head/{home_team_id}/{away_team_id}", params={"per_page": 10})
+                h2h_list = h2h_data.get("data") if isinstance(h2h_data.get("data"), list) else []
+                if h2h_list:
+                    inner["h2h"] = h2h_list
+                    print(f"[sportmonks] H2H (fallback) found: {len(h2h_list)} matches")
+        print(f"[sportmonks] resolve_fixture fallback: fixture {fid} from search")
+        return inner
     return None
 
 
@@ -1071,23 +1127,45 @@ def load_match_context_sportmonks(
     home_participant, away_participant = _extract_participants(fixture_data)
     home_name = (home_participant.get("name") if home_participant else None) or home_team
     away_name = (away_participant.get("name") if away_participant else None) or away_team
-    home_logo = _team_logo(home_participant)
-    away_logo = _team_logo(away_participant)
     home_team_id = (home_participant.get("id") or home_participant.get("team_id")) if home_participant else None
     away_team_id = (away_participant.get("id") or away_participant.get("team_id")) if away_participant else None
-    # Fallback blasons si between ne renvoie pas image_path
+
+    # Enrichir les participants avec image_path depuis l'API teams si manquant
+    if home_participant and not home_participant.get("image_path"):
+        if home_team_id:
+            # Récupérer les données complètes de l'équipe via /teams/{id}
+            team_data = _get_allow_404(f"/teams/{home_team_id}")
+            if team_data and team_data.get("data"):
+                team_obj = team_data["data"]
+                if isinstance(team_obj, dict) and team_obj.get("image_path"):
+                    home_participant["image_path"] = team_obj["image_path"]
+
+    if away_participant and not away_participant.get("image_path"):
+        if away_team_id:
+            team_data = _get_allow_404(f"/teams/{away_team_id}")
+            if team_data and team_data.get("data"):
+                team_obj = team_data["data"]
+                if isinstance(team_obj, dict) and team_obj.get("image_path"):
+                    away_participant["image_path"] = team_obj["image_path"]
+
+    home_logo = _team_logo(home_participant)
+    away_logo = _team_logo(away_participant)
+
+    # Fallback blasons si toujours pas de logo
     if not home_logo and home_name:
+        print(f"[sportmonks] Fallback logo search for home team: {home_name}")
         candidates = teams_search(home_name, limit=1)
-        if candidates and isinstance(candidates, list) and candidates[0].get("image_path"):
-            home_logo = (candidates[0].get("image_path") or "").strip()
-            if home_logo and not home_logo.startswith("http"):
-                home_logo = f"https://cdn.sportmonks.com/images/soccer/teams/{home_logo}"
+        if candidates and isinstance(candidates, list) and len(candidates) > 0:
+            img = candidates[0].get("image_path")
+            if img:
+                home_logo = img if str(img).startswith("http") else f"https://cdn.sportmonks.com/images/soccer/teams/{img}"
     if not away_logo and away_name:
+        print(f"[sportmonks] Fallback logo search for away team: {away_name}")
         candidates = teams_search(away_name, limit=1)
-        if candidates and isinstance(candidates, list) and candidates[0].get("image_path"):
-            away_logo = (candidates[0].get("image_path") or "").strip()
-            if away_logo and not away_logo.startswith("http"):
-                away_logo = f"https://cdn.sportmonks.com/images/soccer/teams/{away_logo}"
+        if candidates and isinstance(candidates, list) and len(candidates) > 0:
+            img = candidates[0].get("image_path")
+            if img:
+                away_logo = img if str(img).startswith("http") else f"https://cdn.sportmonks.com/images/soccer/teams/{img}"
 
     league_obj = fixture_data.get("league") or {}
     league_name = league_obj.get("name") if isinstance(league_obj, dict) else None

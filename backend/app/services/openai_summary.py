@@ -156,9 +156,10 @@ def generate_ai_analysis_sportmonks(
     ctx: dict,
     out: dict,
     language: Optional[str] = None,
+    news_context: Optional[str] = None,
 ) -> dict:
     """
-    Analyse professionnelle à partir des données Sportmonks (prédictions + contexte).
+    Analyse professionnelle à partir des données Sportmonks (prédictions + contexte + news).
     Retourne quick_summary, professional_analysis (8 sections), scenario_1–4, key_forces_home/away.
     """
     default = {
@@ -200,6 +201,9 @@ def generate_ai_analysis_sportmonks(
             "home": ctx.get("home_motivation_label") or "medium",
             "away": ctx.get("away_motivation_label") or "medium",
         }
+    # Add news context if available
+    if news_context and news_context.strip():
+        input_json["news"] = news_context.strip()
     try:
         r = client.chat.completions.create(
             model="gpt-4o-mini",
