@@ -74,7 +74,9 @@ export default function LandingPage() {
           <div className="rounded-2xl bg-white/5 border border-white/10 p-6 sm:p-8 text-center">
             <p className="font-bold text-sm sm:text-base uppercase tracking-wider mb-1">
               <span className="text-white">Based on </span>
-              <span className="text-[#00ffe8]">millions of data points</span>
+              <Link href={ANALYSE_HREF} className="text-[#00ffe8] hover:opacity-90 transition">
+                millions of data points
+              </Link>
             </p>
             <p className="text-white font-bold text-sm sm:text-base uppercase tracking-wider mb-4">
               Linked to football news
@@ -214,7 +216,7 @@ export default function LandingPage() {
               <div className="text-3xl sm:text-4xl mb-4">🧠</div>
               <h3 className="text-lg sm:text-xl font-bold text-white mb-2">AI Match Predictions</h3>
               <p className="text-zinc-400 text-sm sm:text-base mb-4 leading-relaxed">
-                Analyse automatique de milliers de matchs pour calculer les probabilités réelles.
+                Automatic analysis of thousands of matches to compute real probabilities.
               </p>
               <ul className="space-y-1.5 text-zinc-300 text-sm mb-4">
                 <li>• win / draw / loss probabilities</li>
@@ -222,9 +224,12 @@ export default function LandingPage() {
                 <li>• BTTS probability</li>
                 <li>• upset probability</li>
               </ul>
-              <p className="text-[#00ffe8] text-sm font-medium">
-                👉 Trouve les value bets avant les bookmakers.
-              </p>
+              <Link
+                href={ANALYSE_HREF}
+                className="inline-block text-[#00ffe8] text-sm font-medium hover:opacity-90 transition"
+              >
+                👉 Find value bets before the bookmakers.
+              </Link>
             </div>
 
             {/* Advanced Match Analytics */}
@@ -232,18 +237,21 @@ export default function LandingPage() {
               <div className="text-3xl sm:text-4xl mb-4">📊</div>
               <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Advanced Match Analytics</h3>
               <p className="text-zinc-400 text-sm sm:text-base mb-4 leading-relaxed">
-                Toutes les données importantes dans une seule analyse :
+                All key data in one single analysis:
               </p>
               <ul className="space-y-1.5 text-zinc-300 text-sm mb-4">
-                <li>• form des équipes</li>
-                <li>• head-to-head historique</li>
-                <li>• classement</li>
+                <li>• team form</li>
+                <li>• head-to-head history</li>
+                <li>• standings</li>
                 <li>• recent performance</li>
-                <li>• tendances des matchs</li>
+                <li>• match trends</li>
               </ul>
-              <p className="text-[#00ffe8] text-sm font-medium">
-                👉 Comprendre pourquoi une équipe est favorite.
-              </p>
+              <Link
+                href={ANALYSE_HREF}
+                className="inline-block text-[#00ffe8] text-sm font-medium hover:opacity-90 transition"
+              >
+                👉 Understand why a team is the favourite.
+              </Link>
             </div>
 
             {/* Smart Betting Insights */}
@@ -251,7 +259,7 @@ export default function LandingPage() {
               <div className="text-3xl sm:text-4xl mb-4">📈</div>
               <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Smart Betting Insights</h3>
               <p className="text-zinc-400 text-sm sm:text-base mb-4 leading-relaxed">
-                DeepFoot transforme les données en décisions de pari.
+                DeepFoot turns data into betting decisions.
               </p>
               <ul className="space-y-1.5 text-zinc-300 text-sm mb-4">
                 <li>• double chance probabilities</li>
@@ -259,9 +267,12 @@ export default function LandingPage() {
                 <li>• market probabilities</li>
                 <li>• upset detection</li>
               </ul>
-              <p className="text-[#00ffe8] text-sm font-medium">
-                👉 Identifie les paris les plus sûrs et les plus rentables.
-              </p>
+              <Link
+                href={ANALYSE_HREF}
+                className="inline-block text-[#00ffe8] text-sm font-medium hover:opacity-90 transition"
+              >
+                👉 Identify the safest and most profitable bets.
+              </Link>
             </div>
           </div>
         </section>
