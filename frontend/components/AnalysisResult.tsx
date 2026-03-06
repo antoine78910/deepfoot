@@ -493,9 +493,9 @@ export function AnalysisResult({ result }: { result: Result }) {
     );
   };
 
-  /** Overlay 15% + CTA — positionné plus bas pour laisser entrevoir les 3 bandes (probabilités) dans le flou au-dessus */
+  /** Overlay 15% + CTA — positionné bien en bas du flou pour ne pas chevaucher Exact statistics */
   const exactProbabilitiesOverlay = () => (
-    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-14 pt-8">
+    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-6 pt-24 sm:pt-32">
       <div className="rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center relative z-10">
         <h3 className="text-lg sm:text-xl font-bold text-white">
           {t("analysis.limitedAccessTitle")}

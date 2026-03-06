@@ -102,16 +102,16 @@ export function LandingMatchSearch({ analyseHref = "/analyse" }: LandingMatchSea
                 <li key={i}>
                   <Link
                     href={`${analyseHref}?home=${encodeURIComponent(f.home.name)}&away=${encodeURIComponent(f.away.name)}`}
-                    className="rounded-xl bg-white/5 border border-white/10 px-3 sm:px-4 py-2 sm:py-2.5 text-left transition hover:bg-white/10 hover:border-[#00ffe8]/30 block min-w-0 w-full max-w-full overflow-hidden"
+                    className="rounded-xl bg-white/5 border border-white/10 px-3 sm:px-4 py-1.5 sm:py-2.5 text-left transition hover:bg-white/10 hover:border-[#00ffe8]/30 block min-w-0 w-full max-w-full overflow-hidden"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-                      {/* Mobile: match on top, then date+league tout près. Desktop: date first */}
-                      <div className="order-2 sm:order-1 flex-shrink-0 sm:w-28 text-center sm:text-left mt-0.5 sm:mt-0">
-                        <div className="text-zinc-400 text-[11px] sm:text-sm tabular-nums leading-tight">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
+                      {/* Mobile: match on top (équipes aux coins), puis date+ligue très près. Desktop: date first */}
+                      <div className="order-2 sm:order-1 flex-shrink-0 sm:w-28 text-center sm:text-left mt-0.5 sm:mt-0 leading-tight">
+                        <div className="text-zinc-400 text-[11px] sm:text-sm tabular-nums">
                           {f.date} <span className="sm:inline">–</span> {f.time}
                         </div>
                         {f.league?.name ? (
-                          <div className="text-[10px] sm:text-[11px] text-zinc-500 leading-tight flex items-center justify-center sm:justify-start gap-1 mt-0.5 min-w-0 overflow-hidden">
+                          <div className="text-[10px] sm:text-[11px] text-zinc-500 flex items-center justify-center sm:justify-start gap-1 mt-0.5 min-w-0 overflow-hidden">
                             <span className="text-amber-300 flex-shrink-0">🏆</span>
                             <span className="truncate" title={f.league.name}>
                               {f.league.name}
@@ -119,19 +119,19 @@ export function LandingMatchSearch({ analyseHref = "/analyse" }: LandingMatchSea
                           </div>
                         ) : null}
                       </div>
-                      {/* Mobile: logos + names, truncate pour ne pas dépasser */}
-                      <div className="order-1 sm:order-2 flex items-center justify-center sm:justify-start gap-2 sm:gap-4 min-w-0 flex-1 basis-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-end sm:justify-start overflow-hidden">
+                      {/* Mobile: équipes bien à gauche et à droite, VS au centre */}
+                      <div className="order-1 sm:order-2 flex items-center justify-between sm:justify-start gap-2 sm:gap-4 min-w-0 flex-1 basis-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-start overflow-hidden">
                           {f.home.logo ? (
                             <img src={f.home.logo} alt="" className="w-8 h-8 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                           ) : (
                             <div className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-white/10 flex-shrink-0" />
                           )}
-                          <span className="text-white text-sm sm:text-sm font-semibold sm:font-medium truncate">{f.home.name}</span>
+                          <span className="text-white text-sm font-semibold sm:font-medium truncate">{f.home.name}</span>
                         </div>
-                        <span className="text-zinc-500 text-xs sm:text-xs font-medium flex-shrink-0">VS</span>
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-start sm:justify-end overflow-hidden">
-                          <span className="text-white text-sm sm:text-sm font-semibold sm:font-medium truncate text-right">{f.away.name}</span>
+                        <span className="text-zinc-500 text-xs font-medium flex-shrink-0 mx-0.5">VS</span>
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-end overflow-hidden">
+                          <span className="text-white text-sm font-semibold sm:font-medium truncate">{f.away.name}</span>
                           {f.away.logo ? (
                             <img src={f.away.logo} alt="" className="w-8 h-8 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                           ) : (
