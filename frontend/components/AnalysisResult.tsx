@@ -56,7 +56,7 @@ type Result = {
   scenario_4?: { title?: string; body?: string; probability_pct?: number | null } | null;
   key_forces_home?: string[] | null;
   key_forces_away?: string[] | null;
-  /** Full 8-section professional analysis (Sportmonks) */
+  /** Full 8-section professional analysis */
   professional_analysis?: string | null;
   ai_confidence?: string | null;
   /** News-style context (position, stakes); shown at top with quick_summary */
@@ -758,7 +758,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         </section>
       )}
 
-      {/* Match Importance - motivation scores (Sportmonks standings-based) */}
+      {/* Match Importance - motivation scores (standings-based) */}
       {(result.home_motivation_label || result.away_motivation_label) && (
         <section className="pt-4 sm:pt-6 border-t border-white/5">
           <h2 className="text-sm sm:text-base font-semibold text-white mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">

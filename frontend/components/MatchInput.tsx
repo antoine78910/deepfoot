@@ -53,25 +53,6 @@ function AnalysisLoaderContent({
   );
 }
 
-/** Overlay full-page (desktop only). Sur mobile le loader s'affiche en dessous de la sélection. */
-function AnalysisLoadingOverlay({
-  progress,
-  progressStep,
-  analyzingLabel,
-}: {
-  progress: number;
-  progressStep: string;
-  analyzingLabel: string;
-}) {
-  return (
-    <div className="hidden md:flex fixed inset-0 z-50 flex-col items-center justify-center p-6 bg-[#0a0a0f]" aria-live="polite" aria-busy="true">
-      <div className="w-full max-w-md rounded-2xl bg-[#14141c] border border-white/10 p-8 shadow-xl">
-        <AnalysisLoaderContent progress={progress} progressStep={progressStep} analyzingLabel={analyzingLabel} />
-      </div>
-    </div>
-  );
-}
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type UpcomingFixture = {
@@ -425,13 +406,6 @@ export function MatchInput({
 
   return (
     <div className="w-full max-w-xl rounded-2xl bg-dark-card border border-dark-border p-6 shadow-glow relative">
-      {loading && (
-        <AnalysisLoadingOverlay
-          progress={progress}
-          progressStep={progressStep}
-          analyzingLabel={t("matchInput.analyzing")}
-        />
-      )}
       <p className="text-xs uppercase tracking-wider text-zinc-500 mb-6">{t("matchInput.matchToAnalyze")}</p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -514,9 +488,9 @@ export function MatchInput({
         )}
       </form>
 
-      {/* Loader inline sous la sélection sur mobile (au lieu du full-page overlay) */}
+      {/* Loader inline sous le formulaire (mobile + desktop, pas de page pleine) */}
       {loading && (
-        <div className="md:hidden mt-6 rounded-xl bg-[#14141c] border border-white/10 p-6" aria-live="polite" aria-busy="true">
+        <div className="mt-6 rounded-xl bg-[#14141c] border border-white/10 p-6" aria-live="polite" aria-busy="true">
           <AnalysisLoaderContent
             progress={progress}
             progressStep={progressStep}
