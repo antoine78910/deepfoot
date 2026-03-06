@@ -33,19 +33,7 @@ function WalletIcon({ className }: { className?: string }) {
 
 function SupportQuestionIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-      <path d="M12 17h.01" />
-    </svg>
-  );
-}
-
-function ShieldIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
+    <span className={`inline-flex items-center justify-center w-5 h-5 text-lg font-bold ${className ?? ""}`} aria-hidden>?</span>
   );
 }
 
@@ -98,6 +86,7 @@ export default function AccountPage() {
   const [renewSuccessOpen, setRenewSuccessOpen] = useState(false);
   const [renewLoading, setRenewLoading] = useState(false);
   const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
+  const [offerClaimedOpen, setOfferClaimedOpen] = useState(false);
   const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -185,7 +174,7 @@ export default function AccountPage() {
 
   const handleEnjoyOffer = () => {
     setUnsubscribeModalOpen(false);
-    window.location.href = getWhopCheckoutUrl("pro", currencyConfig.currency, getDatafastVisitorId(), "account-offer-pro");
+    setOfferClaimedOpen(true);
   };
 
   const handleConfirmCancel = async () => {
@@ -479,22 +468,6 @@ export default function AccountPage() {
         </a>
       </div>
 
-      {/* Security */}
-      <div className="mt-6 rounded-2xl bg-dark-card border border-dark-border p-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-white mb-2">
-          <ShieldIcon className="text-violet-400 flex-shrink-0" />
-          {t("account.security")}
-        </h2>
-        <p className="text-zinc-500 text-sm mb-4">{t("account.connectedVia")}</p>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="px-4 py-2.5 rounded-xl bg-red-600/90 hover:bg-red-600 text-white text-sm font-medium transition"
-        >
-          {t("account.signOut")}
-        </button>
-      </div>
-
       {/* Modal: Are you sure you want to unsubscribe? (style comme offre -30%) */}
       {confirmUnsubscribeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -557,6 +530,24 @@ export default function AccountPage() {
             <button
               type="button"
               onClick={() => setRenewSuccessOpen(false)}
+              className="w-full py-2.5 px-4 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:opacity-90 transition"
+            >
+              {t("account.close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popup validation : offre -30% enregistrée (pas de redirect Whop) */}
+      {offerClaimedOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setOfferClaimedOpen(false)} aria-hidden />
+          <div className="relative w-full max-w-sm rounded-2xl bg-[#0a0a0f] border border-[#00ffe8]/30 shadow-xl p-6 text-center">
+            <h2 className="text-lg font-bold text-white mb-2">{t("account.offerClaimedTitle")}</h2>
+            <p className="text-zinc-300 text-sm mb-6">{t("account.offerClaimedMessage")}</p>
+            <button
+              type="button"
+              onClick={() => setOfferClaimedOpen(false)}
               className="w-full py-2.5 px-4 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:opacity-90 transition"
             >
               {t("account.close")}

@@ -510,7 +510,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         <button
           type="button"
           onClick={openUnlockStep1}
-          className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:bg-[#00ffe8]/90 transition relative z-20 whitespace-nowrap"
+          className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:bg-[#00ffe8]/90 transition relative z-20 text-center"
         >
           <span className="text-lg" aria-hidden>🏆</span>
           {t("analysis.unlockFullAnalysis")}
@@ -522,8 +522,8 @@ export function AnalysisResult({ result }: { result: Result }) {
   return (
     <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-visible shadow-lg relative">
       <div className="px-2 py-4 sm:p-6 space-y-0">
-      {/* AI analysis ready — mobile: tout en haut centré, dépasse pour rester visible (pas coupé); desktop: haut droite */}
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-3 sm:top-3 sm:translate-x-0 z-20">
+      {/* AI analysis ready — centré au milieu de la carte (middle), dépasse au-dessus du contenu */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
         <div className="rounded-md border border-[#00ffe8]/50 bg-[#0a0a0e]/95 px-2 py-1 text-center shadow-lg">
           <p className="text-[#00ffe8] font-medium text-[10px] sm:text-xs leading-tight">{t("analysis.aiReady")}</p>
           <p className="text-[#00ffe8]/70 text-[9px] sm:text-[10px] leading-tight">{t("analysis.basedOn")}</p>
@@ -806,7 +806,7 @@ export function AnalysisResult({ result }: { result: Result }) {
                 <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#00ffe8] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                 </div>
-                <span className="text-zinc-300 text-sm font-medium whitespace-nowrap flex-shrink-0">{label}</span>
+                <span className="text-zinc-300 text-sm font-medium flex-shrink-0 text-right min-w-0">{label}</span>
               </div>
               <p className="text-zinc-500 text-xs mt-1.5">Confidence level based on available data quality.</p>
             </div>

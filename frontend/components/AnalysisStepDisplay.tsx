@@ -28,7 +28,7 @@ export function AnalysisStepDisplay({
   const isEmpty = !step || !step.trim();
 
   return (
-    <div className={cn("overflow-hidden py-0.5 min-h-[1.5rem] flex items-center justify-center", className)}>
+    <div className={cn("overflow-hidden py-0.5 min-h-[1.5rem] flex items-center justify-center w-full min-w-0", className)}>
       <AnimatePresence mode="wait">
         {isEmpty ? (
           <motion.span
@@ -43,7 +43,7 @@ export function AnalysisStepDisplay({
         ) : (
           <motion.div
             key={step}
-            className="flex items-center justify-center"
+            className="flex items-center justify-center w-full min-w-0 text-center"
             {...framerProps}
           >
             {variant === "button" ? (
@@ -52,7 +52,7 @@ export function AnalysisStepDisplay({
                 duration={2}
                 spread={2}
                 className={cn(
-                  "text-sm font-medium",
+                  "text-sm font-medium whitespace-normal break-words",
                   "[--base-color:#0c0c0c] [--base-gradient-color:#ffffff]",
                   "dark:[--base-color:#0c0c0c] dark:[--base-gradient-color:#e4e4e7]"
                 )}
@@ -60,7 +60,7 @@ export function AnalysisStepDisplay({
                 {step}
               </TextShimmer>
             ) : (
-              <TextShimmer as="span" duration={2} spread={2} className="text-sm">
+              <TextShimmer as="span" duration={2} spread={2} className="text-sm whitespace-normal break-words">
                 {step}
               </TextShimmer>
             )}
