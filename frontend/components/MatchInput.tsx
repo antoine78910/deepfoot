@@ -122,6 +122,10 @@ export function MatchInput({
   const { t, lang } = useLanguage();
   const submitIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const stepQueueRef = useRef<string[]>([]);
+  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastQueuedStepRef = useRef<string>("");
+  const STEP_DISPLAY_MS = 1500;
 
   // Sync from URL when landing on /analyse?home=...&away=...
   useEffect(() => {
@@ -231,6 +235,12 @@ export function MatchInput({
 
     const submitId = ++submitIdRef.current;
 
+    if (stepIntervalRef.current) {
+      clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+    stepQueueRef.current = [];
+    lastQueuedStepRef.current = "";
     setLoading(true);
     setProgress(0);
     setProgressStep("");
@@ -284,7 +294,21 @@ export function MatchInput({
               const event = JSON.parse(line) as { type?: string; step?: string; percent?: number; data?: Record<string, unknown>; message?: string; code?: string };
               if (event.type === "progress") {
                 setProgress(event.percent ?? 0);
-                setProgressStep(event.step ?? "");
+                const step = (event.step ?? "").trim();
+                if (step && step !== lastQueuedStepRef.current) {
+                  lastQueuedStepRef.current = step;
+                  stepQueueRef.current.push(step);
+                  if (!stepIntervalRef.current) {
+                    const first = stepQueueRef.current.shift();
+                    if (first) setProgressStep(first);
+                    stepIntervalRef.current = setInterval(() => {
+                      if (stepQueueRef.current.length > 0) {
+                        const next = stepQueueRef.current.shift();
+                        if (next) setProgressStep(next);
+                      }
+                    }, STEP_DISPLAY_MS);
+                  }
+                }
               } else if (event.type === "result" && event.data) {
                 data = event.data as Record<string, unknown>;
               } else if (event.type === "error") {
@@ -351,6 +375,12 @@ export function MatchInput({
       } catch {
         // ignore
       }
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+        stepIntervalRef.current = null;
+      }
+      stepQueueRef.current = [];
+      lastQueuedStepRef.current = "";
       setProgress(100);
       setProgressStep("Done");
       await new Promise((r) => setTimeout(r, 300));
@@ -365,9 +395,21 @@ export function MatchInput({
       setError(err instanceof Error ? err.message : "Analysis failed.");
       setProgress(0);
       setProgressStep("");
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+        stepIntervalRef.current = null;
+      }
+      stepQueueRef.current = [];
+      lastQueuedStepRef.current = "";
     } finally {
       if (submitId === submitIdRef.current) {
         setLoading(false);
+        if (stepIntervalRef.current) {
+          clearInterval(stepIntervalRef.current);
+          stepIntervalRef.current = null;
+        }
+        stepQueueRef.current = [];
+        lastQueuedStepRef.current = "";
       }
     }
   };

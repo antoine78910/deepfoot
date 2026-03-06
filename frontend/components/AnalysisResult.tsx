@@ -495,7 +495,7 @@ export function AnalysisResult({ result }: { result: Result }) {
 
   /** Overlay 15% + CTA — positionné bien en bas du flou pour ne pas chevaucher Exact statistics */
   const exactProbabilitiesOverlay = () => (
-    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-6 pt-24 sm:pt-32">
+    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-6 pt-32 sm:pt-40">
       <div className="rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center relative z-10">
         <h3 className="text-lg sm:text-xl font-bold text-white">
           {t("analysis.limitedAccessTitle")}
@@ -510,7 +510,7 @@ export function AnalysisResult({ result }: { result: Result }) {
         <button
           type="button"
           onClick={openUnlockStep1}
-          className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:bg-[#00ffe8]/90 transition relative z-20"
+          className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-[#0d0d12] bg-[#00ffe8] hover:bg-[#00ffe8]/90 transition relative z-20 whitespace-nowrap"
         >
           <span className="text-lg" aria-hidden>🏆</span>
           {t("analysis.unlockFullAnalysis")}
@@ -1163,33 +1163,52 @@ export function AnalysisResult({ result }: { result: Result }) {
         </>
       )}
 
-      <section className="pt-6 mt-6 border-t border-white/5">
-        <h3 className="text-sm font-semibold text-white mb-2">Help us improve the product</h3>
-        <p className="text-zinc-400 text-xs mb-3">
-          Want more data or have any feedback on the product? Let us know.
-        </p>
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Your feedback..."
-            className="w-full rounded-lg bg-dark-input border border-dark-border px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#00ffe8]/40"
-          />
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={sendFeedback}
-              disabled={feedbackStatus === "sending" || feedback.trim().length < 4}
-              className="px-4 py-2 rounded-lg bg-[#00ffe8] text-[#0d0d12] text-sm font-semibold disabled:opacity-50"
-            >
-              {feedbackStatus === "sending" ? "Sending..." : "Send feedback"}
-            </button>
-            {feedbackStatus === "sent" && <span className="text-xs text-emerald-400">Thanks for your feedback.</span>}
-            {feedbackStatus === "error" && <span className="text-xs text-rose-400">Could not send feedback.</span>}
+      {fullAnalysis ? (
+        <section className="pt-6 mt-6 border-t border-white/5">
+          <h3 className="text-sm font-semibold text-white mb-2">Help us improve the product</h3>
+          <p className="text-zinc-400 text-xs mb-3">
+            Want more data or have any feedback on the product? Let us know.
+          </p>
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Your feedback..."
+              className="w-full rounded-lg bg-dark-input border border-dark-border px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#00ffe8]/40"
+            />
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={sendFeedback}
+                disabled={feedbackStatus === "sending" || feedback.trim().length < 4}
+                className="px-4 py-2 rounded-lg bg-[#00ffe8] text-[#0d0d12] text-sm font-semibold disabled:opacity-50"
+              >
+                {feedbackStatus === "sending" ? "Sending..." : "Send feedback"}
+              </button>
+              {feedbackStatus === "sent" && <span className="text-xs text-emerald-400">Thanks for your feedback.</span>}
+              {feedbackStatus === "error" && <span className="text-xs text-rose-400">Could not send feedback.</span>}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="relative">
+          <div className="select-none pointer-events-none blur-md opacity-90" aria-hidden>
+            <section className="pt-6 mt-6 border-t border-white/5">
+              <h3 className="text-sm font-semibold text-white mb-2">Help us improve the product</h3>
+              <p className="text-zinc-400 text-xs mb-3">
+                Want more data or have any feedback on the product? Let us know.
+              </p>
+              <div className="space-y-2">
+                <div className="w-full rounded-lg bg-dark-input border border-dark-border px-3 py-2 text-sm text-zinc-500 h-[2.25rem]" />
+                <div className="flex items-center justify-between">
+                  <span className="px-4 py-2 rounded-lg bg-[#00ffe8] text-[#0d0d12] text-sm font-semibold opacity-80">Send feedback</span>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
-      </section>
+      )}
 
       <p className="text-center text-zinc-500 text-xs pt-6 border-t border-white/5">This analysis is provided for informational purposes only.</p>
       </div>
