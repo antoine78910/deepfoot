@@ -172,8 +172,18 @@ export default function AccountPage() {
     }
   };
 
-  const handleEnjoyOffer = () => {
+  const handleEnjoyOffer = async () => {
     setUnsubscribeModalOpen(false);
+    if (user?.id && API_URL && API_URL !== "undefined") {
+      try {
+        await fetch(`${API_URL}/me/notify-offer-claim`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-User-Id": user.id },
+        });
+      } catch {
+        // ignore: popup shown anyway
+      }
+    }
     setOfferClaimedOpen(true);
   };
 
@@ -468,7 +478,7 @@ export default function AccountPage() {
         </a>
       </div>
 
-      {/* Modal: Are you sure you want to unsubscribe? (style comme offre -30%) */}
+      {/* Modal: Are you sure you want to unsubscribe? (style comme offre -50%) */}
       {confirmUnsubscribeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmUnsubscribeOpen(false)} aria-hidden />
@@ -538,7 +548,7 @@ export default function AccountPage() {
         </div>
       )}
 
-      {/* Popup validation : offre -30% enregistrée (pas de redirect Whop) */}
+      {/* Popup validation : offre -50% enregistrée + email envoyé à anto.delbos@gmail.com si RESEND_API_KEY */}
       {offerClaimedOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setOfferClaimedOpen(false)} aria-hidden />

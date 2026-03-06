@@ -1,5 +1,6 @@
 # backend/app/api/me.py
 """Endpoint /me : plan, usage, limite d'analyses ; POST /me/cancel-subscription pour annuler via Whop (at_period_end).
+POST /me/notify-offer-claim : envoie un email à notify_offer_email quand un user clique sur "Claim 50% offer" (Resend si RESEND_API_KEY).
 
 Whop API URLs appelées (Company API Key uniquement — pas de /me ni de routes v5/v2 /company/*) :
   - GET  https://api.whop.com/api/v1/members?company_id=...&first=100
@@ -8,6 +9,7 @@ Whop API URLs appelées (Company API Key uniquement — pas de /me ni de routes 
   - POST https://api.whop.com/api/v1/memberships/{membership_id}/uncancel
 """
 import logging
+import httpx
 from fastapi import APIRouter, Header, HTTPException
 
 from app.services.subscription import (
@@ -846,3 +848,48 @@ async def renew_subscription(x_user_id: str | None = Header(None, alias="X-User-
 
     logger.info("Renew subscription: user %s plan=%s subscription_ends_at cleared", user_id, current_plan)
     return {"ok": True, "plan": current_plan, "renewed": True, "subscription_ends_at": None}
+
+
+@router.post("/me/notify-offer-claim")
+async def notify_offer_claim(x_user_id: str | None = Header(None, alias="X-User-Id")):
+    """
+    Appelé quand l'utilisateur clique sur "Claim 50% offer". Envoie un email à notify_offer_email
+    (anto.delbos@gmail.com) si RESEND_API_KEY est configuré. Sinon, log uniquement.
+    """
+    user_id = (x_user_id or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id required")
+
+    settings = get_settings()
+    to_email = (settings.notify_offer_email or "anto.delbos@gmail.com").strip()
+    api_key = (settings.resend_api_key or "").strip()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    body_text = f"Un utilisateur a cliqué sur « Claim 50% offer ».\n\nUser ID: {user_id}\nDate: {now}"
+    from_addr = (settings.notify_from_email or "DeepFoot <onboarding@resend.dev>").strip()
+    payload = {
+        "from": from_addr,
+        "to": [to_email],
+        "subject": "DeepFoot: Claim 50% offer",
+        "text": body_text,
+    }
+
+    if api_key:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=10.0,
+                )
+                if r.status_code in (200, 201):
+                    logger.info("notify-offer-claim: email sent to %s for user %s", to_email[:10] + "...", _mask_user_id(user_id))
+                else:
+                    logger.warning("notify-offer-claim: Resend returned %s %s", r.status_code, r.text[:200])
+        except Exception as e:
+            logger.warning("notify-offer-claim: failed to send email: %s", e)
+    else:
+        logger.info("notify-offer-claim: RESEND_API_KEY not set, skip send (user_id=%s)", _mask_user_id(user_id))
+
+    return {"ok": True}

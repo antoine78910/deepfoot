@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     whop_api_key: str = Field(default="", validation_alias="WHOP_API_KEY")
     # Whop — Company ID (biz_xxx) pour annulation par email si pas de membership_id; env: WHOP_COMPANY_ID
     whop_company_id: str = Field(default="", validation_alias="WHOP_COMPANY_ID")
+    # Notification offre fidélité (claim 50%) : envoi email à notify_offer_email si RESEND_API_KEY est défini
+    resend_api_key: str = ""
+    notify_offer_email: str = "anto.delbos@gmail.com"
+    notify_from_email: str = "DeepFoot <onboarding@resend.dev>"  # Doit être un domaine vérifié Resend en prod
 
     @model_validator(mode="before")
     @classmethod

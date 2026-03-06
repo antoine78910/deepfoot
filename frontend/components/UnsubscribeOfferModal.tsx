@@ -34,7 +34,7 @@ export function UnsubscribeOfferModal({
   if (!open) return null;
 
   const stayOffer = t("account.stayOffer");
-  const parts = stayOffer.split("-30%");
+  const parts = stayOffer.split("-50%");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -68,7 +68,7 @@ export function UnsubscribeOfferModal({
         </p>
         <p className="text-center text-zinc-300 text-sm mb-6">
           {parts[0]}
-          <span className="font-bold" style={{ color: ACCENT }}>-30%</span>
+          <span className="font-bold" style={{ color: ACCENT }}>-50%</span>
           {parts[1]}
         </p>
 
