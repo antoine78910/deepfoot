@@ -41,7 +41,24 @@ export function LogoCloud() {
         WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
       }}
     >
-      <InfiniteSlider gap={24} reverse speed={10} copies={3} className="flex items-center">
+      {/* Mobile: scroll plus rapide (10s). Desktop: comme avant (22s) */}
+      <InfiniteSlider gap={24} reverse speed={10} copies={3} className="flex items-center sm:hidden">
+        {LEAGUE_LOGOS.map((logo) => (
+          <img
+            alt={logo.alt}
+            className="pointer-events-none h-[var(--logo-size)] w-[var(--logo-size)] flex-shrink-0 select-none object-contain opacity-95"
+            height={48}
+            key={logo.src}
+            loading="eager"
+            src={logo.src}
+            width={48}
+            onError={(e) => {
+              e.currentTarget.style.opacity = "0.3";
+            }}
+          />
+        ))}
+      </InfiniteSlider>
+      <InfiniteSlider gap={24} reverse speed={22} copies={3} className="hidden sm:flex items-center">
         {LEAGUE_LOGOS.map((logo) => (
           <img
             alt={logo.alt}

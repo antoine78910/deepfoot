@@ -492,7 +492,7 @@ export function MatchInput({
           ) : upcoming.length === 0 ? (
             <p className="text-zinc-500 text-sm">{t("matchInput.noUpcoming")}</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-2 min-w-0 max-w-full">
               {upcoming.map((f, i) => {
                 return (
                   <li key={i}>
@@ -509,15 +509,16 @@ export function MatchInput({
                         setHomeTeamOption({ id: null, name: homeName, crest: f.home.logo ?? null });
                         setAwayTeamOption({ id: null, name: awayName, crest: f.away.logo ?? null });
                       }}
-                      className="w-full rounded-xl bg-dark-input/60 border border-dark-border px-3 sm:px-4 py-2.5 text-left transition hover:bg-dark-input hover:border-accent-green/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-green/50 min-w-0"
+                      className="w-full max-w-full overflow-hidden rounded-xl bg-dark-input/60 border border-dark-border px-3 sm:px-4 py-2 sm:py-2.5 text-left transition hover:bg-dark-input hover:border-accent-green/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-green/50 min-w-0"
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                        <div className="flex-shrink-0 sm:w-32">
-                          <div className="text-zinc-400 text-xs sm:text-sm tabular-nums leading-tight">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                        {/* Mobile: match on top, then date+league tout près. Desktop: date first */}
+                        <div className="order-2 sm:order-1 flex-shrink-0 sm:w-32 text-center sm:text-left mt-0.5 sm:mt-0">
+                          <div className="text-zinc-400 text-[11px] sm:text-sm tabular-nums leading-tight">
                             {f.date} <span className="sm:inline">–</span> {f.time}
                           </div>
                           {f.league?.name ? (
-                            <div className="text-[11px] text-zinc-500 leading-tight flex items-center gap-1 mt-0.5 min-w-0 overflow-hidden">
+                            <div className="text-[10px] sm:text-[11px] text-zinc-500 leading-tight flex items-center justify-center sm:justify-start gap-1 mt-0.5 min-w-0 overflow-hidden">
                               <span className="text-amber-300 flex-shrink-0">🏆</span>
                               <span className="truncate" title={f.league.name}>
                                 {f.league.name}
@@ -525,22 +526,23 @@ export function MatchInput({
                             </div>
                           ) : null}
                         </div>
-                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem]">
+                        {/* Mobile: logos + noms comme sur la LP */}
+                        <div className="order-1 sm:order-2 flex items-center justify-center sm:justify-start gap-2 sm:gap-4 min-w-0 flex-1 basis-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-end sm:justify-start overflow-hidden">
                             {f.home.logo ? (
-                              <img src={f.home.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+                              <img src={f.home.logo} alt="" className="w-8 h-8 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                             ) : (
-                              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
+                              <div className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
                             )}
-                            <span className="text-white text-xs sm:text-sm font-medium truncate">{f.home.name}</span>
+                            <span className="text-white text-sm font-semibold sm:font-medium truncate">{f.home.name}</span>
                           </div>
                           <span className="text-zinc-500 text-xs font-medium flex-shrink-0">VS</span>
-                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem] justify-end">
-                            <span className="text-white text-xs sm:text-sm font-medium truncate text-right">{f.away.name}</span>
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 justify-start sm:justify-end overflow-hidden">
+                            <span className="text-white text-sm font-semibold sm:font-medium truncate text-right">{f.away.name}</span>
                             {f.away.logo ? (
-                              <img src={f.away.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+                              <img src={f.away.logo} alt="" className="w-8 h-8 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                             ) : (
-                              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
+                              <div className="w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
                             )}
                           </div>
                         </div>
