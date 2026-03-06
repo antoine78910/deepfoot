@@ -57,3 +57,25 @@ export function clearUserFromStorage(): void {
 export function displayNameFromEmail(email: string): string {
   return email.split("@")[0]?.trim() || email;
 }
+
+const SESSION_ID_KEY = "visifoot_session_id";
+
+/**
+ * Clé localStorage pour l’historique des analyses : unique par compte (user.id) ou par session (anon).
+ * Évite que deux comptes différents partagent le même historique.
+ */
+export function getHistoryKey(): string {
+  if (typeof window === "undefined") return "visifoot_history";
+  const user = getUserFromStorage();
+  if (user?.id) return `visifoot_history_${user.id}`;
+  try {
+    let sid = sessionStorage.getItem(SESSION_ID_KEY);
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem(SESSION_ID_KEY, sid);
+    }
+    return `visifoot_history_anon_${sid}`;
+  } catch {
+    return "visifoot_history_anon";
+  }
+}

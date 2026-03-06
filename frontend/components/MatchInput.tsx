@@ -8,7 +8,7 @@ import { UnlockPricingModal, type PricingModalVariant } from "./UnlockPricingMod
 import { AnalysisStepDisplay } from "./AnalysisStepDisplay";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getAppHref } from "@/lib/app-url";
-import { getUserFromStorage } from "@/lib/auth";
+import { getUserFromStorage, getHistoryKey } from "@/lib/auth";
 
 const LOADING_STEPS = [
   "Initializing Deepfoot AI engine...",
@@ -423,7 +423,7 @@ export function MatchInput({
       // Si une nouvelle soumission a été lancée entre-temps, on ignore ce résultat
       if (submitId !== submitIdRef.current) return;
       sessionStorage.setItem("visifoot_analysis", JSON.stringify(data));
-      const historyKey = "visifoot_history";
+      const historyKey = getHistoryKey();
       const maxHistory = 50;
       const predictionId = crypto.randomUUID();
       try {

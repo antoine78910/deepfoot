@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
-
-const HISTORY_KEY = "visifoot_history";
+import { getHistoryKey } from "@/lib/auth";
 
 type HistoryItem = {
   id: string;
@@ -59,7 +58,8 @@ export default function HistoryPage() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(HISTORY_KEY);
+      const key = getHistoryKey();
+      const raw = localStorage.getItem(key);
       setItems(raw ? JSON.parse(raw) : []);
     } catch {
       setItems([]);

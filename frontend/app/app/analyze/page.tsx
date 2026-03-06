@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnalysisResult } from "@/components/AnalysisResult";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getUserFromStorage } from "@/lib/auth";
+import { getHistoryKey, getUserFromStorage } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const HISTORY_KEY = "visifoot_history";
 
 function AnalyzeContent() {
   const searchParams = useSearchParams();
@@ -28,7 +27,8 @@ function AnalyzeContent() {
       return;
     }
     try {
-      const raw = localStorage.getItem(HISTORY_KEY);
+      const key = getHistoryKey();
+      const raw = localStorage.getItem(key);
       const list: { id: string; result: Record<string, unknown> }[] = raw ? JSON.parse(raw) : [];
       const item = list.find((x) => x.id === predictionId);
       if (!item?.result) {
