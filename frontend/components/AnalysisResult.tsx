@@ -521,7 +521,7 @@ export function AnalysisResult({ result }: { result: Result }) {
 
   return (
     <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-visible shadow-lg relative">
-      <div className="p-4 sm:p-6 space-y-0">
+      <div className="px-2 py-4 sm:p-6 space-y-0">
       {/* AI analysis ready — mobile: tout en haut centré, dépasse pour rester visible (pas coupé); desktop: haut droite */}
       <div className="absolute -top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-3 sm:top-3 sm:translate-x-0 z-20">
         <div className="rounded-md border border-[#00ffe8]/50 bg-[#0a0a0e]/95 px-2 py-1 text-center shadow-lg">
@@ -690,56 +690,56 @@ export function AnalysisResult({ result }: { result: Result }) {
         </>
       )}
 
-      {/* Recent form — compact single block */}
+      {/* Recent form — compact single block, deux équipes côte à côte (mobile: plus compact) */}
       <section className="pt-4 sm:pt-6 border-t border-white/5">
-        <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-3 sm:p-4">
+        <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-2.5 sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 mb-2 sm:mb-3">
             <h2 className="text-sm sm:text-base font-semibold text-white flex items-center gap-1.5 sm:gap-2">
               <span className="text-zinc-400 text-xs sm:text-base">📊</span> {t("analysis.recentForm")}
             </h2>
             <span className="text-zinc-500 text-[10px] sm:text-xs">{t("analysis.globalForm")}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {/* Mobile: blason aligné avec le nom sur une ligne, puis label + form en dessous (plus de place en longueur) */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-              <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 min-w-0">
+            {/* Toujours côte à côte (mobile: plus compact) */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
                 {result.home_team_logo ? (
-                  <img src={result.home_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
+                  <img src={result.home_team_logo} alt="" className="w-6 h-6 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
                 ) : (
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{home.slice(0, 2)}</div>
+                  <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[9px] sm:text-xs">{home.slice(0, 2)}</div>
                 )}
-                <p className="font-semibold text-white text-xs sm:text-sm truncate">{home}</p>
+                <p className="font-semibold text-white text-[10px] sm:text-sm truncate min-w-0">{home}</p>
               </div>
               <div className="min-w-0 flex-1 flex flex-col gap-0.5">
                 <FormLabelBlock label={result.home_form_label ?? ""} compact />
-                <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+                <p className="text-[9px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {(() => {
                     const form5 = [...(result.home_form ?? []).slice(0, 5)];
                     while (form5.length < 5) form5.push("");
                     return form5.map((r, i) => <FormIcon key={i} result={r} />);
                   })()}
-                  <span className="text-zinc-500">W-D-L: {result.home_wdl ?? "—"}</span>
+                  <span className="text-zinc-500 text-[9px] sm:text-xs">W-D-L: {result.home_wdl ?? "—"}</span>
                 </p>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
-              <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
                 {result.away_team_logo ? (
-                  <img src={result.away_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
+                  <img src={result.away_team_logo} alt="" className="w-6 h-6 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
                 ) : (
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{away.slice(0, 2)}</div>
+                  <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[9px] sm:text-xs">{away.slice(0, 2)}</div>
                 )}
-                <p className="font-semibold text-white text-xs sm:text-sm truncate">{away}</p>
+                <p className="font-semibold text-white text-[10px] sm:text-sm truncate min-w-0">{away}</p>
               </div>
               <div className="min-w-0 flex-1 flex flex-col gap-0.5">
                 <FormLabelBlock label={result.away_form_label ?? ""} compact />
-                <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+                <p className="text-[9px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {(() => {
                     const form5 = [...(result.away_form ?? []).slice(0, 5)];
                     while (form5.length < 5) form5.push("");
                     return form5.map((r, i) => <FormIcon key={i} result={r} />);
                   })()}
-                  <span className="text-zinc-500">W-D-L: {result.away_wdl ?? "—"}</span>
+                  <span className="text-zinc-500 text-[9px] sm:text-xs">W-D-L: {result.away_wdl ?? "—"}</span>
                 </p>
               </div>
             </div>

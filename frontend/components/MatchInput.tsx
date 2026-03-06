@@ -330,8 +330,32 @@ export function MatchInput({
             } else throw parseErr;
           }
         }
+      } else {
+        // Response body not available (e.g. non-streaming 200): try to parse as single JSON event
+        try {
+          const single = await res.json() as { type?: string; data?: Record<string, unknown>; message?: string; code?: string };
+          if (single.type === "result" && single.data) data = single.data;
+          else if (single.type === "error") {
+            const code = single.code;
+            if (code === "starter" || code === "free") {
+              setLimitModalVariant(code === "starter" ? "pro_lifetime" : "free");
+              setLoading(false);
+              return;
+            }
+            throw new Error(single.message ?? "Analysis failed.");
+          }
+        } catch (e) {
+          if (data !== null) { /* already set */ } else throw e;
+        }
       }
-      if (!data) throw new Error("No result from server. The match may not have predictions available yet, or the server may have timed out.");
+      if (!data) {
+        setError(t("matchInput.errorNoResult"));
+        if (user?.id) setLimitModalVariant("free");
+        setProgress(0);
+        setProgressStep("");
+        setLoading(false);
+        return;
+      }
 
       // Si une nouvelle soumission a été lancée entre-temps, on ignore ce résultat
       if (submitId !== submitIdRef.current) return;
