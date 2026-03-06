@@ -41,7 +41,7 @@ export function LogoCloud() {
         WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
       }}
     >
-      <InfiniteSlider gap={24} reverse speed={22} copies={3} className="flex items-center">
+      <InfiniteSlider gap={24} reverse speed={10} copies={3} className="flex items-center">
         {LEAGUE_LOGOS.map((logo) => (
           <img
             alt={logo.alt}

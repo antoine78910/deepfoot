@@ -520,10 +520,10 @@ export function AnalysisResult({ result }: { result: Result }) {
   );
 
   return (
-    <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-hidden shadow-lg relative">
+    <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-visible shadow-lg relative">
       <div className="p-4 sm:p-6 space-y-0">
-      {/* AI analysis ready — mobile: tout en haut centré (dépasse de moitié); desktop: haut droite */}
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 sm:left-auto sm:right-3 sm:top-3 sm:translate-x-0 z-10">
+      {/* AI analysis ready — mobile: tout en haut centré, dépasse pour rester visible (pas coupé); desktop: haut droite */}
+      <div className="absolute -top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-3 sm:top-3 sm:translate-x-0 z-20">
         <div className="rounded-md border border-[#00ffe8]/50 bg-[#0a0a0e]/95 px-2 py-1 text-center shadow-lg">
           <p className="text-[#00ffe8] font-medium text-[10px] sm:text-xs leading-tight">{t("analysis.aiReady")}</p>
           <p className="text-[#00ffe8]/70 text-[9px] sm:text-[10px] leading-tight">{t("analysis.basedOn")}</p>
@@ -856,7 +856,7 @@ export function AnalysisResult({ result }: { result: Result }) {
 
       {/* Model win probabilities — Poisson + motivation + recent performance blend */}
       <section className="pt-6 border-t border-white/5">
-        <h2 className="text-lg font-semibold text-white mb-4">📊 {t("analysis.modelWinProbabilities")}</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">📊 {t("analysis.exactStatistics")}</h2>
         {fullAnalysis ? (
           <>
             <div className="space-y-3 mb-4">
@@ -882,7 +882,6 @@ export function AnalysisResult({ result }: { result: Result }) {
                 <span className="text-[#ef4444] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_away ?? result.prob_away ?? 0}%</span>
               </div>
             </div>
-            <p className="text-zinc-500 text-xs mt-2">{t("analysis.exactProbNote")}</p>
             {result.implied_odds_home != null && (
               <>
                 <p className="text-zinc-500 text-xs mb-2 mt-3">{t("betting.impliedOdds")} (decimal, compare with bookmakers)</p>

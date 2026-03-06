@@ -102,15 +102,16 @@ export function LandingMatchSearch({ analyseHref = "/analyse" }: LandingMatchSea
                 <li key={i}>
                   <Link
                     href={`${analyseHref}?home=${encodeURIComponent(f.home.name)}&away=${encodeURIComponent(f.away.name)}`}
-                    className="rounded-xl bg-white/5 border border-white/10 px-3 sm:px-4 py-2.5 sm:py-2.5 text-left transition hover:bg-white/10 hover:border-[#00ffe8]/30 block min-w-0"
+                    className="rounded-xl bg-white/5 border border-white/10 px-3 sm:px-4 py-3 sm:py-2.5 text-left transition hover:bg-white/10 hover:border-[#00ffe8]/30 block min-w-0"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                      <div className="flex-shrink-0 sm:w-28">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3">
+                      {/* Mobile: match on top (big). Desktop: date first */}
+                      <div className="order-2 sm:order-1 flex-shrink-0 sm:w-28 text-center sm:text-left">
                         <div className="text-zinc-400 text-xs sm:text-sm tabular-nums leading-tight">
                           {f.date} <span className="sm:inline">–</span> {f.time}
                         </div>
                         {f.league?.name ? (
-                          <div className="text-[11px] text-zinc-500 leading-tight flex items-center gap-1 mt-0.5 min-w-0 overflow-hidden">
+                          <div className="text-[11px] text-zinc-500 leading-tight flex items-center justify-center sm:justify-start gap-1 mt-0.5 min-w-0 overflow-hidden">
                             <span className="text-amber-300 flex-shrink-0">🏆</span>
                             <span className="truncate" title={f.league.name}>
                               {f.league.name}
@@ -118,22 +119,23 @@ export function LandingMatchSearch({ analyseHref = "/analyse" }: LandingMatchSea
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem]">
+                      {/* Mobile: logos + names big. Desktop: same as before */}
+                      <div className="order-1 sm:order-2 flex items-center justify-center sm:justify-start gap-3 sm:gap-4 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem] justify-end sm:justify-start">
                           {f.home.logo ? (
-                            <img src={f.home.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+                            <img src={f.home.logo} alt="" className="w-10 h-10 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                           ) : (
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/10 flex-shrink-0" />
+                            <div className="w-10 h-10 sm:w-7 sm:h-7 rounded-full bg-white/10 flex-shrink-0" />
                           )}
-                          <span className="text-white text-xs sm:text-sm font-medium truncate">{f.home.name}</span>
+                          <span className="text-white text-base sm:text-sm font-semibold sm:font-medium truncate">{f.home.name}</span>
                         </div>
-                        <span className="text-zinc-500 text-xs font-medium flex-shrink-0">VS</span>
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem] justify-end">
-                          <span className="text-white text-xs sm:text-sm font-medium truncate text-right">{f.away.name}</span>
+                        <span className="text-zinc-500 text-base sm:text-xs font-medium flex-shrink-0">VS</span>
+                        <div className="flex items-center gap-2 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem] justify-start sm:justify-end">
+                          <span className="text-white text-base sm:text-sm font-semibold sm:font-medium truncate text-right sm:text-right">{f.away.name}</span>
                           {f.away.logo ? (
-                            <img src={f.away.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
+                            <img src={f.away.logo} alt="" className="w-10 h-10 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                           ) : (
-                            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/10 flex-shrink-0" />
+                            <div className="w-10 h-10 sm:w-7 sm:h-7 rounded-full bg-white/10 flex-shrink-0" />
                           )}
                         </div>
                       </div>

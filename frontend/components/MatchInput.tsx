@@ -19,7 +19,41 @@ function LoaderSpinner({ className }: { className?: string }) {
   );
 }
 
-/** Overlay de chargement style /loading-demo : fond sombre + carte centrée */
+/** Contenu du loader (partagé overlay + inline mobile) */
+function AnalysisLoaderContent({
+  progress,
+  progressStep,
+  analyzingLabel,
+  className = "",
+}: {
+  progress: number;
+  progressStep: string;
+  analyzingLabel: string;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-col items-center gap-4 w-full ${className}`}>
+      <span className="flex items-center gap-2 text-white">
+        <LoaderSpinner className="w-5 h-5 flex-shrink-0 text-[#00ffe8]" />
+        <span className="font-semibold">{analyzingLabel}</span>
+      </span>
+      <span className="text-2xl font-bold tabular-nums text-white">{progress}%</span>
+      <AnalysisStepDisplay
+        step={progressStep}
+        variant="default"
+        className="w-full min-h-[2rem] text-zinc-300"
+      />
+      <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden shadow-inner">
+        <div
+          className="h-full bg-gradient-to-r from-[#00ffe8] to-emerald-400 rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Overlay full-page (desktop only). Sur mobile le loader s'affiche en dessous de la sélection. */
 function AnalysisLoadingOverlay({
   progress,
   progressStep,
@@ -30,26 +64,9 @@ function AnalysisLoadingOverlay({
   analyzingLabel: string;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-[#0a0a0f]" aria-live="polite" aria-busy="true">
+    <div className="hidden md:flex fixed inset-0 z-50 flex-col items-center justify-center p-6 bg-[#0a0a0f]" aria-live="polite" aria-busy="true">
       <div className="w-full max-w-md rounded-2xl bg-[#14141c] border border-white/10 p-8 shadow-xl">
-        <div className="flex flex-col items-center gap-4 w-full">
-          <span className="flex items-center gap-2 text-white">
-            <LoaderSpinner className="w-5 h-5 flex-shrink-0 text-[#00ffe8]" />
-            <span className="font-semibold">{analyzingLabel}</span>
-          </span>
-          <span className="text-2xl font-bold tabular-nums text-white">{progress}%</span>
-          <AnalysisStepDisplay
-            step={progressStep}
-            variant="default"
-            className="w-full min-h-[2rem] text-zinc-300"
-          />
-          <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden shadow-inner">
-            <div
-              className="h-full bg-gradient-to-r from-[#00ffe8] to-emerald-400 rounded-full transition-all duration-700 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
+        <AnalysisLoaderContent progress={progress} progressStep={progressStep} analyzingLabel={analyzingLabel} />
       </div>
     </div>
   );
@@ -454,6 +471,17 @@ export function MatchInput({
           </button>
         )}
       </form>
+
+      {/* Loader inline sous la sélection sur mobile (au lieu du full-page overlay) */}
+      {loading && (
+        <div className="md:hidden mt-6 rounded-xl bg-[#14141c] border border-white/10 p-6" aria-live="polite" aria-busy="true">
+          <AnalysisLoaderContent
+            progress={progress}
+            progressStep={progressStep}
+            analyzingLabel={t("matchInput.analyzing")}
+          />
+        </div>
+      )}
 
       {selectedHomeTeam && !awayTeamOption && (
         <div className="mt-8 pt-6 border-t border-dark-border">
