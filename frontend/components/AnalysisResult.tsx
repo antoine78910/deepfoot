@@ -493,9 +493,9 @@ export function AnalysisResult({ result }: { result: Result }) {
     );
   };
 
-  /** Overlay 15% + CTA — positionné bien en bas du flou pour ne pas chevaucher Exact statistics */
+  /** Overlay 15% + CTA — form plus bas dans le flou (free plan) */
   const exactProbabilitiesOverlay = () => (
-    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-6 pt-48 sm:pt-56">
+    <div className="absolute inset-0 z-10 flex flex-col justify-end items-center p-4 pb-6 pt-64 sm:pt-80">
       <div className="rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center relative z-10">
         <h3 className="text-lg sm:text-xl font-bold text-white">
           {t("analysis.limitedAccessTitle")}
@@ -522,11 +522,11 @@ export function AnalysisResult({ result }: { result: Result }) {
   return (
     <div className="rounded-2xl bg-[#14141c] border border-white/10 overflow-visible shadow-lg relative">
       <div className="px-2 py-4 sm:p-6 space-y-0">
-      {/* AI analysis ready — centré au milieu de la carte (middle), dépasse au-dessus du contenu */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-        <div className="rounded-md border border-[#00ffe8]/50 bg-[#0a0a0e]/95 px-2 py-1 text-center shadow-lg">
-          <p className="text-[#00ffe8] font-medium text-[10px] sm:text-xs leading-tight">{t("analysis.aiReady")}</p>
-          <p className="text-[#00ffe8]/70 text-[9px] sm:text-[10px] leading-tight">{t("analysis.basedOn")}</p>
+      {/* Analyse IA prête — tout en haut, dépasse à moitié (couleur primaire) */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+        <div className="rounded-md border-2 border-[#00ffe8] bg-[#0d0d12] px-2.5 py-1 text-center shadow-lg">
+          <p className="text-[#00ffe8] font-semibold text-[10px] sm:text-xs leading-tight">{t("analysis.aiReady")}</p>
+          <p className="text-[#00ffe8]/80 text-[9px] sm:text-[10px] leading-tight">{t("analysis.basedOn")}</p>
         </div>
       </div>
       {/* Recap - first section: mobile = logos above, names + VS on new lines; desktop = logo | text | logo */}
@@ -535,7 +535,6 @@ export function AnalysisResult({ result }: { result: Result }) {
           <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             {/* Mobile: équipes centrées autour de "vs" au milieu */}
             <div className="flex flex-col sm:hidden gap-1.5 min-w-0 items-center w-full">
-              <p className="text-zinc-500 text-xs text-center">{t("analysis.analyzedMatch")}</p>
               <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
                   {result.home_team_logo ? (
@@ -564,7 +563,6 @@ export function AnalysisResult({ result }: { result: Result }) {
                 <div className="w-14 h-14 rounded-xl bg-[#1c1c28] flex-shrink-0 flex items-center justify-center text-white font-bold">{home.slice(0, 2)}</div>
               )}
               <div className="min-w-0">
-                <p className="text-zinc-500 text-xs sm:text-sm">{t("analysis.analyzedMatch")}</p>
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold mt-0.5 text-white">
                   <span className="text-white">{home}</span>
                   <span className="text-zinc-500 font-normal mx-2">vs</span>

@@ -87,21 +87,40 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Demo analysis card — vraie analyse DeepFoot style (PSG vs Chelsea) */}
+        {/* Demo analysis card — structure alignée app (mobile responsive, comme AnalysisResult) */}
         <section className="w-full max-w-4xl mx-auto mt-12 sm:mt-16 px-4">
           <div className="rounded-2xl bg-[#14141c] border border-white/10 p-6 shadow-lg">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0 flex-1 flex items-center gap-3">
-                <img src="https://media.api-sports.io/football/teams/85.png" alt="" className="w-12 h-12 object-contain flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-zinc-500 text-sm">Analyzed match</p>
-                  <h2 className="text-xl md:text-2xl font-bold text-white mt-0.5">
-                    Paris Saint-Germain vs Chelsea
-                  </h2>
+              <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                {/* Mobile: équipes centrées, vs au milieu (comme app) */}
+                <div className="flex flex-col sm:hidden gap-1.5 min-w-0 items-center w-full">
+                  <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
+                      <img src="https://media.api-sports.io/football/teams/85.png" alt="" className="w-11 h-11 object-contain flex-shrink-0" />
+                      <span className="text-white font-bold text-base truncate">Paris Saint-Germain</span>
+                    </div>
+                    <span className="text-zinc-500 text-sm font-medium flex-shrink-0">vs</span>
+                    <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
+                      <img src="https://media.api-sports.io/football/teams/49.png" alt="" className="w-11 h-11 object-contain flex-shrink-0" />
+                      <span className="text-white font-bold text-base truncate">Chelsea</span>
+                    </div>
+                  </div>
                 </div>
-                <img src="https://media.api-sports.io/football/teams/49.png" alt="" className="w-12 h-12 object-contain flex-shrink-0" />
+                {/* Desktop: logo | title | logo (comme app) */}
+                <div className="hidden sm:flex items-center gap-4 min-w-0 flex-1">
+                  <img src="https://media.api-sports.io/football/teams/85.png" alt="" className="w-14 h-14 object-contain flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white">
+                      <span className="text-white">Paris Saint-Germain</span>
+                      <span className="text-zinc-500 font-normal mx-2">vs</span>
+                      <span className="text-white">Chelsea</span>
+                    </h2>
+                  </div>
+                  <img src="https://media.api-sports.io/football/teams/49.png" alt="" className="w-14 h-14 object-contain flex-shrink-0" />
+                </div>
               </div>
-              <div className="rounded-lg bg-[#00ffe8] px-4 py-2.5 text-center flex-shrink-0">
+              {/* Badge AI analysis ready — ligne dédiée sur mobile, à droite sur desktop */}
+              <div className="rounded-lg bg-[#00ffe8] px-4 py-2.5 text-center flex-shrink-0 w-full sm:w-auto">
                 <p className="text-black font-semibold text-sm">AI analysis ready</p>
                 <p className="text-black/80 text-xs mt-0.5">Based on stats + football news</p>
               </div>
