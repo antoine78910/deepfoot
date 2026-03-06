@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { BGPattern } from "@/components/BGPattern";
 import { getUserFromStorage, setUserInStorage, clearAuthCookie, clearUserFromStorage, type UserInfo, type PlanId } from "@/lib/auth";
@@ -158,6 +158,7 @@ function XIcon({ className }: { className?: string }) {
 
 export function AppLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { t, lang, setLang } = useLanguage();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [analysesUsed, setAnalysesUsed] = useState(0);
@@ -273,7 +274,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     }
     clearAuthCookie();
     clearUserFromStorage();
-    window.location.href = "/";
+    router.push("/");
   };
 
   const closeSidebar = () => setSidebarOpen(false);
@@ -337,7 +338,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider px-3 mb-2">Analysis</p>
           <ul className="space-y-0.5">
             {navKeys.map(({ path, key, icon: Icon, soon }) => {
-              const href = path === "/" ? "/" : path;
+              const href = path === "/" ? "/app" : `/app${path}`;
               const label = t(key);
               const active =
                 !soon &&
@@ -377,7 +378,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             })}
             <li>
               <Link
-                href="/pricing"
+                href="/app/pricing"
                 onClick={closeSidebar}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm border transition-all duration-200 ${
                   pathname === "/pricing" || pathname === "/app/pricing" || pathname?.startsWith("/app/pricing")
@@ -426,7 +427,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
               return isLimitReached ? (
                 <p className="text-xs text-zinc-400 mt-2">
                   {t("nav.limitReached")} •{" "}
-                  <Link href="/pricing" className="text-[#00ffe8] hover:underline">
+                  <Link href="/app/pricing" className="text-[#00ffe8] hover:underline">
                     {t("nav.upgradeForMore")}
                   </Link>
                 </p>

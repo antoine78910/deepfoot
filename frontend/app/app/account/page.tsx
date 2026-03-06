@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getUserFromStorage, setUserInStorage, type PlanId } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -87,6 +87,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function AccountPage() {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useLanguage();
   const { config: currencyConfig, isLoading: currencyLoading } = useGeoCurrency();
   const [user, setUser] = useState<ReturnType<typeof getUserFromStorage>>(null);
@@ -178,7 +179,7 @@ export default function AccountPage() {
       document.cookie = "visifoot_session=; path=/; max-age=0";
       localStorage.removeItem("visifoot_logged_in");
       localStorage.removeItem("visifoot_user");
-      window.location.href = "/";
+      router.push("/");
     }
   };
 

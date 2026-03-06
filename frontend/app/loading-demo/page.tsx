@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { AnalysisStepDisplay } from "@/components/AnalysisStepDisplay";
 
 const DEMO_STEPS = [
@@ -83,9 +84,9 @@ export default function LoadingDemoPage() {
         </div>
 
         <p className="text-zinc-600 text-xs text-center mt-8">
-          <a href="/" className="text-[#00ffe8] hover:underline">Back to home</a>
+          <Link href="/" className="text-[#00ffe8] hover:underline">Back to home</Link>
           {" · "}
-          <a href="/app/matches" className="text-[#00ffe8] hover:underline">Matches</a>
+          <Link href="/app/matches" className="text-[#00ffe8] hover:underline">Matches</Link>
         </p>
       </div>
     </div>
