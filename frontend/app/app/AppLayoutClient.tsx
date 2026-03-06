@@ -282,7 +282,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-app-gradient text-zinc-200 flex flex-col md:flex-row relative">
       <BGPattern variant="grid" mask="fade-edges" size={24} fill="rgba(0,255,232,0.07)" className="fixed inset-0" />
       {/* Mobile header: logo + hamburger */}
-      <header className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-dark-border bg-dark-card/80 backdrop-blur-md sticky top-0 z-30">
+      <header className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0a0a0e]/50 backdrop-blur-md sticky top-0 z-30">
         <Link href="/" className="flex items-center">
           <img src="/logo.png" alt="DEEPFOOT" className="h-12 w-auto object-contain" />
         </Link>

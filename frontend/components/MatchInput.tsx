@@ -481,38 +481,38 @@ export function MatchInput({
                         setHomeTeamOption({ id: null, name: homeName, crest: f.home.logo ?? null });
                         setAwayTeamOption({ id: null, name: awayName, crest: f.away.logo ?? null });
                       }}
-                      className="w-full rounded-xl bg-dark-input/60 border border-dark-border px-4 py-2.5 text-left transition hover:bg-dark-input hover:border-accent-green/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-green/50"
+                      className="w-full rounded-xl bg-dark-input/60 border border-dark-border px-3 sm:px-4 py-2.5 text-left transition hover:bg-dark-input hover:border-accent-green/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent-green/50 min-w-0"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 flex-shrink-0">
-                          <div className="text-zinc-400 text-sm tabular-nums leading-tight whitespace-nowrap">
-                            {f.date} - {f.time}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        <div className="flex-shrink-0 sm:w-32">
+                          <div className="text-zinc-400 text-xs sm:text-sm tabular-nums leading-tight">
+                            {f.date} <span className="sm:inline">–</span> {f.time}
                           </div>
                           {f.league?.name ? (
-                            <div className="text-[11px] text-zinc-500 leading-tight flex items-center gap-1 mt-0.5 min-w-0">
-                              <span className="text-amber-300">🏆</span>
-                              <span className="whitespace-nowrap overflow-hidden" title={f.league.name}>
+                            <div className="text-[11px] text-zinc-500 leading-tight flex items-center gap-1 mt-0.5 min-w-0 overflow-hidden">
+                              <span className="text-amber-300 flex-shrink-0">🏆</span>
+                              <span className="truncate" title={f.league.name}>
                                 {f.league.name}
                               </span>
                             </div>
                           ) : null}
                         </div>
-                        <div className="flex items-center justify-center gap-4 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0 flex-[0_1_13rem]">
+                        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem]">
                             {f.home.logo ? (
-                              <img src={f.home.logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+                              <img src={f.home.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-dark-card flex-shrink-0" />
+                              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
                             )}
-                            <span className="text-white text-sm font-medium truncate">{f.home.name}</span>
+                            <span className="text-white text-xs sm:text-sm font-medium truncate">{f.home.name}</span>
                           </div>
                           <span className="text-zinc-500 text-xs font-medium flex-shrink-0">VS</span>
-                          <div className="flex items-center gap-2 min-w-0 flex-[0_1_13rem] justify-end">
-                            <span className="text-white text-sm font-medium truncate text-right">{f.away.name}</span>
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 sm:flex-[0_1_13rem] justify-end">
+                            <span className="text-white text-xs sm:text-sm font-medium truncate text-right">{f.away.name}</span>
                             {f.away.logo ? (
-                              <img src={f.away.logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+                              <img src={f.away.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7 object-contain flex-shrink-0" />
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-dark-card flex-shrink-0" />
+                              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-dark-card flex-shrink-0" />
                             )}
                           </div>
                         </div>

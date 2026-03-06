@@ -116,6 +116,7 @@ export function TeamAutocomplete({
   const cacheRef = useRef<Map<string, TeamOption[]>>(new Map());
   const warmTeamsRef = useRef<TeamOption[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const justSelectedRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -280,6 +281,7 @@ export function TeamAutocomplete({
     setQuery(team.name);
     setOpen(false);
     setOptions([]);
+    inputRef.current?.blur();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -306,6 +308,7 @@ export function TeamAutocomplete({
     <div ref={wrapperRef} className={`relative ${className}`}>
       <div className="input-gradient-border">
         <input
+          ref={inputRef}
           type="text"
           name="team"
           placeholder={placeholder}

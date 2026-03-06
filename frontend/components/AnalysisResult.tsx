@@ -799,11 +799,11 @@ export function AnalysisResult({ result }: { result: Result }) {
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-zinc-400 text-sm font-medium">🧠 AI confidence</span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#00ffe8] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                 </div>
-                <span className="text-zinc-300 text-sm font-medium whitespace-nowrap">{label}</span>
+                <span className="text-zinc-300 text-sm font-medium whitespace-nowrap flex-shrink-0">{label}</span>
               </div>
               <p className="text-zinc-500 text-xs mt-1.5">Confidence level based on available data quality.</p>
             </div>
@@ -859,27 +859,27 @@ export function AnalysisResult({ result }: { result: Result }) {
         <h2 className="text-lg font-semibold text-white mb-4">📊 {t("analysis.modelWinProbabilities")}</h2>
         {fullAnalysis ? (
           <>
-            <div className="space-y-4 mb-4">
-              <div className="flex items-center gap-4">
-                <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{home} win</span>
-                <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{home} win</span>
+                <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#00ffe8] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_home ?? result.prob_home ?? 0}%` }} />
                 </div>
-                <span className="text-[#00ffe8] font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
+                <span className="text-[#00ffe8] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-zinc-300 text-sm w-28 flex-shrink-0">Draw</span>
-                <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Draw</span>
+                <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#a3a3a3] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_draw ?? result.prob_draw ?? 0}%` }} />
                 </div>
-                <span className="text-zinc-300 font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
+                <span className="text-zinc-300 font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{away} win</span>
-                <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{away} win</span>
+                <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#ef4444] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_away ?? result.prob_away ?? 0}%` }} />
                 </div>
-                <span className="text-[#ef4444] font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_away ?? result.prob_away ?? 0}%</span>
+                <span className="text-[#ef4444] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_away ?? result.prob_away ?? 0}%</span>
               </div>
             </div>
             <p className="text-zinc-500 text-xs mt-2">{t("analysis.exactProbNote")}</p>
@@ -897,27 +897,27 @@ export function AnalysisResult({ result }: { result: Result }) {
         ) : (
           <div className="relative min-h-[320px]">
             <div className="select-none pointer-events-none blur-sm opacity-85 absolute inset-0" aria-hidden>
-              <div className="space-y-4 mb-4">
-                <div className="flex items-center gap-4">
-                  <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{home} win</span>
-                  <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+              <div className="space-y-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{home} win</span>
+                  <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_home ?? result.prob_home ?? 0}%` }} />
                   </div>
-                  <span className="text-[#00ffe8] font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
+                  <span className="text-[#00ffe8] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-zinc-300 text-sm w-28 flex-shrink-0">Draw</span>
-                  <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Draw</span>
+                  <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_draw ?? result.prob_draw ?? 0}%` }} />
                   </div>
-                  <span className="text-zinc-300 font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
+                  <span className="text-zinc-300 font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-zinc-300 text-sm w-28 flex-shrink-0">{away} win</span>
-                  <div className="flex-1 h-3 bg-dark-input rounded-full overflow-hidden min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{away} win</span>
+                  <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_away ?? result.prob_away ?? 0}%` }} />
                   </div>
-                  <span className="text-[#ef4444] font-semibold text-sm w-10 text-right flex-shrink-0">{result.internal_prob_away ?? result.prob_away ?? 0}%</span>
+                  <span className="text-[#ef4444] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_away ?? result.prob_away ?? 0}%</span>
                 </div>
               </div>
               {result.implied_odds_home != null && (
