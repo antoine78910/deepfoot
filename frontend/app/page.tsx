@@ -87,15 +87,19 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Demo analysis card - same style as real analysis */}
+        {/* Demo analysis card — vraie analyse DeepFoot style (PSG vs Chelsea) */}
         <section className="w-full max-w-4xl mx-auto mt-12 sm:mt-16 px-4">
           <div className="rounded-2xl bg-[#14141c] border border-white/10 p-6 shadow-lg">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-zinc-500 text-sm">Analyzed match</p>
-                <h2 className="text-xl md:text-2xl font-bold text-white mt-0.5">
-                  Paris Saint Germain vs Real Madrid
-                </h2>
+              <div className="min-w-0 flex-1 flex items-center gap-3">
+                <img src="https://media.api-sports.io/football/teams/85.png" alt="" className="w-12 h-12 object-contain flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-zinc-500 text-sm">Analyzed match</p>
+                  <h2 className="text-xl md:text-2xl font-bold text-white mt-0.5">
+                    Paris Saint-Germain vs Chelsea
+                  </h2>
+                </div>
+                <img src="https://media.api-sports.io/football/teams/49.png" alt="" className="w-12 h-12 object-contain flex-shrink-0" />
               </div>
               <div className="rounded-lg bg-[#00ffe8] px-4 py-2.5 text-center flex-shrink-0">
                 <p className="text-black font-semibold text-sm">AI analysis ready</p>
@@ -105,76 +109,79 @@ export default function LandingPage() {
 
             <div className="border-t border-white/10 mt-5 pt-5" />
 
-            <div className="grid md:grid-cols-2 gap-6 md:gap-8">
-              <div>
-                <h3 className="text-white font-semibold text-sm mb-3">Team statistics</h3>
-                <div className="space-y-3">
-                  <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4">
-                    <p className="font-semibold text-white text-sm">Paris Saint Germain</p>
-                    <p className="text-zinc-400 text-xs mt-1.5 flex items-center gap-1">
-                      Form: <span className="inline-flex gap-0.5">✅ ✅ ✅ ➖ ❌</span>
-                    </p>
-                    <p className="text-zinc-400 text-xs mt-0.5">Goals/match: 2.1</p>
-                  </div>
-                  <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4">
-                    <p className="font-semibold text-white text-sm">Real Madrid</p>
-                    <p className="text-zinc-400 text-xs mt-1.5 flex items-center gap-1">
-                      Form: <span className="inline-flex gap-0.5">✅ ✅ ➖ ➖ ❌</span>
-                    </p>
-                    <p className="text-zinc-400 text-xs mt-0.5">Goals/match: 2.4</p>
-                  </div>
+            <h3 className="text-white font-semibold text-sm mb-3">Team statistics</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4 flex items-center gap-3">
+                <img src="https://media.api-sports.io/football/teams/85.png" alt="" className="w-10 h-10 object-contain flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-white text-sm">Paris Saint-Germain</p>
+                  <p className="text-zinc-400 text-xs mt-1 flex items-center gap-1">
+                    Form: <span className="inline-flex gap-0.5">✅ ✅ ➖ ❌ ✅</span> <span className="text-zinc-500">W-D-L: 3-1-1</span>
+                  </p>
+                  <p className="text-zinc-400 text-xs mt-0.5">Goals/match: 2.2 · xG: 2.1</p>
                 </div>
               </div>
-              <div>
-                <h3 className="text-white font-semibold text-sm mb-3">AI probabilities</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-zinc-300 text-sm w-20 flex-shrink-0">PSG win</span>
-                    <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
-                      <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: "44%" }} />
-                    </div>
-                    <span className="text-white font-semibold text-sm w-8 text-right">44%</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Draw</span>
-                    <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
-                      <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: "26%" }} />
-                    </div>
-                    <span className="text-white font-semibold text-sm w-8 text-right">26%</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Real win</span>
-                    <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
-                      <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: "30%" }} />
-                    </div>
-                    <span className="text-white font-semibold text-sm w-8 text-right">30%</span>
-                  </div>
+              <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-4 flex items-center gap-3">
+                <img src="https://media.api-sports.io/football/teams/49.png" alt="" className="w-10 h-10 object-contain flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-white text-sm">Chelsea</p>
+                  <p className="text-zinc-400 text-xs mt-1 flex items-center gap-1">
+                    Form: <span className="inline-flex gap-0.5">✅ ➖ ✅ ✅ ➖</span> <span className="text-zinc-500">W-D-L: 3-2-0</span>
+                  </p>
+                  <p className="text-zinc-400 text-xs mt-0.5">Goals/match: 1.8 · xG: 1.9</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 mt-5 pt-5" />
+
+            <h3 className="text-white font-semibold text-sm mb-3">AI probabilities</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-300 text-sm w-24 flex-shrink-0">PSG win</span>
+                <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
+                  <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: "42%" }} />
+                </div>
+                <span className="text-white font-semibold text-sm w-8 text-right">42%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-300 text-sm w-24 flex-shrink-0">Draw</span>
+                <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
+                  <div className="h-full bg-zinc-400 rounded-full" style={{ width: "28%" }} />
+                </div>
+                <span className="text-white font-semibold text-sm w-8 text-right">28%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-300 text-sm w-24 flex-shrink-0">Chelsea win</span>
+                <div className="flex-1 h-3 bg-[#1c1c28] rounded-full overflow-hidden min-w-0">
+                  <div className="h-full bg-[#ef4444]/80 rounded-full" style={{ width: "30%" }} />
+                </div>
+                <span className="text-white font-semibold text-sm w-8 text-right">30%</span>
               </div>
             </div>
 
             <div className="border-t border-white/10 mt-6 pt-6" />
 
-            <h3 className="text-white font-semibold text-sm mb-3">Key factors identified by AI</h3>
+            <h3 className="text-white font-semibold text-sm mb-3">Key factors by AI</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               <ul className="space-y-1.5 text-sm text-zinc-300">
                 <li className="flex items-start gap-2">
                   <span className="text-[#00ffe8] mt-0.5">•</span>
-                  <span>High offensive form</span>
+                  <span>PSG strong at home, high xG in last 5</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[#00ffe8] mt-0.5">•</span>
-                  <span>Can leave spaces behind</span>
+                  <span>Defensive line can leave space in transition</span>
                 </li>
               </ul>
               <ul className="space-y-1.5 text-sm text-zinc-300">
                 <li className="flex items-start gap-2">
                   <span className="text-[#ef4444] mt-0.5">•</span>
-                  <span>Dangerous fast transitions</span>
+                  <span>Chelsea unbeaten in last 5, solid form</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[#ef4444] mt-0.5">•</span>
-                  <span>Strong at home</span>
+                  <span>Counter-attack threat, set-pieces danger</span>
                 </li>
               </ul>
             </div>
@@ -183,7 +190,7 @@ export default function LandingPage() {
 
             <h3 className="text-white font-semibold text-sm mb-2">Quick summary</h3>
             <p className="text-zinc-300 text-sm leading-relaxed">
-              DeepFoot AI analyzes form, recent actions and key stats: PSG arrives with a confident attack, while Real is chaining good results. A match that promises to be open with opportunities on both sides.
+              DeepFoot AI combines form, xG and H2H: PSG has the edge at home with a higher attacking output, but Chelsea are on an unbeaten run and dangerous on the break. The model gives a slight advantage to the hosts (42% vs 30% away win), with a 28% draw. Key battle: PSG’s possession vs Chelsea’s transitions.
             </p>
 
             <div className="border-t border-white/10 mt-6 pt-6" />

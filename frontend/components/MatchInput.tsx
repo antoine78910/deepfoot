@@ -10,6 +10,20 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getAppHref } from "@/lib/app-url";
 import { getUserFromStorage } from "@/lib/auth";
 
+const LOADING_STEPS = [
+  "Initializing Deepfoot AI engine...",
+  "1. Fetching global football datasets",
+  "2. Detecting match context",
+  "3. Analyzing team performance",
+  "4. Computing advanced metrics",
+  "5. Evaluating tactical matchup",
+  "6. Running AI pattern recognition",
+  "7. Building probabilistic model",
+  "8. Simulating match outcomes",
+  "9. Scanning bookmaker markets",
+  "10. Generating final prediction",
+];
+
 function LoaderSpinner({ className }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className ?? "w-5 h-5"}`} fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -24,13 +38,16 @@ function AnalysisLoaderContent({
   progress,
   progressStep,
   analyzingLabel,
+  simulatingCount = null,
   className = "",
 }: {
   progress: number;
   progressStep: string;
   analyzingLabel: string;
+  simulatingCount?: number | null;
   className?: string;
 }) {
+  const isSimulatingStep = progressStep === "8. Simulating match outcomes";
   return (
     <div className={`flex flex-col items-center gap-4 w-full ${className}`}>
       <span className="flex items-center gap-2 text-white">
@@ -43,6 +60,11 @@ function AnalysisLoaderContent({
         variant="default"
         className="w-full min-h-[2rem] text-zinc-300"
       />
+      {isSimulatingStep && simulatingCount != null && (
+        <p className="text-sm tabular-nums text-zinc-400 w-full text-center">
+          Simulating matches: {simulatingCount.toLocaleString()} / 50,000
+        </p>
+      )}
       <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden shadow-inner">
         <div
           className="h-full bg-gradient-to-r from-[#00ffe8] to-emerald-400 rounded-full transition-all duration-700 ease-out"
@@ -95,6 +117,7 @@ export function MatchInput({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressStep, setProgressStep] = useState("");
+  const [simulatingCount, setSimulatingCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [limitModalVariant, setLimitModalVariant] = useState<PricingModalVariant | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingFixture[]>([]);
@@ -103,10 +126,8 @@ export function MatchInput({
   const { t, lang } = useLanguage();
   const submitIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const stepQueueRef = useRef<string[]>([]);
-  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastQueuedStepRef = useRef<string>("");
-  const STEP_DISPLAY_MS = 1500;
+  const stepSequenceCleanupRef = useRef<(() => void) | null>(null);
+  const simulatingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Sync from URL when landing on /analyse?home=...&away=...
   useEffect(() => {
@@ -175,6 +196,62 @@ export function MatchInput({
     else if (awayTeamOption && awayTeam.trim() !== awayTeamOption.name) setAwayTeamOption(null);
   }, [awayTeam, awayTeamOption]);
 
+  // Séquence d’étapes de chargement (2–4 s par étape, ordre fixe)
+  useEffect(() => {
+    if (!loading) {
+      stepSequenceCleanupRef.current?.();
+      stepSequenceCleanupRef.current = null;
+      setSimulatingCount(null);
+      return;
+    }
+    const timeouts: Array<() => void> = [];
+    function runStep(i: number) {
+      if (i >= LOADING_STEPS.length) return;
+      if (simulatingIntervalRef.current) {
+        clearInterval(simulatingIntervalRef.current);
+        simulatingIntervalRef.current = null;
+      }
+      setProgressStep(LOADING_STEPS[i]);
+      setProgress(Math.round(((i + 1) / LOADING_STEPS.length) * 100));
+      if (i === 8) {
+        setSimulatingCount(0);
+        const target1 = 12540;
+        const target2 = 50000;
+        const duration1 = 1200;
+        const duration2 = 1500;
+        const start = Date.now();
+        simulatingIntervalRef.current = setInterval(() => {
+          const elapsed = Date.now() - start;
+          if (elapsed < duration1) {
+            setSimulatingCount(Math.round((elapsed / duration1) * target1));
+          } else if (elapsed < duration1 + duration2) {
+            const t2 = (elapsed - duration1) / duration2;
+            setSimulatingCount(target1 + Math.round(t2 * (target2 - target1)));
+          } else {
+            setSimulatingCount(target2);
+          }
+        }, 50);
+        timeouts.push(() => {
+          if (simulatingIntervalRef.current) {
+            clearInterval(simulatingIntervalRef.current);
+            simulatingIntervalRef.current = null;
+          }
+        });
+      } else {
+        setSimulatingCount(null);
+      }
+      const delayMs = i === 8 ? 3000 : 2000 + Math.random() * 2000;
+      const t = setTimeout(() => runStep(i + 1), delayMs);
+      timeouts.push(() => clearTimeout(t));
+    }
+    runStep(0);
+    const cleanup = () => {
+      timeouts.forEach((f) => f());
+    };
+    stepSequenceCleanupRef.current = cleanup;
+    return cleanup;
+  }, [loading]);
+
   useEffect(() => {
     if (!selectedHomeTeam?.trim() && selectedHomeTeamId == null) {
       setUpcoming([]);
@@ -216,15 +293,12 @@ export function MatchInput({
 
     const submitId = ++submitIdRef.current;
 
-    if (stepIntervalRef.current) {
-      clearInterval(stepIntervalRef.current);
-      stepIntervalRef.current = null;
-    }
-    stepQueueRef.current = [];
-    lastQueuedStepRef.current = "";
+    stepSequenceCleanupRef.current?.();
+    stepSequenceCleanupRef.current = null;
     setLoading(true);
     setProgress(0);
     setProgressStep("");
+    setSimulatingCount(null);
     try {
       const body: Record<string, string | number | boolean> = {
         home_team: homeTeam.trim(),
@@ -274,22 +348,7 @@ export function MatchInput({
             try {
               const event = JSON.parse(line) as { type?: string; step?: string; percent?: number; data?: Record<string, unknown>; message?: string; code?: string };
               if (event.type === "progress") {
-                setProgress(event.percent ?? 0);
-                const step = (event.step ?? "").trim();
-                if (step && step !== lastQueuedStepRef.current) {
-                  lastQueuedStepRef.current = step;
-                  stepQueueRef.current.push(step);
-                  if (!stepIntervalRef.current) {
-                    const first = stepQueueRef.current.shift();
-                    if (first) setProgressStep(first);
-                    stepIntervalRef.current = setInterval(() => {
-                      if (stepQueueRef.current.length > 0) {
-                        const next = stepQueueRef.current.shift();
-                        if (next) setProgressStep(next);
-                      }
-                    }, STEP_DISPLAY_MS);
-                  }
-                }
+                // Progression et étapes pilotées côté front (séquence LOADING_STEPS)
               } else if (event.type === "result" && event.data) {
                 data = event.data as Record<string, unknown>;
               } else if (event.type === "error") {
@@ -380,12 +439,9 @@ export function MatchInput({
       } catch {
         // ignore
       }
-      if (stepIntervalRef.current) {
-        clearInterval(stepIntervalRef.current);
-        stepIntervalRef.current = null;
-      }
-      stepQueueRef.current = [];
-      lastQueuedStepRef.current = "";
+      stepSequenceCleanupRef.current?.();
+      stepSequenceCleanupRef.current = null;
+      setSimulatingCount(null);
       setProgress(100);
       setProgressStep("Done");
       await new Promise((r) => setTimeout(r, 300));
@@ -400,21 +456,14 @@ export function MatchInput({
       setError(err instanceof Error ? err.message : "Analysis failed.");
       setProgress(0);
       setProgressStep("");
-      if (stepIntervalRef.current) {
-        clearInterval(stepIntervalRef.current);
-        stepIntervalRef.current = null;
-      }
-      stepQueueRef.current = [];
-      lastQueuedStepRef.current = "";
+      stepSequenceCleanupRef.current?.();
+      stepSequenceCleanupRef.current = null;
+      setSimulatingCount(null);
     } finally {
       if (submitId === submitIdRef.current) {
         setLoading(false);
-        if (stepIntervalRef.current) {
-          clearInterval(stepIntervalRef.current);
-          stepIntervalRef.current = null;
-        }
-        stepQueueRef.current = [];
-        lastQueuedStepRef.current = "";
+        stepSequenceCleanupRef.current?.();
+        stepSequenceCleanupRef.current = null;
       }
     }
   };
@@ -519,6 +568,7 @@ export function MatchInput({
             progress={progress}
             progressStep={progressStep}
             analyzingLabel={t("matchInput.analyzing")}
+            simulatingCount={simulatingCount}
           />
         </div>
       )}
