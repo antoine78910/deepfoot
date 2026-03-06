@@ -533,25 +533,27 @@ export function AnalysisResult({ result }: { result: Result }) {
       <div className="pb-4 sm:pb-6 pt-4 sm:pt-0">
         <div className="flex flex-wrap items-center justify-between gap-4 sm:pr-24">
           <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-            {/* Mobile: blason aligné avec le nom de l'équipe, noms un peu plus gros pour gagner de la place */}
-            <div className="flex flex-col sm:hidden gap-1.5 min-w-0">
+            {/* Mobile: équipes centrées autour de "vs" au milieu */}
+            <div className="flex flex-col sm:hidden gap-1.5 min-w-0 items-center w-full">
               <p className="text-zinc-500 text-xs text-center">{t("analysis.analyzedMatch")}</p>
-              <div className="flex items-center gap-2 min-w-0">
-                {result.home_team_logo ? (
-                  <img src={result.home_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{home.slice(0, 2)}</div>
-                )}
-                <span className="text-white font-bold text-base sm:text-lg truncate flex-1 min-w-0">{home}</span>
-              </div>
-              <p className="text-zinc-500 text-sm text-center">vs</p>
-              <div className="flex items-center gap-2 min-w-0">
-                {result.away_team_logo ? (
-                  <img src={result.away_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{away.slice(0, 2)}</div>
-                )}
-                <span className="text-white font-bold text-base sm:text-lg truncate flex-1 min-w-0">{away}</span>
+              <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
+                  {result.home_team_logo ? (
+                    <img src={result.home_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{home.slice(0, 2)}</div>
+                  )}
+                  <span className="text-white font-bold text-base truncate">{home}</span>
+                </div>
+                <span className="text-zinc-500 text-sm font-medium flex-shrink-0">vs</span>
+                <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
+                  {result.away_team_logo ? (
+                    <img src={result.away_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{away.slice(0, 2)}</div>
+                  )}
+                  <span className="text-white font-bold text-base truncate">{away}</span>
+                </div>
               </div>
             </div>
             {/* Desktop: logo | text | logo */}
@@ -697,19 +699,20 @@ export function AnalysisResult({ result }: { result: Result }) {
             </h2>
             <span className="text-zinc-500 text-[10px] sm:text-xs">{t("analysis.globalForm")}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              {result.home_team_logo ? (
-                <img src={result.home_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
-              ) : (
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{home.slice(0, 2)}</div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                  <p className="font-semibold text-white text-xs sm:text-sm truncate">{home}</p>
-                  <FormLabelBlock label={result.home_form_label ?? ""} compact />
-                </div>
-                <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {/* Mobile: blason aligné avec le nom sur une ligne, puis label + form en dessous (plus de place en longueur) */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+                {result.home_team_logo ? (
+                  <img src={result.home_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{home.slice(0, 2)}</div>
+                )}
+                <p className="font-semibold text-white text-xs sm:text-sm truncate">{home}</p>
+              </div>
+              <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+                <FormLabelBlock label={result.home_form_label ?? ""} compact />
+                <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {(() => {
                     const form5 = [...(result.home_form ?? []).slice(0, 5)];
                     while (form5.length < 5) form5.push("");
@@ -719,18 +722,18 @@ export function AnalysisResult({ result }: { result: Result }) {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              {result.away_team_logo ? (
-                <img src={result.away_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
-              ) : (
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{away.slice(0, 2)}</div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-                  <p className="font-semibold text-white text-xs sm:text-sm truncate">{away}</p>
-                  <FormLabelBlock label={result.away_form_label ?? ""} compact />
-                </div>
-                <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+                {result.away_team_logo ? (
+                  <img src={result.away_team_logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px] sm:text-xs">{away.slice(0, 2)}</div>
+                )}
+                <p className="font-semibold text-white text-xs sm:text-sm truncate">{away}</p>
+              </div>
+              <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+                <FormLabelBlock label={result.away_form_label ?? ""} compact />
+                <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-0.5 sm:gap-1.5 flex-wrap">
                   {(() => {
                     const form5 = [...(result.away_form ?? []).slice(0, 5)];
                     while (form5.length < 5) form5.push("");
