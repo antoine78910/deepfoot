@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
 import { formatPrice } from "@/lib/geoCurrency";
 import { getWhopCheckoutUrl, getDatafastVisitorId } from "@/lib/whopCheckout";
+import { trackDatafastGoal } from "@/lib/datafast";
 import type { WhopPlanId } from "@/lib/whopCheckout";
 import { getUserFromStorage } from "@/lib/auth";
 import { Medal, Check, Gem } from "lucide-react";
@@ -68,6 +69,7 @@ export function UnlockPricingModal({
   const [loadingPlan, setLoadingPlan] = useState<WhopPlanId | null>(null);
 
   const goToWhop = (plan: WhopPlanId, source: string) => {
+    trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
     const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source);
     requestAnimationFrame(() => {
@@ -76,6 +78,10 @@ export function UnlockPricingModal({
       }, 400);
     });
   };
+
+  useEffect(() => {
+    if (open) trackDatafastGoal("unlock_modal_opened", { variant: variant ?? "all" });
+  }, [open, variant]);
 
   useEffect(() => {
     if (!open) return;

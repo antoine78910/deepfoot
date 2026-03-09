@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { BGPattern } from "@/components/BGPattern";
 import { getUserFromStorage, setUserInStorage, clearAuthCookie, clearUserFromStorage, type UserInfo, type PlanId } from "@/lib/auth";
 import { getDatafastVisitorId } from "@/lib/whopCheckout";
+import { trackDatafastGoal } from "@/lib/datafast";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Lang } from "@/lib/translations";
 
@@ -206,6 +207,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
         const planFromSync = payload?.plan as string | undefined;
         const validPlans: PlanId[] = ["starter", "pro", "lifetime"];
         if (planFromSync && validPlans.includes(planFromSync as PlanId)) {
+          trackDatafastGoal("checkout_success", { plan: planFromSync });
           const u = getUserFromStorage();
           if (u) {
             const next: UserInfo = { ...u, plan: planFromSync as PlanId, subscription_ends_at: null };

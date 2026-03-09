@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth";
 import { SIGN_IN_HREF, ANALYSE_HREF, getAppAuthCallbackUrl, getAppRootUrl } from "@/lib/app-url";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { trackDatafastGoal } from "@/lib/datafast";
 
 function SignUpPageContent() {
   const [email, setEmail] = useState("");
@@ -20,6 +21,10 @@ function SignUpPageContent() {
   const [emailSent, setEmailSent] = useState(false);
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
+
+  useEffect(() => {
+    trackDatafastGoal("view_sign_up");
+  }, []);
 
   // If Supabase redirected here with tokens in hash (wrong Site URL in dashboard), redirect to /auth/callback on same host
   useEffect(() => {
@@ -90,6 +95,7 @@ function SignUpPageContent() {
       const redirectTo = safeNext
         ? `${getAppAuthCallbackUrl()}?next=${encodeURIComponent(safeNext)}`
         : getAppAuthCallbackUrl();
+      trackDatafastGoal("sign_up_submitted", { method: "google" });
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {

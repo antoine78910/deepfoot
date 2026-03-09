@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { getAppAuthCallbackUrl, SIGN_IN_HREF } from "@/lib/app-url";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { trackDatafastGoal } from "@/lib/datafast";
 
 const PENDING_MATCH_KEY = "visifoot_pending_match";
 
@@ -62,8 +63,10 @@ export function SignupModal({ open, onClose, onSignIn, pendingMatch }: SignupMod
         return;
       }
       if (data?.user && !data?.session) {
+        trackDatafastGoal("sign_up_submitted", { method: "email", source: "modal" });
         setEmailSent(true);
       } else if (data?.session && onSignIn) {
+        trackDatafastGoal("sign_up_submitted", { method: "email", source: "modal" });
         onSignIn();
         onClose();
       }
@@ -76,6 +79,7 @@ export function SignupModal({ open, onClose, onSignIn, pendingMatch }: SignupMod
 
   const handleGoogle = async () => {
     try {
+      trackDatafastGoal("sign_up_submitted", { method: "google", source: "modal" });
       if (pendingMatch?.home && pendingMatch?.away) {
         try {
           sessionStorage.setItem(PENDING_MATCH_KEY, JSON.stringify({ home: pendingMatch.home, away: pendingMatch.away }));

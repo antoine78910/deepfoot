@@ -68,6 +68,12 @@ export default function RootLayout({
           />
         ) : null}
         <ClientProviders>{children}</ClientProviders>
+        <script
+          id="datafast-queue"
+          dangerouslySetInnerHTML={{
+            __html: `window.datafast = window.datafast || function() { (window.datafast.q = window.datafast.q || []).push(arguments); };`,
+          }}
+        />
         <Script
           src="https://datafa.st/js/script.js"
           data-website-id="dfid_hXUwdw1eEOt3xICr0vj4y"
