@@ -104,7 +104,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
             else:
                 logger.info("me: user_id=%s Whop returned no current membership (no active/trialing)", _mask_user_id(user_id))
 
-    plan, used, last, subscription_ends_at, whop_membership_id = get_plan_and_usage(user_id)
+    plan, used, last, subscription_ends_at, whop_membership_id, next_analysis_at = get_plan_and_usage(user_id)
     subscription_started_at: str | None = None
     if user_id:
         logger.info(
@@ -166,6 +166,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         "can_analyze": allowed,
         "subscription_ends_at": subscription_ends_at,
         "subscription_started_at": subscription_started_at,
+        "next_analysis_at": next_analysis_at,  # ISO timestamp when at limit (24h from last use)
     }
 
 
@@ -432,12 +433,28 @@ async def _whop_get_user_id_by_email(email: str, whop_key: str, company_id: str)
         return (None, None)
 
 
+def _whop_membership_sort_key(ms: dict) -> tuple[int, float]:
+    """
+    Sort key for picking best membership: (renewing_first, -created_at_ts).
+    Renewing (not canceled) first, then most recent first. Lower key = higher priority.
+    """
+    _, is_canceled = _whop_parse_membership_status(ms)
+    renewing_first = 0 if not is_canceled else 1  # renewing first
+    raw = ms.get("created_at")
+    try:
+        ts = int(raw) if isinstance(raw, (int, float)) else int(float(str(raw).strip()))
+    except (ValueError, TypeError):
+        ts = 0
+    return (renewing_first, -ts)
+
+
 async def _whop_get_current_membership(
     email: str, whop_key: str, company_id: str
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """
-    Stratégie recommandée Whop : récupérer l'abonnement actuel = le plus récent actif/trialing.
-    GET /memberships avec statuses=["active", "trialing"], order="created_at", direction="desc", first=1.
+    Récupère l'abonnement actuel Whop : si plusieurs actifs, on prend d'abord celui qui est
+    renewing (pas cancel_at_period_end), sinon le plus récent (created_at desc).
+    GET /memberships statuses=active,trialing, first=50, puis tri (renewing first, then newest).
     Returns (app_plan, membership_id, subscription_ends_at, api_error).
     """
     if not email or not whop_key or not company_id:
@@ -460,7 +477,7 @@ async def _whop_get_current_membership(
                     "statuses": ["active", "trialing"],
                     "order": "created_at",
                     "direction": "desc",
-                    "first": 1,
+                    "first": 50,
                 },
                 headers=headers,
                 timeout=15.0,
@@ -470,14 +487,17 @@ async def _whop_get_current_membership(
             return (None, None, None, None)
         data = r.json()
         list_ms = data.get("data") if isinstance(data.get("data"), list) else data.get("memberships") or []
-        if not list_ms or not isinstance(list_ms[0], dict):
+        list_ms = [m for m in list_ms if isinstance(m, dict)]
+        if not list_ms:
             return (None, None, None, None)
+        # Prefer renewing (active, not cancel_at_period_end), then most recent
+        list_ms.sort(key=_whop_membership_sort_key)
         ms = list_ms[0]
         membership_id = ms.get("id") or ms.get("membership_id")
         plan_id = ms.get("plan_id") or (ms.get("plan") or {}).get("id") if isinstance(ms.get("plan"), dict) else None
         if not membership_id:
             return (None, None, None, None)
-        # Get details to know cancel_at_period_end and period_end
+        # Get details for period_end and final is_canceled
         _, period_end_iso, is_canceled = await _whop_get_membership_details(membership_id, whop_key)
         app_plan = (WHOP_PLAN_TO_APP.get((plan_id or "").strip()) if plan_id else "starter") or "starter"
         subscription_ends_at = period_end_iso if is_canceled else None
@@ -591,7 +611,7 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
             params: dict = {"company_id": company_id, "first": 50}
             if user_id_for_memberships:
                 params["user_ids"] = [user_id_for_memberships]
-            params["statuses"] = ["active"]
+            params["statuses"] = ["active", "trialing"]
             async with httpx.AsyncClient() as client:
                 r = await client.get(
                     f"{base}{path}",
@@ -605,12 +625,9 @@ async def _whop_get_plan_for_email(email: str, whop_key: str, company_id: str) -
             list_ms = data.get("data") if isinstance(data.get("data"), list) else data.get("memberships") or []
             if not isinstance(list_ms, list):
                 list_ms = []
-            for ms in list_ms:
-                if isinstance(ms, dict) and (ms.get("status") or "").lower() == "active":
-                    membership_id = ms.get("id") or ms.get("membership_id")
-                    plan_id = ms.get("plan_id") or (ms.get("plan") or {}).get("id") if isinstance(ms.get("plan"), dict) else None
-                    break
-            if not membership_id and list_ms and isinstance(list_ms[0], dict):
+            list_ms = [m for m in list_ms if isinstance(m, dict)]
+            if list_ms:
+                list_ms.sort(key=_whop_membership_sort_key)  # renewing first, then most recent
                 ms = list_ms[0]
                 membership_id = ms.get("id") or ms.get("membership_id")
                 plan_id = ms.get("plan_id") or (ms.get("plan") or {}).get("id") if isinstance(ms.get("plan"), dict) else None
