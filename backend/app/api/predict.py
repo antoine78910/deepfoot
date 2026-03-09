@@ -1,8 +1,11 @@
 # backend/app/api/predict.py
 import json
+import logging
 import queue
 import threading
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Query, Header
 from fastapi.responses import StreamingResponse
@@ -896,6 +899,12 @@ def predict_stream(
     """
     user_id = (x_user_id or "").strip()
     allowed, msg, full_analysis, limit_reason = can_analyze(user_id)
+    logger.info(
+        "predict/stream: user_id=%s allowed=%s full_analysis=%s",
+        (user_id[:8] + "...") if len(user_id) > 8 else (user_id or "(none)"),
+        allowed,
+        full_analysis,
+    )
     if not allowed:
         def error_stream():
             yield json.dumps({"type": "error", "message": msg, "code": limit_reason or "limit"}, ensure_ascii=False) + "\n"

@@ -9,6 +9,7 @@ import { AnalysisStepDisplay } from "./AnalysisStepDisplay";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getAppHref } from "@/lib/app-url";
 import { getUserFromStorage, getHistoryKey } from "@/lib/auth";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const LOADING_STEPS = [
   "Initializing Deepfoot AI engine...",
@@ -316,8 +317,17 @@ export function MatchInput({
       if (Number.isInteger(awayId)) body.away_team_id = awayId;
 
       const user = getUserFromStorage();
+      let userId: string | undefined = user?.id;
+      if (!userId && typeof window !== "undefined") {
+        try {
+          const { data } = await getSupabaseBrowserClient().auth.getSession();
+          userId = data?.session?.user?.id ?? undefined;
+        } catch {
+          // ignore
+        }
+      }
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (user?.id) headers["X-User-Id"] = user.id;
+      if (userId) headers["X-User-Id"] = userId;
 
       const res = await fetch(`${API_URL}/predict/stream`, {
         method: "POST",
