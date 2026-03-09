@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
@@ -69,6 +69,9 @@ export function UnlockPricingModal({
   const [loadingPlan, setLoadingPlan] = useState<WhopPlanId | null>(null);
 
   const goToWhop = (plan: WhopPlanId, source: string) => {
+    if (plan === "starter") trackDatafastGoal("unlock_9");
+    else if (plan === "pro") trackDatafastGoal("unlock_19");
+    else if (plan === "lifetime") trackDatafastGoal("unlock_99");
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
     const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source);
@@ -78,15 +81,6 @@ export function UnlockPricingModal({
       }, 400);
     });
   };
-
-  const openedGoalFiredRef = useRef(false);
-  useEffect(() => {
-    if (open && !openedGoalFiredRef.current) {
-      openedGoalFiredRef.current = true;
-      trackDatafastGoal("unlock_modal_opened", { variant: variant ?? "all" });
-    }
-    if (!open) openedGoalFiredRef.current = false;
-  }, [open, variant]);
 
   useEffect(() => {
     if (!open) return;

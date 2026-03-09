@@ -64,6 +64,9 @@ function PricingPage() {
   const [loadingPlan, setLoadingPlan] = useState<WhopPlanId | null>(null);
 
   const goToWhop = (plan: WhopPlanId, source: string) => {
+    if (plan === "starter") trackDatafastGoal("unlock_9");
+    else if (plan === "pro") trackDatafastGoal("unlock_19");
+    else if (plan === "lifetime") trackDatafastGoal("unlock_99");
     trackDatafastGoal("click_unlock", { source });
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
