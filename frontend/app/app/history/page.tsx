@@ -60,12 +60,14 @@ export default function HistoryPage() {
   useEffect(() => {
     const uid = getUserFromStorage()?.id;
     if (uid) {
-      getSupabaseBrowserClient()
-        .from("analysis_history")
-        .select("id, home_team, away_team, home_logo, away_logo, league, result, created_at")
-        .eq("user_id", uid)
-        .order("created_at", { ascending: false })
-        .limit(50)
+      void Promise.resolve(
+        getSupabaseBrowserClient()
+          .from("analysis_history")
+          .select("id, home_team, away_team, home_logo, away_logo, league, result, created_at")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(50)
+      )
         .then(({ data, error }) => {
           if (!error && Array.isArray(data)) {
             const mapped: HistoryItem[] = data.map((row) => ({
