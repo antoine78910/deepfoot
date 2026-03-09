@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnalysisResult } from "@/components/AnalysisResult";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getHistoryKey } from "@/lib/auth";
+import { getHistoryKey, getUserFromStorage } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -123,14 +123,19 @@ function AnalyzeContent() {
     );
   }
 
-  // Ne pas surcharger full_analysis côté client : on fait confiance au backend (Starter = 1 full/jour, Free = flou)
+  // Depuis l'historique, le résultat sauvegardé peut avoir full_analysis: false (analyse faite en free).
+  // Si l'utilisateur a maintenant un plan payant, on affiche l'analyse complète.
+  const user = getUserFromStorage();
+  const hasPaidPlan = user?.plan && user.plan !== "free";
+  const resultToShow = hasPaidPlan ? { ...data, full_analysis: true } : data;
+
   return (
     <div className="px-2 py-4 sm:p-8 pb-16 w-full flex flex-col items-center">
       <div className="w-full max-w-4xl mx-auto min-w-0">
         <Link href="/history" className="inline-block text-zinc-500 hover:text-accent-cyan text-sm mb-8">
           ← {t("history.title")}
         </Link>
-        <AnalysisResult result={data} />
+        <AnalysisResult result={resultToShow} />
       </div>
     </div>
   );
