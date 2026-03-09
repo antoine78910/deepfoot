@@ -30,28 +30,46 @@ def _normalize_plan(plan: str) -> str:
     return PLAN_FREE
 
 
-def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None, str | None, str | None]:
+def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None, str | None, str | None, str | None]:
     """
-    Récupère plan normalisé, usage du jour, last_*_date, subscription_ends_at, whop_membership_id.
-    Pour free : analyses_used_today / last_analysis_date (analyses partielles).
-    Pour starter/pro/lifetime : full_analyses_used_today / last_full_analysis_date (analyses complètes).
+    Récupère plan, usage du jour, last_*_date, subscription_ends_at, whop_membership_id, next_analysis_at (ISO).
+    next_analysis_at = moment où le quota repart (last_*_at + 24h) quand limite atteinte, sinon None.
     """
     if not user_id or not _use_supabase():
-        return (PLAN_FREE, 0, None, None, None)
+        return (PLAN_FREE, 0, None, None, None, None)
     supabase = get_supabase_admin() or get_supabase()
-    r = supabase.table("profiles").select(
-        "plan, analyses_used_today, last_analysis_date, full_analyses_used_today, last_full_analysis_date, subscription_ends_at, whop_membership_id"
-    ).eq("id", user_id).execute()
+    row = None
+    try:
+        r = supabase.table("profiles").select(
+            "plan, analyses_used_today, last_analysis_date, last_analysis_at, "
+            "full_analyses_used_today, last_full_analysis_date, last_full_analysis_at, "
+            "subscription_ends_at, whop_membership_id"
+        ).eq("id", user_id).execute()
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "42703" in err_msg or "does not exist" in err_msg:
+            r = supabase.table("profiles").select(
+                "plan, analyses_used_today, last_analysis_date, "
+                "full_analyses_used_today, last_full_analysis_date, "
+                "subscription_ends_at, whop_membership_id"
+            ).eq("id", user_id).execute()
+        else:
+            raise
     if not r.data or len(r.data) == 0:
-        return (PLAN_FREE, 0, None, None, None)
+        return (PLAN_FREE, 0, None, None, None, None)
     row = r.data[0]
+    row = dict(row) if not isinstance(row, dict) else row
+    row.setdefault("last_analysis_at", None)
+    row.setdefault("last_full_analysis_at", None)
     plan = _normalize_plan(str(row.get("plan") or "free"))
     if plan in (PLAN_STARTER, PLAN_PRO, PLAN_LIFETIME):
         used = int(row.get("full_analyses_used_today") or 0)
         last_raw = row.get("last_full_analysis_date")
+        last_at_raw = row.get("last_full_analysis_at")
     else:
         used = int(row.get("analyses_used_today") or 0)
         last_raw = row.get("last_analysis_date")
+        last_at_raw = row.get("last_analysis_at")
     last = None
     if last_raw:
         try:
@@ -64,7 +82,24 @@ def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None, str | None,
     else:
         ends_at = None
     membership_id = (row.get("whop_membership_id") or "").strip() or None
-    return (plan, used, last, ends_at, membership_id)
+
+    limit, _ = get_analysis_limit(plan)
+    next_analysis_at: str | None = None
+    if limit is not None and used >= limit and last_at_raw:
+        try:
+            from datetime import timedelta
+            if isinstance(last_at_raw, datetime):
+                at = last_at_raw
+            elif isinstance(last_at_raw, str):
+                at = datetime.fromisoformat(last_at_raw.replace("Z", "+00:00"))
+            else:
+                at = None
+            if at is not None:
+                next_dt = at + timedelta(hours=24)
+                next_analysis_at = next_dt.isoformat()
+        except Exception:
+            pass
+    return (plan, used, last, ends_at, membership_id, next_analysis_at)
 
 
 def reset_if_new_day(used: int, last: date | None, today: date) -> int:
@@ -96,7 +131,7 @@ def can_analyze(user_id: str) -> tuple[bool, str, bool, str | None]:
     if not _use_supabase():
         return (True, "", True, None)
     today = datetime.now(timezone.utc).date()
-    plan, used, last, _, _ = get_plan_and_usage(user_id)
+    plan, used, last, _, _, _ = get_plan_and_usage(user_id)
     used = reset_if_new_day(used, last, today)
     limit, full_analysis = get_analysis_limit(plan)
 
@@ -149,7 +184,7 @@ def can_use_chat_ai(user_id: str) -> tuple[bool, int | None, str]:
     """
     if not _use_supabase():
         return (True, None, "")
-    plan, _, _, _, _ = get_plan_and_usage(user_id)
+    plan, _, _, _, _, _ = get_plan_and_usage(user_id)
     limit = get_chat_limit(plan)
     if limit == 0:
         return (False, 0, "Chat IA réservé aux abonnés Pro et Lifetime.")
@@ -192,7 +227,7 @@ def consume_analysis(user_id: str, home_team: str | None = None, away_team: str 
     if not user_id or not _use_supabase():
         return
     today = datetime.now(timezone.utc).date()
-    plan, used, last, _, _ = get_plan_and_usage(user_id)
+    plan, used, last, _, _, _ = get_plan_and_usage(user_id)
     used = reset_if_new_day(used, last, today)
     new_used = used + 1
 
@@ -205,11 +240,13 @@ def consume_analysis(user_id: str, home_team: str | None = None, away_team: str 
     except Exception:
         analyses_total = 0
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     if plan in (PLAN_STARTER, PLAN_PRO, PLAN_LIFETIME):
         payload = {
             "id": user_id,
             "full_analyses_used_today": new_used,
             "last_full_analysis_date": today.isoformat(),
+            "last_full_analysis_at": now_iso,
             "analyses_total": analyses_total + 1,
         }
     else:
@@ -217,9 +254,17 @@ def consume_analysis(user_id: str, home_team: str | None = None, away_team: str 
             "id": user_id,
             "analyses_used_today": new_used,
             "last_analysis_date": today.isoformat(),
+            "last_analysis_at": now_iso,
             "analyses_total": analyses_total + 1,
         }
-    supabase.table("profiles").upsert(payload, on_conflict="id").execute()
+    try:
+        supabase.table("profiles").upsert(payload, on_conflict="id").execute()
+    except Exception as e:
+        if "42703" not in str(e) and "does not exist" not in str(e).lower():
+            raise
+        payload.pop("last_full_analysis_at", None)
+        payload.pop("last_analysis_at", None)
+        supabase.table("profiles").upsert(payload, on_conflict="id").execute()
     try:
         supabase.table("analysis_events").insert(
             {

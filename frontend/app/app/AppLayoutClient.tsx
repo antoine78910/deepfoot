@@ -13,10 +13,22 @@ import type { Lang } from "@/lib/translations";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-/** Next midnight UTC (quota reset for Starter plan). */
+/** Next midnight UTC (fallback when backend does not return next_analysis_at). */
 function getNextMidnightUTC(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+}
+
+/** Format countdown to a given ISO timestamp (next analysis at = last use + 24h). "Xh Ym" or "Xm" or "Xs". */
+function formatCountdownTo(isoNextAt: string): string {
+  const next = new Date(isoNextAt).getTime();
+  const ms = Math.max(0, next - Date.now());
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
 }
 
 /** Format countdown to next midnight UTC as "Xh Ym" or "Xm" or "Xs". */
@@ -183,6 +195,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [analysesUsed, setAnalysesUsed] = useState(0);
   const [analysesLimit, setAnalysesLimit] = useState<number | null>(null);
+  const [nextAnalysisAt, setNextAnalysisAt] = useState<string | null>(null);
   const [nextAnalysisCountdown, setNextAnalysisCountdown] = useState<string | null>(null);
   const [langOpen, setLangOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -264,6 +277,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
         if (data && typeof data === "object") {
           setAnalysesUsed(Number(data.analyses_used_today) || 0);
           setAnalysesLimit(data.analyses_limit !== undefined ? data.analyses_limit : null);
+          setNextAnalysisAt((data as { next_analysis_at?: string | null }).next_analysis_at ?? null);
           let planToSet = data.plan as PlanId | undefined;
           if (data.plan === "free" && uid) {
             try {
@@ -298,19 +312,27 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     // Refetch on route change or when analyze page signals consumption (e.g. view from history)
   }, [user?.id, pathname, refreshMeTrigger]);
 
-  // Countdown to next analysis (Starter 1/1): reset at midnight UTC
+  // Countdown to next analysis: 24h from last use when limit reached (unique per user/session)
   useEffect(() => {
     const plan = user?.plan ?? "free";
-    const isStarterAtLimit = plan === "starter" && analysesUsed >= 1;
-    if (!isStarterAtLimit) {
+    const limit = plan === "starter" ? 1 : analysesLimit;
+    const isAtLimit = limit != null && analysesUsed >= limit;
+    if (!isAtLimit) {
       setNextAnalysisCountdown(null);
       return;
     }
-    const tick = () => setNextAnalysisCountdown(formatCountdownToNextMidnightUTC());
+    const tick = () => {
+      if (nextAnalysisAt) {
+        const countdown = formatCountdownTo(nextAnalysisAt);
+        setNextAnalysisCountdown(countdown);
+      } else {
+        setNextAnalysisCountdown(formatCountdownToNextMidnightUTC());
+      }
+    };
     tick();
-    const interval = setInterval(tick, 60_000); // update every minute
+    const interval = setInterval(tick, 60_000);
     return () => clearInterval(interval);
-  }, [user?.plan, analysesUsed]);
+  }, [user?.plan, analysesUsed, analysesLimit, nextAnalysisAt]);
 
   const handleSignOut = async () => {
     try {
@@ -471,10 +493,9 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
               const plan = user?.plan ?? "free";
               const effectiveLimit = plan === "starter" ? 1 : analysesLimit;
               const isLimitReached = plan === "free" || (effectiveLimit != null && analysesUsed >= effectiveLimit);
-              const isStarterAtLimit = plan === "starter" && analysesUsed >= 1;
               return isLimitReached ? (
                 <div className="text-xs text-zinc-400 mt-2 space-y-0.5">
-                  {isStarterAtLimit && nextAnalysisCountdown && (
+                  {nextAnalysisCountdown && (
                     <p className="text-[#00ffe8]/90">
                       {t("nav.nextAnalysisIn").replace("{time}", nextAnalysisCountdown)}
                     </p>

@@ -183,20 +183,58 @@ def admin_summary(
 
     # Resolve Supabase Auth email for each user_id (app login email)
     uid_to_email: dict[str, str] = {}
+    admin_client = get_supabase_admin()
     try:
-        r = supabase.auth.admin.list_users(page=1, per_page=1000)
-        auth_users = getattr(r, "users", None) or getattr(r, "data", None) or []
-        if isinstance(auth_users, list):
-            for u in auth_users:
-                uid = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
-                em = getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)
-                if uid and em:
-                    uid_to_email[str(uid)] = str(em).strip()
+        if admin_client:
+            page = 1
+            per_page = 1000
+            while True:
+                r = admin_client.auth.admin.list_users(page=page, per_page=per_page)
+                auth_users = None
+                if isinstance(r, list):
+                    auth_users = r
+                elif hasattr(r, "users"):
+                    auth_users = getattr(r, "users", None)
+                elif hasattr(r, "data"):
+                    auth_users = getattr(r, "data", None)
+                elif hasattr(r, "model_dump"):
+                    d = r.model_dump() if callable(getattr(r, "model_dump")) else {}
+                    auth_users = d.get("users") if isinstance(d, dict) else None
+                elif isinstance(r, dict):
+                    auth_users = r.get("users")
+                if not isinstance(auth_users, list):
+                    break
+                for u in auth_users:
+                    uid = None
+                    em = None
+                    if isinstance(u, dict):
+                        uid, em = u.get("id"), u.get("email")
+                    else:
+                        uid, em = getattr(u, "id", None), getattr(u, "email", None)
+                    if uid and em:
+                        uid_to_email[str(uid)] = str(em).strip()
+                if len(auth_users) < per_page:
+                    break
+                page += 1
     except Exception:
         uid_to_email = {}
 
+    # Fallback: resolve email one-by-one for users we return (if still missing), max 150 to avoid rate limits
+    fallback_count = 0
     for u in users:
-        u["email"] = uid_to_email.get(u["user_id"])
+        uid = u.get("user_id")
+        u["email"] = uid_to_email.get(uid)
+        if not u["email"] and uid and admin_client and uid != "anonymous" and fallback_count < 150:
+            try:
+                fallback_count += 1
+                r = admin_client.auth.admin.get_user_by_id(uid)
+                user_obj = getattr(r, "user", None)
+                if user_obj is not None:
+                    em = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+                    if em:
+                        u["email"] = str(em).strip()
+            except Exception:
+                pass
 
     return {
         "window_days": days,
