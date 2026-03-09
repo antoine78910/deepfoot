@@ -298,9 +298,11 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             const u = getUserFromStorage();
             const newPlan = (planToSet ?? u?.plan ?? "free") as PlanId;
             const endsAt = (data as { subscription_ends_at?: string | null }).subscription_ends_at ?? u?.subscription_ends_at;
-            if (u && (u.plan !== newPlan || u.id !== uid || (u.subscription_ends_at ?? null) !== (endsAt ?? null))) {
-              setUserInStorage({ ...u, id: uid, plan: newPlan, subscription_ends_at: endsAt ?? undefined });
-              setUser({ ...u, id: uid, plan: newPlan, subscription_ends_at: endsAt ?? undefined });
+            const whopMid = (data as { whop_membership_id?: string | null }).whop_membership_id ?? u?.whop_membership_id ?? undefined;
+            if (u && (u.plan !== newPlan || u.id !== uid || (u.subscription_ends_at ?? null) !== (endsAt ?? null) || (u.whop_membership_id ?? null) !== (whopMid ?? null))) {
+              const nextUser = { ...u, id: uid, plan: newPlan, subscription_ends_at: endsAt ?? undefined, whop_membership_id: whopMid };
+              setUserInStorage(nextUser);
+              setUser(nextUser);
             }
           }
         }

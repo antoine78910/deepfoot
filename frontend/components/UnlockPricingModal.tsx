@@ -74,7 +74,7 @@ export function UnlockPricingModal({
     else if (plan === "lifetime") trackDatafastGoal("unlock_99");
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
-    const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email);
+    const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
     requestAnimationFrame(() => {
       setTimeout(() => {
         window.location.href = url;

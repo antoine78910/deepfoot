@@ -457,6 +457,18 @@ async def whop_webhook(request: Request):
     member_email, app_plan, membership_id = _extract_whop_member_plan_and_membership(body)
     if member_email and app_plan:
         _update_supabase_plan_for_email(member_email, app_plan, membership_id)
+        # When user buys Lifetime, cancel any previous subscription (Starter/Pro) so they are not charged twice
+        if app_plan == "lifetime" and member_email and membership_id:
+            whop_key = (settings.whop_api_key or "").strip()
+            company_id = (settings.whop_company_id or "").strip()
+            if whop_key and company_id:
+                try:
+                    from app.api.me import whop_cancel_other_memberships_for_email
+                    n = await whop_cancel_other_memberships_for_email(member_email, whop_key, company_id, membership_id)
+                    if n:
+                        logger.info("Whop webhook: cancelled %s previous membership(s) (Lifetime purchase)", n)
+                except Exception as e:
+                    logger.warning("Whop webhook: could not cancel previous memberships for Lifetime: %s", e)
     else:
         logger.warning("Whop webhook: missing member_email or app_plan (email=%s, plan=%s)", bool(member_email), app_plan or "none")
 
@@ -508,6 +520,18 @@ async def whop_sync_payment(request: Request):
                 logger.info("Whop sync-payment: plan=%s linked to user_id (session), payment_id=%s", app_plan, payment_id)
         if not updated and member_email:
             updated = _update_supabase_plan_for_email(member_email, app_plan, membership_id)
+        # When user buys Lifetime, cancel any previous subscription (Starter/Pro)
+        if app_plan == "lifetime" and member_email and membership_id:
+            whop_api_key = (settings.whop_api_key or "").strip()
+            company_id = (settings.whop_company_id or "").strip()
+            if whop_api_key and company_id:
+                try:
+                    from app.api.me import whop_cancel_other_memberships_for_email
+                    n = await whop_cancel_other_memberships_for_email(member_email, whop_api_key, company_id, membership_id)
+                    if n:
+                        logger.info("Whop sync-payment: cancelled %s previous membership(s) (Lifetime purchase)", n)
+                except Exception as e:
+                    logger.warning("Whop sync-payment: could not cancel previous memberships for Lifetime: %s", e)
     if not app_plan:
         logger.warning("Whop sync-payment: missing app_plan for payment_id=%s", payment_id)
 

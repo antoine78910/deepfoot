@@ -36,7 +36,9 @@ export function getWhopCheckoutUrl(
   datafastVisitorId?: string | null,
   context?: string | null,
   /** Email of the logged-in user (Supabase app). Prefills checkout to avoid mismatches. */
-  userEmail?: string | null
+  userEmail?: string | null,
+  /** Whop membership id when upgrading (e.g. Starter → Pro). Pass so Whop can apply proration if supported. */
+  whopMembershipId?: string | null
 ): string {
   let url = CHECKOUT_URLS[currency][plan];
   const params = new URLSearchParams();
@@ -45,6 +47,9 @@ export function getWhopCheckoutUrl(
   }
   if (userEmail?.trim()) {
     params.set("email", userEmail.trim());
+  }
+  if (whopMembershipId?.trim()) {
+    params.set("membership_id", whopMembershipId.trim());
   }
   // Help Datafast / internal analytics distinguish flows
   params.set("df_plan", plan);

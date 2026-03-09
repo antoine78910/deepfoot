@@ -14,6 +14,8 @@ export type UserInfo = {
   plan: PlanId;
   /** ISO date when subscription ends (cancel at period end). Plan remains until this date. */
   subscription_ends_at?: string | null;
+  /** Whop membership id (for upgrade checkout: pass to get proration when switching plan). */
+  whop_membership_id?: string | null;
 };
 
 export function setAuthCookie(): void {

@@ -167,6 +167,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         "subscription_ends_at": subscription_ends_at,
         "subscription_started_at": subscription_started_at,
         "next_analysis_at": next_analysis_at,  # ISO timestamp when at limit (24h from last use)
+        "whop_membership_id": whop_membership_id,  # for upgrade checkout (proration when switching plan)
     }
 
 
@@ -373,6 +374,54 @@ async def _whop_find_and_cancel_by_email(email: str, whop_key: str, company_id: 
     if api_error or not membership_id:
         return (False, None)
     return await _whop_cancel_membership(membership_id, whop_key)
+
+
+async def whop_cancel_other_memberships_for_email(
+    email: str, whop_key: str, company_id: str, keep_membership_id: str | None
+) -> int:
+    """
+    Annule tous les abonnements actifs/trialing de cet utilisateur (par email) SAUF keep_membership_id.
+    Utilisé quand l'utilisateur achète le Lifetime : on coupe Starter/Pro pour éviter double facturation.
+    Retourne le nombre de memberships annulés.
+    """
+    if not email or not whop_key or not company_id:
+        return 0
+    keep_membership_id = (keep_membership_id or "").strip() or None
+    user_id_whop, _ = await _whop_get_user_id_by_email(email, whop_key, company_id)
+    if not user_id_whop:
+        return 0
+    import httpx
+    cancelled = 0
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://api.whop.com/api/v1/memberships",
+                params={
+                    "company_id": company_id,
+                    "user_ids": [user_id_whop],
+                    "statuses": ["active", "trialing"],
+                    "first": 50,
+                },
+                headers={"Authorization": f"Bearer {whop_key}"},
+                timeout=15.0,
+            )
+        if r.status_code >= 400:
+            return 0
+        data = r.json()
+        list_ms = data.get("data") if isinstance(data.get("data"), list) else data.get("memberships") or []
+        for m in list_ms:
+            if not isinstance(m, dict):
+                continue
+            mid = (m.get("id") or m.get("membership_id") or "").strip()
+            if not mid or mid == keep_membership_id:
+                continue
+            ok, _ = await _whop_cancel_membership(mid, whop_key)
+            if ok:
+                cancelled += 1
+                logger.info("Whop: cancelled previous membership %s (user bought Lifetime)", mid[:12] + "...")
+    except Exception as e:
+        logger.warning("Whop: failed to cancel other memberships for %s: %s", (email or "")[:8] + "...", e)
+    return cancelled
 
 
 def _extract_members_list(data: dict, base: str) -> list:
