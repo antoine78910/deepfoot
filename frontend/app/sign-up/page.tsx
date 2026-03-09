@@ -15,6 +15,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 function SignUpPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
 
@@ -33,24 +36,51 @@ function SignUpPageContent() {
 
   const canSubmit = email.trim().length > 0 && password.trim().length >= 6;
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
-    const user: UserInfo = {
-      displayName: displayNameFromEmail(email.trim()),
-      email: email.trim(),
-      plan: "free",
-    };
-    setAuthCookie();
-    setUserInStorage(user);
-    const isApp = typeof window !== "undefined" && window.location.hostname.startsWith("app.");
-    const safeNext = next && next.startsWith("/") ? next : null;
-    const target = safeNext
-      ? `${window.location.origin}${safeNext}`
-      : isApp
-        ? `${window.location.origin}/`
-        : getAppRootUrl();
-    window.location.href = target;
+    if (!canSubmit || loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error: err } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: getAppAuthCallbackUrl(),
+        },
+      });
+      if (err) {
+        setError(err.message);
+        setLoading(false);
+        return;
+      }
+      if (data?.user && !data?.session) {
+        setLoading(false);
+        setEmailSent(true);
+      } else if (data?.session && data?.user) {
+        const user: UserInfo = {
+          id: data.user.id,
+          displayName: displayNameFromEmail(data.user.email ?? email.trim()),
+          email: (data.user.email ?? email.trim()) || "",
+          plan: "free",
+        };
+        setAuthCookie();
+        setUserInStorage(user);
+        const isApp = typeof window !== "undefined" && window.location.hostname.startsWith("app.");
+        const safeNext = next && next.startsWith("/") ? next : null;
+        const target = safeNext
+          ? `${window.location.origin}${safeNext}`
+          : isApp
+            ? `${window.location.origin}/`
+            : getAppRootUrl();
+        window.location.href = target;
+        return;
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Sign up failed");
+    }
+    setLoading(false);
   };
 
   const handleGoogle = async () => {
@@ -91,6 +121,27 @@ function SignUpPageContent() {
             <h1 className="text-white text-2xl font-bold mb-2 text-center">Sign up</h1>
             <p className="text-white/60 text-center mb-6 text-sm">Create an account to analyze matches with AI</p>
 
+            {emailSent ? (
+              <div className="rounded-xl bg-emerald-500/15 border border-emerald-400/40 p-4 text-center">
+                <p className="text-white font-medium mb-1">Check your email</p>
+                <p className="text-white/70 text-sm">
+                  We sent a confirmation link to <span className="text-[#00ffe8] font-medium">{email}</span>. Click it to validate your account, then sign in.
+                </p>
+                <Link
+                  href={SIGN_IN_HREF}
+                  className="mt-4 inline-block text-teal-400 hover:text-teal-300 text-sm underline"
+                >
+                  Go to sign in
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => { setEmailSent(false); setEmail(""); setPassword(""); setError(null); }}
+                  className="block mt-2 mx-auto text-white/60 hover:text-white text-sm"
+                >
+                  Use another email
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleSignUp} className="space-y-3">
               <button
                 type="button"
@@ -115,28 +166,38 @@ function SignUpPageContent() {
                 </div>
               </div>
 
+              {error && (
+                <p className="text-red-400 text-sm text-center -mb-1">{error}</p>
+              )}
               <input
                 placeholder="Email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
                 className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
+                autoComplete="email"
               />
               <input
                 placeholder="Password (min 6 characters)"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setError(null); }}
                 className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
+                autoComplete="new-password"
               />
               <button
                 type="submit"
-                disabled={!canSubmit}
+                disabled={!canSubmit || loading}
                 className="w-full h-12 px-6 bg-gradient-to-r from-teal-400 to-emerald-400 hover:from-teal-500 hover:to-emerald-500 text-black font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create account
+                {loading ? (
+                  <span className="inline-block w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                ) : (
+                  "Create account"
+                )}
               </button>
             </form>
+            )}
 
             <p className="text-center mt-4">
               <Link href={SIGN_IN_HREF} className="text-teal-400 hover:text-teal-300 text-sm underline">
