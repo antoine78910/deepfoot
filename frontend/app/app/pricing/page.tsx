@@ -70,7 +70,7 @@ function PricingPage() {
     trackDatafastGoal("click_unlock", { source });
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
-    const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source);
+    const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email);
     requestAnimationFrame(() => {
       setTimeout(() => {
         window.location.href = url;

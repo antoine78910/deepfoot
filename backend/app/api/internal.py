@@ -181,6 +181,23 @@ def admin_summary(
         reverse=True,
     )[:30]
 
+    # Resolve Supabase Auth email for each user_id (app login email)
+    uid_to_email: dict[str, str] = {}
+    try:
+        r = supabase.auth.admin.list_users(page=1, per_page=1000)
+        auth_users = getattr(r, "users", None) or getattr(r, "data", None) or []
+        if isinstance(auth_users, list):
+            for u in auth_users:
+                uid = getattr(u, "id", None) or (u.get("id") if isinstance(u, dict) else None)
+                em = getattr(u, "email", None) or (u.get("email") if isinstance(u, dict) else None)
+                if uid and em:
+                    uid_to_email[str(uid)] = str(em).strip()
+    except Exception:
+        uid_to_email = {}
+
+    for u in users:
+        u["email"] = uid_to_email.get(u["user_id"])
+
     return {
         "window_days": days,
         "feedback_count": len(feedback_rows),

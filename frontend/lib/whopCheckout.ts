@@ -34,19 +34,23 @@ export function getWhopCheckoutUrl(
   plan: WhopPlanId,
   currency: PricingCurrency,
   datafastVisitorId?: string | null,
-  context?: string | null
+  context?: string | null,
+  /** Email of the logged-in user (Supabase app). Prefills checkout to avoid mismatches. */
+  userEmail?: string | null
 ): string {
   let url = CHECKOUT_URLS[currency][plan];
   const params = new URLSearchParams();
   if (datafastVisitorId?.trim()) {
     params.set("datafast_visitor_id", datafastVisitorId.trim());
   }
+  if (userEmail?.trim()) {
+    params.set("email", userEmail.trim());
+  }
   // Help Datafast / internal analytics distinguish flows
   params.set("df_plan", plan);
   if (context?.trim()) {
     params.set("df_source", context.trim());
   }
-  // Allow customers to enter a promo/coupon at checkout (Whop may support this param)
   params.set("allow_promotion_codes", "true");
   const qs = params.toString();
   if (qs) {

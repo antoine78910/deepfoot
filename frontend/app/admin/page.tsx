@@ -34,6 +34,7 @@ type AdminSummary = {
   users_count: number;
   users: Array<{
     user_id: string;
+    email?: string | null;
     plan: string;
     analyses_today: number;
     analyses_total: number;
@@ -148,7 +149,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead className="text-zinc-500">
                     <tr>
-                      <th className="text-left py-2 pr-4">User</th>
+                      <th className="text-left py-2 pr-4">Email (app)</th>
                       <th className="text-left py-2 pr-4">Plan</th>
                       <th className="text-left py-2 pr-4">Today</th>
                       <th className="text-left py-2 pr-4">Total</th>
@@ -159,7 +160,7 @@ export default function AdminPage() {
                   <tbody>
                     {topUsers.map((u) => (
                       <tr key={u.user_id} className="border-t border-white/5">
-                        <td className="py-2 pr-4 font-mono text-xs">{u.user_id}</td>
+                        <td className="py-2 pr-4 text-sm">{u.email || u.user_id}</td>
                         <td className="py-2 pr-4">{u.plan}</td>
                         <td className="py-2 pr-4">{u.analyses_today}</td>
                         <td className="py-2 pr-4">{u.analyses_total}</td>
