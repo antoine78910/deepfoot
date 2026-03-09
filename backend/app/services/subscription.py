@@ -32,22 +32,30 @@ def _normalize_plan(plan: str) -> str:
 
 def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None, str | None, str | None]:
     """
-    Récupère plan normalisé, analyses_used_today, last_analysis_date, subscription_ends_at (ISO string si annulé at_period_end), whop_membership_id.
-    Si pas de ligne profile ou user_id vide, considère free avec 0 usage.
+    Récupère plan normalisé, usage du jour, last_*_date, subscription_ends_at, whop_membership_id.
+    Pour free : analyses_used_today / last_analysis_date (analyses partielles).
+    Pour starter/pro/lifetime : full_analyses_used_today / last_full_analysis_date (analyses complètes).
     """
     if not user_id or not _use_supabase():
         return (PLAN_FREE, 0, None, None, None)
     supabase = get_supabase_admin() or get_supabase()
-    r = supabase.table("profiles").select("plan, analyses_used_today, last_analysis_date, subscription_ends_at, whop_membership_id").eq("id", user_id).execute()
+    r = supabase.table("profiles").select(
+        "plan, analyses_used_today, last_analysis_date, full_analyses_used_today, last_full_analysis_date, subscription_ends_at, whop_membership_id"
+    ).eq("id", user_id).execute()
     if not r.data or len(r.data) == 0:
         return (PLAN_FREE, 0, None, None, None)
     row = r.data[0]
     plan = _normalize_plan(str(row.get("plan") or "free"))
-    used = int(row.get("analyses_used_today") or 0)
-    last = row.get("last_analysis_date")
-    if last:
+    if plan in (PLAN_STARTER, PLAN_PRO, PLAN_LIFETIME):
+        used = int(row.get("full_analyses_used_today") or 0)
+        last_raw = row.get("last_full_analysis_date")
+    else:
+        used = int(row.get("analyses_used_today") or 0)
+        last_raw = row.get("last_analysis_date")
+    last = None
+    if last_raw:
         try:
-            last = date.fromisoformat(str(last)[:10])
+            last = date.fromisoformat(str(last_raw)[:10])
         except Exception:
             last = None
     ends_at = row.get("subscription_ends_at")
@@ -176,7 +184,11 @@ def consume_chat_ai(user_id: str) -> None:
 
 
 def consume_analysis(user_id: str, home_team: str | None = None, away_team: str | None = None) -> None:
-    """Incrémente analyses_used_today/analyses_total, met à jour last_analysis_date, et journalise l'évènement d'analyse."""
+    """
+    Compte une analyse : free → analyses_used_today/last_analysis_date ;
+    starter/pro/lifetime → full_analyses_used_today/last_full_analysis_date.
+    Incrémente aussi analyses_total et journalise l'événement.
+    """
     if not user_id or not _use_supabase():
         return
     today = datetime.now(timezone.utc).date()
@@ -192,15 +204,22 @@ def consume_analysis(user_id: str, home_team: str | None = None, away_team: str 
             analyses_total = int((r.data[0] or {}).get("analyses_total") or 0)
     except Exception:
         analyses_total = 0
-    supabase.table("profiles").upsert(
-        {
+
+    if plan in (PLAN_STARTER, PLAN_PRO, PLAN_LIFETIME):
+        payload = {
+            "id": user_id,
+            "full_analyses_used_today": new_used,
+            "last_full_analysis_date": today.isoformat(),
+            "analyses_total": analyses_total + 1,
+        }
+    else:
+        payload = {
             "id": user_id,
             "analyses_used_today": new_used,
             "last_analysis_date": today.isoformat(),
             "analyses_total": analyses_total + 1,
-        },
-        on_conflict="id",
-    ).execute()
+        }
+    supabase.table("profiles").upsert(payload, on_conflict="id").execute()
     try:
         supabase.table("analysis_events").insert(
             {

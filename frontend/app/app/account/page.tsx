@@ -451,26 +451,28 @@ export default function AccountPage() {
           >
             {t("account.seeAllPlans")}
           </Link>
-          {user?.subscription_ends_at ? (
-            <button
-              type="button"
-              disabled={renewLoading}
-              onClick={handleRenewPlan}
-              className="px-4 py-2.5 rounded-xl bg-[#00ffe8]/15 border border-[#00ffe8]/50 text-[#00ffe8] hover:bg-[#00ffe8]/25 hover:border-[#00ffe8] disabled:opacity-60 text-sm font-medium transition"
-            >
-              {renewLoading ? "…" : t("account.renewPlan")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setUnsubscribeSuccessMessage(null);
-                setConfirmUnsubscribeOpen(true);
-              }}
-              className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-red-400 hover:text-red-300 text-sm font-medium transition"
-            >
-              {t("account.unsubscribe")}
-            </button>
+          {user?.plan && user.plan !== "free" && (
+            user?.subscription_ends_at ? (
+              <button
+                type="button"
+                disabled={renewLoading}
+                onClick={handleRenewPlan}
+                className="px-4 py-2.5 rounded-xl bg-[#00ffe8]/15 border border-[#00ffe8]/50 text-[#00ffe8] hover:bg-[#00ffe8]/25 hover:border-[#00ffe8] disabled:opacity-60 text-sm font-medium transition"
+              >
+                {renewLoading ? "…" : t("account.renewPlan")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setUnsubscribeSuccessMessage(null);
+                  setConfirmUnsubscribeOpen(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-red-400 hover:text-red-300 text-sm font-medium transition"
+              >
+                {t("account.unsubscribe")}
+              </button>
+            )
           )}
         </div>
       </div>
