@@ -104,6 +104,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
                 logger.info("me: user_id=%s Whop returned no current membership (no active/trialing)", _mask_user_id(user_id))
 
     plan, used, last, subscription_ends_at, whop_membership_id = get_plan_and_usage(user_id)
+    subscription_started_at: str | None = None
     if user_id:
         logger.info(
             "me: user_id=%s plan=%s whop_membership_id=%s",
@@ -118,7 +119,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
             _mask_user_id(user_id),
             (whop_membership_id[:12] + "...") if len(whop_membership_id or "") > 12 else (whop_membership_id or ""),
         )
-        period_end_iso, is_canceled, whop_ok = await _whop_get_membership_status(whop_membership_id, whop_key)
+        period_end_iso, is_canceled, whop_ok, subscription_started_at = await _whop_get_membership_status(whop_membership_id, whop_key)
         if whop_ok:
             if is_canceled and period_end_iso:
                 subscription_ends_at = period_end_iso
@@ -140,7 +141,8 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
                     logger.warning("me: failed to clear subscription_ends_at for user_id=%s: %s", _mask_user_id(user_id), e)
         else:
             logger.warning("me: user_id=%s Whop status unavailable (API error?), keeping subscription_ends_at=%s", _mask_user_id(user_id), subscription_ends_at[:10] if subscription_ends_at else None)
-    elif user_id and not whop_membership_id:
+            subscription_started_at = None
+    if user_id and not whop_membership_id:
         logger.info("me: user_id=%s no whop_membership_id in DB, skipping Whop status check (plan=%s)", _mask_user_id(user_id), plan)
     today = datetime.now(timezone.utc).date()
     used = reset_if_new_day(used, last, today)
@@ -162,6 +164,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         "full_analysis": next_full,
         "can_analyze": allowed,
         "subscription_ends_at": subscription_ends_at,
+        "subscription_started_at": subscription_started_at,
     }
 
 
@@ -235,10 +238,22 @@ async def _whop_get_membership_details(membership_id: str, whop_key: str) -> tup
         return (None, None, False)
 
 
-async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool, bool]:
+def _whop_parse_created_at(m: dict) -> str | None:
+    """Parse created_at from Whop membership (unix timestamp) to ISO string."""
+    raw = m.get("created_at")
+    if raw is None:
+        return None
+    try:
+        ts = int(raw) if isinstance(raw, (int, float)) else int(float(str(raw).strip()))
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool, bool, str | None]:
     """
     Récupère le statut d'un membership Whop (GET by id).
-    Retourne (period_end_iso, is_canceled, ok). ok=False si l'API échoue.
+    Retourne (period_end_iso, is_canceled, ok, created_at_iso). ok=False si l'API échoue.
     """
     import httpx
     try:
@@ -250,21 +265,22 @@ async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tupl
             )
         if r.status_code >= 400:
             logger.warning("Whop get membership status HTTP %s membership_id=%s", r.status_code, (membership_id or "")[:12] + "...")
-            return (None, False, False)
+            return (None, False, False, None)
         data = r.json()
         m = data.get("data") if isinstance(data.get("data"), dict) else data
         if not isinstance(m, dict):
-            return (None, False, False)
+            return (None, False, False, None)
         period_end, is_canceled = _whop_parse_membership_status(m)
-        return (period_end, is_canceled, True)
+        created_at_iso = _whop_parse_created_at(m)
+        return (period_end, is_canceled, True, created_at_iso)
     except Exception as e:
         logger.warning("Whop get membership status failed membership_id=%s: %s", membership_id[:12] + "..." if len(membership_id or "") > 12 else membership_id, e)
-        return (None, False, False)
+        return (None, False, False, None)
 
 
 async def _whop_get_membership_period_end(membership_id: str, whop_key: str) -> str | None:
     """Récupère renewal_period_end d'un membership Whop (pour affichage date de fin)."""
-    period_end, _, _ = await _whop_get_membership_status(membership_id, whop_key)
+    period_end, _, _, _ = await _whop_get_membership_status(membership_id, whop_key)
     return period_end
 
 

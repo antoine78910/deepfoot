@@ -256,7 +256,7 @@ def _extract_whop_member_and_plan(body: dict) -> tuple[str | None, str | None]:
 
 
 def _update_supabase_plan_for_email(email: str, plan: str, membership_id: str | None = None) -> bool:
-    """Find user by email via Supabase auth admin and set profiles.plan (and optional whop_membership_id). Returns True if updated."""
+    """Find user by email via Supabase auth admin and set profiles.plan (and optional whop_membership_id). Returns True if a matching user was found and updated. If no user exists with this email, returns False (user must sign up on the app with the same email)."""
     from app.core.config import get_settings
     settings = get_settings()
     url = (settings.supabase_url or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL") or "").strip()
@@ -406,6 +406,7 @@ async def whop_webhook(request: Request):
             )
 
     event = _extract_event_name(body)
+    logger.info("Whop webhook received event=%s", event or "unknown")
 
     # Abo inactif ou paiement échoué → passer le plan en free
     if _is_revoke_access_event(event):
@@ -421,12 +422,19 @@ async def whop_webhook(request: Request):
         logger.info("Whop webhook: ignored event=%s", event or "unknown")
         return {"ok": True, "ignored": True, "event": event}
 
-    # Optionally update Supabase profile (plan + whop_membership_id for cancel flow)
+    # Update Supabase profile (plan + whop_membership_id) so the user gets their plan when they log in
     member_email, app_plan, membership_id = _extract_whop_member_plan_and_membership(body)
     if member_email and app_plan:
-        _update_supabase_plan_for_email(member_email, app_plan, membership_id)
+        updated = _update_supabase_plan_for_email(member_email, app_plan, membership_id)
+        if updated:
+            logger.info("Whop webhook: payment.succeeded → plan=%s for email=%s (user found and updated)", app_plan, member_email[:8] + "...")
+        else:
+            logger.warning(
+                "Whop webhook: payment.succeeded but no Supabase user with email %s — user must sign up on the app with this email first (see docs/WHOP_WEBHOOK_SETUP.md)",
+                member_email[:12] + "...",
+            )
     else:
-        logger.warning("Whop webhook: missing member_email or app_plan (email=%s, plan=%s)", bool(member_email), app_plan or "none")
+        logger.warning("Whop webhook: payment.succeeded but missing email or plan in payload (email=%s, plan=%s)", bool(member_email), app_plan or "none")
 
     parsed = _extract_whop_payment(body)
     if not parsed:

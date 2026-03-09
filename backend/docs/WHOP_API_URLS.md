@@ -28,3 +28,9 @@ Aucune route v2 ni v5 `/company/*` n’est appelée (elles nécessitent une App 
 | GET | `https://api.whop.com/api/v5/company/payments/{payment_id}` (fallback) |
 
 La v1 est essayée en premier pour les Company API Keys.
+
+## Configuration du webhook (notifications paiement, sync plan)
+
+Voir **[WHOP_WEBHOOK_SETUP.md](./WHOP_WEBHOOK_SETUP.md)** pour :
+- Configurer l’URL du webhook dans le dashboard Whop (`https://<api>/webhooks/whop`) et l’événement `payment.succeeded`
+- Comprendre pourquoi un paiement ne crée pas de nouvel utilisateur (il faut que le client ait un compte app avec le **même email** que sur Whop)

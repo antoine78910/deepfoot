@@ -87,7 +87,7 @@ export default function AccountPage() {
   const [renewLoading, setRenewLoading] = useState(false);
   const [unsubscribeSuccessMessage, setUnsubscribeSuccessMessage] = useState<string | null>(null);
   const [offerClaimedOpen, setOfferClaimedOpen] = useState(false);
-  const [subscribedSince, setSubscribedSince] = useState<string>("26 February 2026");
+  const [subscribedSince, setSubscribedSince] = useState<string>("—");
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [emailMessage, setEmailMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -116,6 +116,19 @@ export default function AccountPage() {
             const next = { ...current, plan, subscription_ends_at: endsAt ?? undefined };
             setUserInStorage(next);
             setUser(next);
+          }
+          const startedAt = (data as { subscription_started_at?: string | null }).subscription_started_at;
+          if (typeof startedAt === "string" && startedAt.trim()) {
+            try {
+              const d = new Date(startedAt.trim());
+              if (!Number.isNaN(d.getTime())) {
+                setSubscribedSince(d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }));
+              }
+            } catch {
+              setSubscribedSince("—");
+            }
+          } else {
+            setSubscribedSince("—");
           }
         }
       })

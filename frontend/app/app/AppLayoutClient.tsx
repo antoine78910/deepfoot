@@ -402,7 +402,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             </p>
             {(() => {
               const plan = user?.plan ?? "free";
-              const effectiveLimit = plan === "starter" && analysesLimit == null ? 1 : analysesLimit;
+              const effectiveLimit = plan === "starter" ? 1 : analysesLimit;
               const limitNum = effectiveLimit != null ? effectiveLimit : (plan === "free" ? 0 : null);
               const isOverLimit = plan === "free" ? true : (effectiveLimit != null && analysesUsed >= effectiveLimit);
               const displayLimit = plan === "free" ? "0" : (effectiveLimit == null ? "∞" : String(effectiveLimit));
@@ -422,7 +422,7 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             })()}
             {(() => {
               const plan = user?.plan ?? "free";
-              const effectiveLimit = plan === "starter" && analysesLimit == null ? 1 : analysesLimit;
+              const effectiveLimit = plan === "starter" ? 1 : analysesLimit;
               const isLimitReached = plan === "free" || (effectiveLimit != null && analysesUsed >= effectiveLimit);
               return isLimitReached ? (
                 <p className="text-xs text-zinc-400 mt-2">

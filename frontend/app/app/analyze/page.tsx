@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnalysisResult } from "@/components/AnalysisResult";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getHistoryKey, getUserFromStorage } from "@/lib/auth";
+import { getHistoryKey } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -123,17 +123,14 @@ function AnalyzeContent() {
     );
   }
 
-  const user = getUserFromStorage();
-  const isFree = (user?.plan ?? "free") === "free";
-  const resultToShow = isFree ? { ...data, full_analysis: false } : data;
-
+  // Ne pas surcharger full_analysis côté client : on fait confiance au backend (Starter = 1 full/jour, Free = flou)
   return (
     <div className="px-2 py-4 sm:p-8 pb-16 w-full flex flex-col items-center">
       <div className="w-full max-w-4xl mx-auto min-w-0">
         <Link href="/history" className="inline-block text-zinc-500 hover:text-accent-cyan text-sm mb-8">
           ← {t("history.title")}
         </Link>
-        <AnalysisResult result={resultToShow} />
+        <AnalysisResult result={data} />
       </div>
     </div>
   );
