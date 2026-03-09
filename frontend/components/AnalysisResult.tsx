@@ -496,8 +496,8 @@ export function AnalysisResult({ result }: { result: Result }) {
 
   /** Overlay 15% + CTA — form dans le premier quart (bas) du flou, pas trop près d’Exact statistics */
   const exactProbabilitiesOverlay = () => (
-    <div className="flex flex-col items-center p-4 pt-4">
-      <div className="rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center relative z-10">
+    <div className="absolute inset-0 z-10 flex items-center justify-center p-4 pointer-events-none">
+      <div className="pointer-events-auto rounded-2xl bg-[#14141c]/95 border-2 border-[#00ffe8]/30 p-5 sm:p-6 max-w-md w-full shadow-xl text-center relative z-10">
         <h3 className="text-lg sm:text-xl font-bold text-white">
           {t("analysis.limitedAccessTitle")}
         </h3>
