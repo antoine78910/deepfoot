@@ -299,8 +299,9 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
             const newPlan = (planToSet ?? u?.plan ?? "free") as PlanId;
             const endsAt = (data as { subscription_ends_at?: string | null }).subscription_ends_at ?? u?.subscription_ends_at;
             const whopMid = (data as { whop_membership_id?: string | null }).whop_membership_id ?? u?.whop_membership_id ?? undefined;
-            if (u && (u.plan !== newPlan || u.id !== uid || (u.subscription_ends_at ?? null) !== (endsAt ?? null) || (u.whop_membership_id ?? null) !== (whopMid ?? null))) {
-              const nextUser = { ...u, id: uid, plan: newPlan, subscription_ends_at: endsAt ?? undefined, whop_membership_id: whopMid };
+            const whopManageUrl = (data as { whop_manage_url?: string | null }).whop_manage_url ?? u?.whop_manage_url ?? undefined;
+            if (u && (u.plan !== newPlan || u.id !== uid || (u.subscription_ends_at ?? null) !== (endsAt ?? null) || (u.whop_membership_id ?? null) !== (whopMid ?? null) || (u.whop_manage_url ?? null) !== (whopManageUrl ?? null))) {
+              const nextUser = { ...u, id: uid, plan: newPlan, subscription_ends_at: endsAt ?? undefined, whop_membership_id: whopMid, whop_manage_url: whopManageUrl };
               setUserInStorage(nextUser);
               setUser(nextUser);
             }

@@ -23,6 +23,14 @@ const CHECKOUT_URLS: Record<PricingCurrency, Record<WhopPlanId, string>> = {
   },
 };
 
+/** True when the user already has a plan and wants a higher one (Starter→Pro, Starter→Lifetime, Pro→Lifetime). Use whop_manage_url for these so Whop applies proration. */
+export function isUpgradeFromCurrentPlan(currentPlan: string, targetPlan: WhopPlanId): boolean {
+  if (currentPlan === "free") return false;
+  if (currentPlan === "starter") return targetPlan === "pro" || targetPlan === "lifetime";
+  if (currentPlan === "pro") return targetPlan === "lifetime";
+  return false;
+}
+
 /** Read DataFast visitor ID from cookie (for revenue attribution). Call only in browser. */
 export function getDatafastVisitorId(): string | null {
   if (typeof document === "undefined") return null;
@@ -47,6 +55,8 @@ export function getWhopCheckoutUrl(
   }
   if (userEmail?.trim()) {
     params.set("email", userEmail.trim());
+    // Stripe-style prefilled identification (Whop may use it for proration on upgrade)
+    params.set("prefilled_identification[email]", userEmail.trim());
   }
   if (whopMembershipId?.trim()) {
     params.set("membership_id", whopMembershipId.trim());

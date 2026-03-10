@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
 import { formatPrice } from "@/lib/geoCurrency";
-import { getWhopCheckoutUrl, getDatafastVisitorId } from "@/lib/whopCheckout";
+import { getWhopCheckoutUrl, getDatafastVisitorId, isUpgradeFromCurrentPlan } from "@/lib/whopCheckout";
 import type { WhopPlanId } from "@/lib/whopCheckout";
 import { getUserFromStorage } from "@/lib/auth";
 import { trackDatafastGoal } from "@/lib/datafast";
@@ -70,7 +70,11 @@ function PricingPage() {
     trackDatafastGoal("click_unlock", { source });
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
-    const url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
+    // Upgrade (Starter→Pro/Lifetime, Pro→Lifetime): use Whop manage page so proration is applied
+    const url =
+      isUpgradeFromCurrentPlan(currentPlan, plan) && user?.whop_manage_url
+        ? user.whop_manage_url
+        : getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
     requestAnimationFrame(() => {
       setTimeout(() => {
         window.location.href = url;

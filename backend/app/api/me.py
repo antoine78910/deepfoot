@@ -109,6 +109,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
 
     plan, used, last, subscription_ends_at, whop_membership_id, next_analysis_at = get_plan_and_usage(user_id)
     subscription_started_at: str | None = None  # set below when we verify Whop membership
+    whop_manage_url: str | None = None  # page Whop gestion abo (upgrade avec prorata)
     if user_id:
         logger.info(
             "me: user_id=%s plan=%s whop_membership_id=%s",
@@ -123,7 +124,7 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
             _mask_user_id(user_id),
             (whop_membership_id[:12] + "...") if len(whop_membership_id or "") > 12 else (whop_membership_id or ""),
         )
-        period_end_iso, is_canceled, whop_ok, created_at_iso, membership_status, whop_member_email = await _whop_get_membership_status(whop_membership_id, whop_key)
+        period_end_iso, is_canceled, whop_ok, created_at_iso, membership_status, whop_member_email, whop_manage_url = await _whop_get_membership_status(whop_membership_id, whop_key)
         if whop_ok:
             if is_canceled and period_end_iso:
                 subscription_ends_at = period_end_iso
@@ -186,7 +187,8 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         "subscription_ends_at": subscription_ends_at,
         "subscription_started_at": subscription_started_at,
         "next_analysis_at": next_analysis_at,  # ISO timestamp when at limit (24h from last use)
-        "whop_membership_id": whop_membership_id,  # for upgrade checkout (proration when switching plan)
+        "whop_membership_id": whop_membership_id,
+        "whop_manage_url": whop_manage_url,  # page Whop pour gérer l'abo (upgrade avec prorata)
     }
 
 
@@ -303,11 +305,11 @@ def _whop_extract_member_email(m: dict) -> str | None:
     return None
 
 
-async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool, bool, str | None, str | None, str | None]:
+async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tuple[str | None, bool, bool, str | None, str | None, str | None, str | None]:
     """
     Récupère le statut d'un membership Whop (GET by id).
-    Retourne (period_end_iso, is_canceled, ok, created_at_iso, status, member_email).
-    ok=False si l'API échoue. status = "active" | "trialing" | "ended" | "expired" | etc.
+    Retourne (period_end_iso, is_canceled, ok, created_at_iso, status, member_email, manage_url).
+    ok=False si l'API échoue. manage_url = page Whop où le client peut gérer son abo (upgrade avec prorata).
     """
     import httpx
     try:
@@ -319,24 +321,25 @@ async def _whop_get_membership_status(membership_id: str, whop_key: str) -> tupl
             )
         if r.status_code >= 400:
             logger.warning("Whop get membership status HTTP %s membership_id=%s", r.status_code, (membership_id or "")[:12] + "...")
-            return (None, False, False, None, None, None)
+            return (None, False, False, None, None, None, None)
         data = r.json()
         m = data.get("data") if isinstance(data.get("data"), dict) else data
         if not isinstance(m, dict):
-            return (None, False, False, None, None, None)
+            return (None, False, False, None, None, None, None)
         period_end, is_canceled = _whop_parse_membership_status(m)
         created_at_iso = _whop_parse_created_at(m)
         status = (m.get("status") or "").strip().lower() or None
         member_email = _whop_extract_member_email(m)
-        return (period_end, is_canceled, True, created_at_iso, status, member_email)
+        manage_url = (m.get("manage_url") or "").strip() or None
+        return (period_end, is_canceled, True, created_at_iso, status, member_email, manage_url)
     except Exception as e:
         logger.warning("Whop get membership status failed membership_id=%s: %s", membership_id[:12] + "..." if len(membership_id or "") > 12 else membership_id, e)
-        return (None, False, False, None, None, None)
+        return (None, False, False, None, None, None, None)
 
 
 async def _whop_get_membership_period_end(membership_id: str, whop_key: str) -> str | None:
     """Récupère renewal_period_end d'un membership Whop (pour affichage date de fin)."""
-    period_end, _, _, _, _, _ = await _whop_get_membership_status(membership_id, whop_key)
+    period_end, _, _, _, _, _, _ = await _whop_get_membership_status(membership_id, whop_key)
     return period_end
 
 

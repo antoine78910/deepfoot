@@ -16,6 +16,8 @@ export type UserInfo = {
   subscription_ends_at?: string | null;
   /** Whop membership id (for upgrade checkout: pass to get proration when switching plan). */
   whop_membership_id?: string | null;
+  /** Whop subscription management page: client upgrades here with proration. */
+  whop_manage_url?: string | null;
 };
 
 export function setAuthCookie(): void {
