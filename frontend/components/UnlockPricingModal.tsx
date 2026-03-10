@@ -9,6 +9,7 @@ import { getWhopCheckoutUrl, getDatafastVisitorId, isUpgradeFromCurrentPlan, get
 import { trackDatafastGoal } from "@/lib/datafast";
 import type { WhopPlanId } from "@/lib/whopCheckout";
 import { getUserFromStorage } from "@/lib/auth";
+import { getApiUrl } from "@/lib/api";
 import { Medal, Check, Gem } from "lucide-react";
 
 const ACCENT = "#00ffe8";
@@ -68,18 +69,34 @@ export function UnlockPricingModal({
   const subtitle = onlyProLifetime ? t("limitModal.starterSubtitle") : variant === "free" ? t("limitModal.freeSubtitle") : t("unlockModal2.subtitle");
   const [loadingPlan, setLoadingPlan] = useState<WhopPlanId | null>(null);
 
-  const goToWhop = (plan: WhopPlanId, source: string) => {
+  const goToWhop = async (plan: WhopPlanId, source: string) => {
     if (plan === "starter") trackDatafastGoal("unlock_9");
     else if (plan === "pro") trackDatafastGoal("unlock_19");
     else if (plan === "lifetime") trackDatafastGoal("unlock_99");
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
-    // Upgrade: use Whop manage page (proration). Fallback to manage URL built from membership_id if needed.
-    const manageUrl = getWhopManageUrl(user);
-    const url =
-      isUpgradeFromCurrentPlan(currentPlan, plan) && manageUrl
-        ? manageUrl
-        : getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
+    let url: string;
+    if (isUpgradeFromCurrentPlan(currentPlan, plan)) {
+      const manageUrl = getWhopManageUrl(user);
+      if (manageUrl) {
+        url = manageUrl;
+      } else if (user?.id) {
+        try {
+          const r = await fetch(`${getApiUrl()}/me/whop-manage-url`, { headers: { "X-User-Id": user.id } });
+          if (r.ok) {
+            const data = (await r.json()) as { url?: string };
+            if (data?.url) url = data.url;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (typeof url === "undefined") {
+        url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, user?.whop_membership_id ?? undefined);
+      }
+    } else {
+      url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
+    }
     requestAnimationFrame(() => {
       setTimeout(() => {
         window.location.href = url;

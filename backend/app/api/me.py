@@ -192,6 +192,22 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
     }
 
 
+@router.get("/me/whop-manage-url")
+async def get_whop_manage_url(x_user_id: str | None = Header(None, alias="X-User-Id")):
+    """
+    Returns the Whop subscription management URL for the current user (upgrade with proration).
+    Used when the frontend doesn't have whop_manage_url in storage yet (e.g. fresh load, EUR).
+    """
+    user_id = (x_user_id or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id required")
+    _, _, _, _, whop_membership_id, _ = get_plan_and_usage(user_id)
+    mid = (whop_membership_id or "").strip() or None
+    if not mid:
+        raise HTTPException(status_code=404, detail="No Whop membership")
+    return {"url": f"https://whop.com/billing/manage/{mid}"}
+
+
 @router.post("/me/consume-one-analysis")
 async def consume_one_analysis(x_user_id: str | None = Header(None, alias="X-User-Id")):
     """
