@@ -9,8 +9,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
 import { formatPrice } from "@/lib/geoCurrency";
 import { UnsubscribeOfferModal } from "@/components/UnsubscribeOfferModal";
-import { getApiUrl } from "@/lib/api";
-import { getWhopCheckoutUrl, getDatafastVisitorId, isUpgradeFromCurrentPlan, getWhopManageUrl } from "@/lib/whopCheckout";
+import { getWhopCheckoutUrl, getDatafastVisitorId } from "@/lib/whopCheckout";
 import { Check } from "lucide-react";
 
 function PersonIcon({ className }: { className?: string }) {
@@ -436,25 +435,15 @@ export default function AccountPage() {
           </p>
           <button
             type="button"
-            onClick={async () => {
-              let url: string;
-              if (isUpgradeFromCurrentPlan(user?.plan ?? "free", "lifetime")) {
-                url = getWhopManageUrl(user) ?? "";
-                if (!url && user?.id) {
-                  try {
-                    const r = await fetch(`${getApiUrl()}/me/whop-manage-url`, { headers: { "X-User-Id": user.id } });
-                    if (r.ok) {
-                      const data = (await r.json()) as { url?: string };
-                      if (data?.url) url = data.url;
-                    }
-                  } catch {
-                    // ignore
-                  }
-                }
-                if (!url) url = getWhopCheckoutUrl("lifetime", currencyConfig.currency, getDatafastVisitorId(), "account-lifetime", user?.email, user?.whop_membership_id);
-              } else {
-                url = getWhopCheckoutUrl("lifetime", currencyConfig.currency, getDatafastVisitorId(), "account-lifetime", user?.email, user?.whop_membership_id);
-              }
+            onClick={() => {
+              const url = getWhopCheckoutUrl(
+                "lifetime",
+                currencyConfig.currency,
+                getDatafastVisitorId(),
+                "account-lifetime",
+                user?.email,
+                user?.whop_membership_id
+              );
               window.location.href = url;
             }}
             className="mt-4 w-full py-3 px-4 rounded-xl font-semibold text-[#0d0d12] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 hover:shadow-[0_0_22px_6px_rgba(245,158,11,0.45)] transition-all duration-300 shadow-[0_0_20px_-5px_rgba(245,158,11,0.4)]"

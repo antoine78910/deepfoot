@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useGeoCurrency } from "@/hooks/useGeoCurrency";
 import { formatPrice } from "@/lib/geoCurrency";
-import { getWhopCheckoutUrl, getDatafastVisitorId, isUpgradeFromCurrentPlan, getWhopManageUrl } from "@/lib/whopCheckout";
+import { getWhopCheckoutUrl, getDatafastVisitorId } from "@/lib/whopCheckout";
 import type { WhopPlanId } from "@/lib/whopCheckout";
 import { getUserFromStorage } from "@/lib/auth";
-import { getApiUrl } from "@/lib/api";
 import { trackDatafastGoal } from "@/lib/datafast";
 import { Medal, Check, Gem } from "lucide-react";
 
@@ -64,31 +63,21 @@ function PricingPage() {
   const currentPlan = (user && user.plan) ? user.plan : "free";
   const [loadingPlan, setLoadingPlan] = useState<WhopPlanId | null>(null);
 
-  const goToWhop = async (plan: WhopPlanId, source: string) => {
+  const goToWhop = (plan: WhopPlanId, source: string) => {
     if (plan === "starter") trackDatafastGoal("unlock_9");
     else if (plan === "pro") trackDatafastGoal("unlock_19");
     else if (plan === "lifetime") trackDatafastGoal("unlock_99");
     trackDatafastGoal("click_unlock", { source });
     trackDatafastGoal("initiate_checkout", { plan, source });
     setLoadingPlan(plan);
-    let url: string;
-    if (isUpgradeFromCurrentPlan(currentPlan, plan)) {
-      url = getWhopManageUrl(user) ?? "";
-      if (!url && user?.id) {
-        try {
-          const r = await fetch(`${getApiUrl()}/me/whop-manage-url`, { headers: { "X-User-Id": user.id } });
-          if (r.ok) {
-            const data = (await r.json()) as { url?: string };
-            if (data?.url) url = data.url;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      if (!url) url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, user?.whop_membership_id ?? undefined);
-    } else {
-      url = getWhopCheckoutUrl(plan, currencyConfig.currency, getDatafastVisitorId(), source, user?.email, plan !== "starter" ? user?.whop_membership_id : undefined);
-    }
+    const url = getWhopCheckoutUrl(
+      plan,
+      currencyConfig.currency,
+      getDatafastVisitorId(),
+      source,
+      user?.email,
+      plan !== "starter" ? user?.whop_membership_id : undefined
+    );
     requestAnimationFrame(() => {
       setTimeout(() => {
         window.location.href = url;
@@ -234,8 +223,6 @@ function PricingPage() {
                 <Spinner className="w-5 h-5 flex-shrink-0 text-[#0d0d12]" />
                 <span>Redirecting...</span>
               </>
-            ) : currentPlan === "starter" ? (
-              `${t("pricing.upgradePro")} - ${formatPrice(currencyConfig, currencyConfig.proAmount)}${t("pricing.perMonth")}`
             ) : (
               `${t("pricing.unlockPro")} - ${formatPrice(currencyConfig, currencyConfig.proAmount)}${t("pricing.perMonth")}`
             )}
@@ -303,8 +290,6 @@ function PricingPage() {
                 <Spinner className="w-5 h-5 flex-shrink-0 text-[#0d0d12]" />
                 <span>Redirecting...</span>
               </>
-            ) : currentPlan === "starter" || currentPlan === "pro" ? (
-              `${t("pricing.upgradeLifetime")} - ${formatPrice(currencyConfig, currencyConfig.lifetimeAmount)}`
             ) : (
               `${t("pricing.unlockLifetime")} - ${formatPrice(currencyConfig, currencyConfig.lifetimeAmount)}`
             )}
