@@ -40,8 +40,8 @@ WHOP_PLAN_TO_APP = {
     "plan_ErLwV2KgiMiC1": "lifetime",
     # USD (9 / 19.99 / 99.99)
     "plan_XNiSpw7OKJoIi": "starter",
-    "plan_MOu52Z9DibE1a": "pro",
-    "plan_b4cQuHInaBG2A": "lifetime",
+    "plan_LwCFHHdytBkM6": "pro",
+    "plan_MlCRcQibssX37": "lifetime",
 }
 
 

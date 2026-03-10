@@ -6,8 +6,8 @@ const CHECKOUT_URLS: Record<PricingCurrency, Record<WhopPlanId, string>> = {
   // USD: countries outside UK + Europe (9 / 19.99 / 99.99)
   USD: {
     starter: "https://whop.com/checkout/plan_XNiSpw7OKJoIi",
-    pro: "https://whop.com/checkout/plan_MOu52Z9DibE1a",
-    lifetime: "https://whop.com/checkout/plan_b4cQuHInaBG2A",
+    pro: "https://whop.com/checkout/plan_LwCFHHdytBkM6",
+    lifetime: "https://whop.com/checkout/plan_MlCRcQibssX37",
   },
   // GBP: UK (9 / 19 / 99)
   GBP: {
