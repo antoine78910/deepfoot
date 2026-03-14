@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-/** Base path for app routes: "" on app subdomain (app.localhost, app.deepfoot.ai), "/app" on main domain */
+/** Base path for app routes: "" on app subdomain (app.localhost, app.deepfoot.io), "/app" on main domain */
 export const AppBasePathContext = createContext<string>("/app");
 
 export function useAppBasePath(): string {

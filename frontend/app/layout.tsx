@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     "football AI",
     "soccer predictions",
     "DeepFoot",
-    "deepfoot.ai",
+    "deepfoot.io",
     "AI football prediction",
     "visifoot alternative",
   ],

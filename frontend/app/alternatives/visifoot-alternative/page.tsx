@@ -24,7 +24,7 @@ const FAQ = [
   {
     question: "Does DeepFoot work like Visifoot?",
     answer:
-      "Both use AI for football predictions. DeepFoot focuses on clear probability outputs and written scenario analysis. You can try it at deepfoot.ai/analyse and compare.",
+      "Both use AI for football predictions. DeepFoot focuses on clear probability outputs and written scenario analysis. You can try it at deepfoot.io/analyse and compare.",
   },
   {
     question: "Which leagues does DeepFoot cover?",

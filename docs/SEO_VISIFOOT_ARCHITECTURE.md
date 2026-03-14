@@ -25,7 +25,7 @@ Do not try to force `Visifoot` on the homepage or sitewide metadata. Use dedicat
 
 Based on the current frontend:
 
-- the primary host is inconsistent: code uses `https://deepfoot.ai` while SEO rules say `https://www.deepfoot.io`
+- the primary host is inconsistent: code uses `https://deepfoot.io` while SEO rules say `https://www.deepfoot.io`
 - `robots.ts` is minimal and does not explicitly support AI crawler discoverability
 - `sitemap.ts` is too small for a pSEO strategy and there is no visible `ai-sitemap`
 - almost no page-level metadata is implemented

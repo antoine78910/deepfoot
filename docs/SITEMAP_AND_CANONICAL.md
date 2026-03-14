@@ -6,8 +6,8 @@
 
 | Sitemap        | URL                          | Usage                                      |
 |----------------|------------------------------|--------------------------------------------|
-| **Sitemap principal** | `https://deepfoot.ai/sitemap.xml`   | Toutes les pages (statiques + articles)     |
-| **AI sitemap** | `https://deepfoot.ai/ai-sitemap.xml` | Pages clés pour crawlers / découverte      |
+| **Sitemap principal** | `https://deepfoot.io/sitemap.xml`   | Toutes les pages (statiques + articles)     |
+| **AI sitemap** | `https://deepfoot.io/ai-sitemap.xml` | Pages clés pour crawlers / découverte      |
 
 Tu n’as pas besoin de générer un fichier XML à la main : Next.js les génère à la volée. Il suffit de déployer et d’indiquer ces deux URLs dans les outils de soumission.
 
@@ -21,19 +21,19 @@ Tu n’as pas besoin de générer un fichier XML à la main : Next.js les génè
 {SITE_URL}{path}
 ```
 
-Avec `SITE_URL = https://deepfoot.ai` (défini dans `frontend/lib/seo/site.ts`).
+Avec `SITE_URL = https://deepfoot.io` (défini dans `frontend/lib/seo/site.ts`).
 
 - Pas de paramètres de requête dans le canonical.
 - Pas de trailing slash (sauf si tu décides une convention et l’appliques partout).
-- Une seule version du site en production (éviter deepfoot.ai vs www.deepfoot.ai sans redirection).
+- Une seule version du site en production (éviter deepfoot.io vs www.deepfoot.io sans redirection).
 
 ### Exemples
 
 | Type de page   | path                    | Canonical                          |
 |----------------|-------------------------|------------------------------------|
-| Homepage       | `/`                     | `https://deepfoot.ai/`              |
-| Article        | `/blog/mon-article`     | `https://deepfoot.ai/blog/mon-article` |
-| Comparaison    | `/compare/deepfoot-vs-visifoot` | `https://deepfoot.ai/compare/deepfoot-vs-visifoot` |
+| Homepage       | `/`                     | `https://deepfoot.io/`              |
+| Article        | `/blog/mon-article`     | `https://deepfoot.io/blog/mon-article` |
+| Comparaison    | `/compare/deepfoot-vs-visifoot` | `https://deepfoot.io/compare/deepfoot-vs-visifoot` |
 
 ---
 
@@ -43,7 +43,7 @@ Avec `SITE_URL = https://deepfoot.ai` (défini dans `frontend/lib/seo/site.ts`).
 
 - **Segment fixe :** `/blog/`
 - **Slug :** minuscules, tirets, pas d’accents ni caractères spéciaux.
-- **Exemple :** `https://deepfoot.ai/blog/premier-league-predictions-2025`
+- **Exemple :** `https://deepfoot.io/blog/premier-league-predictions-2025`
 
 ### 2. Fichiers à créer
 
@@ -129,13 +129,13 @@ export function blogSitemapEntries(): MetadataRoute.Sitemap {
 }
 ```
 
-Après déploiement, `https://deepfoot.ai/sitemap.xml` contiendra automatiquement `https://deepfoot.ai/blog/premier-league-predictions-2025`, etc.
+Après déploiement, `https://deepfoot.io/sitemap.xml` contiendra automatiquement `https://deepfoot.io/blog/premier-league-predictions-2025`, etc.
 
 ### 5. Checklist pour chaque nouvel article
 
 - [ ] URL en `/blog/[slug]`, slug lisible et stable.
 - [ ] `generateMetadata` avec `buildArticleMetadata` et **path = `/blog/{slug}`**.
-- [ ] Canonical = `https://deepfoot.ai/blog/{slug}` (géré par `buildArticleMetadata`).
+- [ ] Canonical = `https://deepfoot.io/blog/{slug}` (géré par `buildArticleMetadata`).
 - [ ] JSON-LD Article avec `articleSchema` (headline, description, url, datePublished, auteur si besoin).
 - [ ] Entrée ajoutée dans `blogSitemapEntries()` (ou générée depuis la source des articles).
 
@@ -158,6 +158,6 @@ Après déploiement, `https://deepfoot.ai/sitemap.xml` contiendra automatiquemen
 
 ## Résumé
 
-1. **Sitemap à “mettre” :** utilise directement `https://deepfoot.ai/sitemap.xml` et `https://deepfoot.ai/ai-sitemap.xml` dans les outils (rien à héberger à part).
-2. **Canonical :** toujours `https://deepfoot.ai` + `path` ; pour les articles, `path = /blog/[slug]`.
+1. **Sitemap à “mettre” :** utilise directement `https://deepfoot.io/sitemap.xml` et `https://deepfoot.io/ai-sitemap.xml` dans les outils (rien à héberger à part).
+2. **Canonical :** toujours `https://deepfoot.io` + `path` ; pour les articles, `path = /blog/[slug]`.
 3. **Nouveaux articles :** créer la page sous `app/blog/[slug]/page.tsx`, utiliser `buildArticleMetadata` + `articleSchema`, et ajouter l’entrée dans `blogSitemapEntries()`.
