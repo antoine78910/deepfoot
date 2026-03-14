@@ -316,7 +316,21 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 py-6 text-center">
+      <footer className="relative z-10 py-8 text-center border-t border-white/5">
+        <nav className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm mb-4">
+          <Link href="/ai-football-predictions" className="text-zinc-400 hover:text-[#00ffe8] transition">
+            AI Football Predictions
+          </Link>
+          <Link href="/how-ai-football-predictions-work" className="text-zinc-400 hover:text-[#00ffe8] transition">
+            How it works
+          </Link>
+          <Link href="/compare/deepfoot-vs-visifoot" className="text-zinc-400 hover:text-[#00ffe8] transition">
+            DeepFoot vs Visifoot
+          </Link>
+          <Link href="/alternatives/visifoot-alternative" className="text-zinc-400 hover:text-[#00ffe8] transition">
+            Visifoot alternative
+          </Link>
+        </nav>
         <p className="text-zinc-500 text-xs sm:text-sm">
           Got a question? Contact us at{" "}
           <a href="mailto:app@deepfoot.io" className="text-zinc-400 hover:text-[#00ffe8] transition">

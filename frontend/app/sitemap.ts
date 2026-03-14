@@ -1,13 +1,11 @@
 import { MetadataRoute } from "next";
+import { staticSitemapEntries, blogSitemapEntries } from "@/lib/seo/sitemap-pages";
 
-const BASE = "https://deepfoot.ai";
-
+/**
+ * Main sitemap: https://deepfoot.ai/sitemap.xml
+ * Submit this URL in Google Search Console (and Bing).
+ * Combines static pages + blog articles (see lib/seo/sitemap-pages.ts).
+ */
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    { url: BASE, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
-    { url: `${BASE}/analyse`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
-    { url: `${BASE}/app`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
-    { url: `${BASE}/matches`, lastModified: new Date(), changeFrequency: "daily", priority: 0.8 },
-    { url: `${BASE}/pricing`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.7 },
-  ];
+  return [...staticSitemapEntries(), ...blogSitemapEntries()];
 }

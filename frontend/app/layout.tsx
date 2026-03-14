@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { ClientProviders } from "@/components/ClientProviders";
-
-const SITE_URL = "https://deepfoot.ai";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/seo/site";
+import { organizationAndWebSiteSchema } from "@/lib/seo/schema";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -11,8 +11,7 @@ export const metadata: Metadata = {
     default: "DeepFoot – AI Football Predictions",
     template: "%s | DeepFoot",
   },
-  description:
-    "AI-powered football match predictions. Get 1X2, Over/Under, BTTS, exact scores and scenario analysis for every match. DeepFoot – AI Football Predictions.",
+  description: SITE_DESCRIPTION,
   keywords: [
     "football predictions",
     "AI predictions",
@@ -21,13 +20,15 @@ export const metadata: Metadata = {
     "soccer predictions",
     "DeepFoot",
     "deepfoot.ai",
+    "AI football prediction",
+    "visifoot alternative",
   ],
-  authors: [{ name: "DeepFoot", url: SITE_URL }],
-  creator: "DeepFoot",
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
   openGraph: {
     type: "website",
     url: SITE_URL,
-    siteName: "DeepFoot",
+    siteName: SITE_NAME,
     title: "DeepFoot – AI Football Predictions",
     description: "AI-powered football match predictions: 1X2, Over/Under, BTTS, exact score and scenario analysis.",
     locale: "en_US",
@@ -59,9 +60,15 @@ export default function RootLayout({
       ? `window.__SUPABASE_ENV__={url:${JSON.stringify(supabaseUrl)},anonKey:${JSON.stringify(supabaseAnonKey)}};`
       : "";
 
+  const jsonLd = organizationAndWebSiteSchema();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased min-h-screen bg-app-gradient text-zinc-200">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd }}
+        />
         {supabaseEnvScript ? (
           <script
             dangerouslySetInnerHTML={{ __html: supabaseEnvScript }}
