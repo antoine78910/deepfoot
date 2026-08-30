@@ -1,0 +1,90 @@
+---
+description: AI SEO for Deepfoot — citations in ChatGPT, Perplexity, Claude, and Google AI Overviews
+alwaysApply: true
+---
+
+# AI SEO Rules (Deepfoot)
+
+Optimize for how AI systems understand, match, and quote content — not classic SEO only.
+
+Targets: ChatGPT, Perplexity, Claude, Google AI Overviews, conversational search.
+
+## Core law
+
+AI can only recommend what is explicitly written. If a league, prediction type, data source, probability, or constraint is not on the page, it does not exist. No implied positioning.
+
+## Project defaults
+
+- Canonical host: `https://deepfoot.io` (single host; match `SITE_URL` / `NEXT_PUBLIC_SITE_URL`)
+- App Router: `frontend/app/`
+- SEO helpers: `frontend/lib/seo/` (`site.ts`, `metadata.ts`, `schema.ts`, `sitemap-pages.ts`)
+- Prefer Server Components for marketing content. `"use client"` only when interactivity is required.
+- Marketing copy: English.
+- Football facts must come from cached API-Football / Sportmonks / Supabase data. Never invent scores, tables, or probabilities. Respect the 100 req/day API-Football quota (see football-data rule).
+
+## Conversational queries (write the answers)
+
+Users ask: “AI football prediction for tonight”, “best football prediction AI”, “Premier League match prediction AI”, “accurate football predictions today”, “Visifoot alternative”.
+
+Every strategic page must explicitly state:
+
+- What it is (AI football match predictor)
+- Who it is for (fans, analysts, bettors)
+- Leagues covered (named)
+- Prediction types (1X2, Over/Under, BTTS, exact score, scenarios)
+- Outputs are probabilities, not certainties
+- Data sources at a high level
+
+Homepage must answer this in the first viewport.
+
+## Pages AI systems cite
+
+Maintain:
+
+- Hub: `/ai-football-predictions`
+- Methodology: `/how-ai-football-predictions-work`
+- Comparisons: `/compare/deepfoot-vs-visifoot`, `/compare/deepfoot-vs-forebet`
+- Alternative: `/alternatives/visifoot-alternative`
+- Honest “when the other tool is better” on every comparison page
+
+Format: short paragraphs, bullets, tables, FAQ with direct answers.
+
+## Structured data
+
+- Global in `frontend/app/layout.tsx`: Organization + WebSite (`JSON.stringify`)
+- Homepage: FAQPage
+- Blog/methodology: Article (+ FAQPage if FAQ exists)
+- Match pages: SportsEvent (teams, date, probabilities)
+- Inner pages: BreadcrumbList
+- Never fabricate Review/AggregateRating
+
+## Robots + sitemaps
+
+- `frontend/app/robots.ts`: allow Googlebot, Bingbot, GPTBot, ChatGPT-User; never block marketing pages
+- Sitemaps: `/sitemap.xml` and `/ai-sitemap.xml`
+- Canonical via `alternates.canonical` + `metadataBase`
+- Do not block search/AI crawlers in middleware
+
+## Content writing (blog / methodology)
+
+H1 already exists — never write another H1. Use `##` / `###`. Minimum 5 H2s.
+
+Before writing (do not display): 1 primary keyword, 8–12 secondary, informational + predictive intent.
+
+Include at least 2 of: statistical analysis, historical trends, real prediction examples, bookmaker vs model, match-analysis checklist.
+
+Forbidden: guaranteed wins, irresponsible gambling, presenting predictions as certain. Always state predictions are probabilistic.
+
+Exactly 2 internal links (mid + conclusion), markdown only, no “click here”, no links to other blog posts.
+
+Mandatory FAQ (4–6 questions). Meta title without “DeepFoot” suffix (`| DeepFoot` is added). Description 150–160 characters.
+
+Vary structure per article. Expert, data-driven, no empty marketing.
+
+## Performance
+
+No client-only primary content. No autoplay media. AI crawlers must see HTML immediately.
+
+## Validation before shipping
+
+Build, robots.txt, both sitemaps, schema validators, single canonical host.

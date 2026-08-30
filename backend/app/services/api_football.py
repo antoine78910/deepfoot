@@ -3,25 +3,153 @@
 Client pour API-Football (api-sports.io) v3.
 Documentation: https://www.api-football.com/documentation-v3
 Base: https://v3.football.api-sports.io/
+
+Free tier is 100 requests/day. Every HTTP call goes through `_get`, which
+enforces a disk cache and a daily quota file under backend/data/api-football/.
 """
 from typing import Any, Optional
+import hashlib
+import json
 import time
 import threading
+from datetime import datetime, timezone
+from pathlib import Path
 import httpx
 from app.core.config import get_settings
-from app.core.leagues import LEAGUE_IDS, current_season
+from app.core.leagues import current_season
 
-# Cache global: équipes (id -> {id, name, logo})
+# Cache global: équipes (id -> {id, name, logo}) — filled from search/id responses, never all leagues.
 _teams_cache: dict[int, dict] = {}
-_teams_cache_filled = False
+_teams_cache_loaded = False
 
 _SUPPORTED_LEAGUES_TTL_SECONDS = 24 * 60 * 60
 _supported_leagues_cache: list[dict] = []
 _supported_leagues_ts: float = 0.0
 
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "api-football"
+_CACHE_DIR = _DATA_DIR / "cache"
+_QUOTA_PATH = _DATA_DIR / "quota.json"
+_TEAMS_INDEX_PATH = _DATA_DIR / "teams-index.json"
+_quota_lock = threading.Lock()
+
 
 def _use_api() -> bool:
     return bool(get_settings().api_football_key)
+
+
+def _utc_today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _daily_limit() -> int:
+    return int(getattr(get_settings(), "api_football_daily_limit", 100) or 100)
+
+
+def _ensure_data_dir() -> None:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def get_quota() -> dict[str, Any]:
+    """Local quota snapshot. Does not call the API."""
+    limit = _daily_limit()
+    today = _utc_today()
+    used = 0
+    remaining_from_api: Optional[int] = None
+    if _QUOTA_PATH.exists():
+        try:
+            raw = json.loads(_QUOTA_PATH.read_text(encoding="utf-8"))
+            if raw.get("date") == today:
+                used = int(raw.get("used") or 0)
+                if raw.get("remaining_from_api") is not None:
+                    remaining_from_api = int(raw["remaining_from_api"])
+        except (OSError, ValueError, TypeError):
+            used = 0
+    remaining = max(0, limit - used)
+    if remaining_from_api is not None:
+        remaining = min(remaining, max(0, remaining_from_api))
+    return {
+        "date": today,
+        "used": used,
+        "limit": limit,
+        "remaining": remaining,
+        "remaining_from_api": remaining_from_api,
+    }
+
+
+def remaining_requests() -> int:
+    return int(get_quota().get("remaining") or 0)
+
+
+def _write_quota(used: int, remaining_from_api: Optional[int] = None) -> None:
+    _ensure_data_dir()
+    payload: dict[str, Any] = {
+        "date": _utc_today(),
+        "used": used,
+        "limit": _daily_limit(),
+    }
+    if remaining_from_api is not None:
+        payload["remaining_from_api"] = remaining_from_api
+    _QUOTA_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _record_request(remaining_from_api: Optional[int] = None) -> None:
+    with _quota_lock:
+        q = get_quota()
+        used = int(q["used"]) + 1
+        _write_quota(used, remaining_from_api=remaining_from_api)
+
+
+def _cache_key(path: str, params: Optional[dict[str, Any]]) -> str:
+    raw = json.dumps({"path": path, "params": params or {}}, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _ttl_seconds(path: str, params: Optional[dict[str, Any]]) -> int:
+    p = (path or "").lower()
+    params = params or {}
+    if p.rstrip("/").endswith("/status"):
+        return 5 * 60
+    if "/teams" in p:
+        return 7 * 24 * 3600
+    if "/leagues" in p or "/countries" in p:
+        return 24 * 3600
+    if "/standings" in p:
+        return 6 * 3600
+    if "/predictions" in p:
+        return 6 * 3600
+    if "/fixtures" in p:
+        if params.get("status") == "FT" or params.get("h2h") or params.get("id"):
+            return 12 * 3600
+        return 3 * 3600
+    return 6 * 3600
+
+
+def _read_cache(path: str, params: Optional[dict[str, Any]], *, allow_stale: bool) -> Optional[dict[str, Any]]:
+    key = _cache_key(path, params)
+    fp = _CACHE_DIR / f"{key}.json"
+    if not fp.exists():
+        return None
+    try:
+        payload = json.loads(fp.read_text(encoding="utf-8"))
+        stored_at = float(payload.get("stored_at") or 0)
+        ttl = int(payload.get("ttl") or 0)
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            return None
+        age = time.time() - stored_at
+        if allow_stale or age <= ttl:
+            return data
+    except (OSError, ValueError, TypeError):
+        return None
+    return None
+
+
+def _write_cache(path: str, params: Optional[dict[str, Any]], data: dict[str, Any], ttl: int) -> None:
+    _ensure_data_dir()
+    key = _cache_key(path, params)
+    fp = _CACHE_DIR / f"{key}.json"
+    payload = {"stored_at": time.time(), "ttl": ttl, "path": path, "params": params or {}, "data": data}
+    fp.write_text(json.dumps(payload, default=str), encoding="utf-8")
 
 COUNTRY_FR: dict[str, str] = {
     "England": "Angleterre",
@@ -73,16 +201,46 @@ def _url(path: str) -> str:
 
 
 def _get(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    """GET sur API-Football. Réponse standard: { "response": [...], "errors": {} }."""
+    """GET API-Football with disk cache and a hard 100 req/day quota.
+
+    Fresh cache is always preferred. If the daily quota is exhausted, stale cache
+    is returned instead of a new request.
+    """
     if not _use_api():
         return {}
-    with httpx.Client(timeout=15.0) as client:
-        r = client.get(_url(path), headers=_headers(), params=params or {})
+    params = params or {}
+    cached = _read_cache(path, params, allow_stale=False)
+    if cached is not None:
+        return cached
+    if remaining_requests() <= 0:
+        stale = _read_cache(path, params, allow_stale=True)
+        if stale is not None:
+            print(f"[api-football] quota exhausted — serving stale cache for {path}")
+            return stale
+        print(f"[api-football] quota exhausted — skipping {path}")
+        return {}
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.get(_url(path), headers=_headers(), params=params)
+        remaining_hdr = r.headers.get("x-ratelimit-requests-remaining")
+        remaining_from_api = int(remaining_hdr) if remaining_hdr is not None and str(remaining_hdr).isdigit() else None
+        _record_request(remaining_from_api=remaining_from_api)
         r.raise_for_status()
         data = r.json() or {}
         if data.get("errors") and not data.get("response"):
             return {}
+        _write_cache(path, params, data, _ttl_seconds(path, params))
         return data
+    except Exception as e:
+        print(f"[api-football] GET {path} error: {e}")
+        stale = _read_cache(path, params, allow_stale=True)
+        return stale or {}
+
+
+def get_api_status() -> dict[str, Any]:
+    """GET /status (counts as 1 request unless cached for 5 minutes)."""
+    data = _get("/status")
+    return data.get("response") or data
 
 
 def get_leagues(params: Optional[dict[str, Any]] = None) -> list[dict]:
@@ -279,7 +437,9 @@ def get_teams_search(search: str, min_chars: int = 2) -> list[dict]:
     if not search or len(search.strip()) < min_chars:
         return []
     data = _get("/teams", params={"search": search.strip()})
-    return data.get("response") or []
+    raw = data.get("response") or []
+    _remember_teams_from_response(raw)
+    return raw
 
 
 def get_countries() -> list[dict]:
@@ -319,28 +479,60 @@ def get_players_by_team(team_id: int, season: Optional[int] = None) -> list[dict
     return data.get("response") or []
 
 
-def _fill_teams_cache() -> None:
-    """Remplit le cache avec les équipes de toutes les ligues configurées."""
-    global _teams_cache, _teams_cache_filled
-    if _teams_cache_filled or not _use_api():
+def _persist_teams_index() -> None:
+    _ensure_data_dir()
+    serializable = {str(k): v for k, v in _teams_cache.items()}
+    _TEAMS_INDEX_PATH.write_text(json.dumps(serializable, ensure_ascii=False), encoding="utf-8")
+
+
+def _remember_team(t: dict) -> None:
+    """Store a team dict in the in-memory + disk index (no API call)."""
+    global _teams_cache
+    if not isinstance(t, dict):
         return
-    season = current_season()
-    for league_id in LEAGUE_IDS:
+    team = t.get("team") if isinstance(t.get("team"), dict) else t
+    tid = team.get("id")
+    if tid is None:
+        return
+    _teams_cache[int(tid)] = {
+        "id": int(tid),
+        "name": (team.get("name") or "").strip(),
+        "shortName": (team.get("name") or "").strip(),
+        "crest": (team.get("logo") or team.get("crest") or "").strip() or None,
+        "country": _country_bilingual(team.get("country") if isinstance(team, dict) else None),
+    }
+
+
+def _remember_teams_from_response(items: list) -> None:
+    changed = False
+    for item in items or []:
+        before = len(_teams_cache)
+        _remember_team(item if isinstance(item, dict) else {})
+        if len(_teams_cache) != before:
+            changed = True
+    if changed:
         try:
-            for item in get_teams_by_league(league_id, season):
-                t = item.get("team") or item
-                tid = t.get("id")
-                if tid is not None:
-                    _teams_cache[int(tid)] = {
-                        "id": int(tid),
-                        "name": (t.get("name") or "").strip(),
-                        "shortName": (t.get("name") or "").strip(),
-                        "crest": (t.get("logo") or "").strip() or None,
-                        "country": _country_bilingual(t.get("country") if isinstance(t, dict) else None),
-                    }
-        except Exception:
-            continue
-    _teams_cache_filled = True
+            _persist_teams_index()
+        except OSError:
+            pass
+
+
+def _fill_teams_cache() -> None:
+    """Load the on-disk team index. Never enumerates all leagues (that would burn the daily quota)."""
+    global _teams_cache, _teams_cache_loaded
+    if _teams_cache_loaded:
+        return
+    _teams_cache_loaded = True
+    if _TEAMS_INDEX_PATH.exists():
+        try:
+            raw = json.loads(_TEAMS_INDEX_PATH.read_text(encoding="utf-8"))
+            for k, v in (raw or {}).items():
+                try:
+                    _teams_cache[int(k)] = v
+                except (TypeError, ValueError):
+                    continue
+        except (OSError, ValueError):
+            pass
 
 
 def _normalize_for_search(s: str) -> str:
@@ -794,10 +986,28 @@ def get_teams_for_autocomplete(q: Optional[str] = None, limit: int = 80) -> list
         out = [{k: v for (k, v) in r.items() if k != "_national"} for r in result[:limit]]
         return out
 
-    # Alias (aja, psg, om, …) : passer par le cache pour avoir la bonne équipe
+    # Alias (aja, psg, om, …) : one search request, never fill all leagues
     if q_normalized and q_normalized in TEAM_SEARCH_ALIASES:
         _fill_teams_cache()
-        teams_list = [t for t in _teams_cache.values() if t.get("name") and _team_matches_query(t, q_normalized)]
+        terms = TEAM_SEARCH_ALIASES[q_normalized]
+        raw = get_teams_search(terms[0], min_chars=2)
+        teams_list = []
+        if raw:
+            for item in raw:
+                t = item.get("team") or item
+                if not isinstance(t, dict):
+                    continue
+                teams_list.append(
+                    {
+                        "id": t.get("id"),
+                        "name": (t.get("name") or "").strip(),
+                        "shortName": (t.get("name") or "").strip(),
+                        "crest": (t.get("logo") or "").strip() or None,
+                        "country": _country_bilingual(t.get("country")),
+                    }
+                )
+        if not teams_list:
+            teams_list = [t for t in _teams_cache.values() if t.get("name") and _team_matches_query(t, q_normalized)]
         teams_list.sort(key=lambda t: (t.get("name") or "").lower())
         result = []
         seen_names: set[str] = set()
@@ -955,6 +1165,7 @@ def get_team_by_id(team_id: int) -> Optional[dict]:
     if not raw:
         return None
     item = raw[0]
+    _remember_teams_from_response(raw)
     team = item.get("team") or item
     venue = (item.get("venue") or {}) if isinstance(item.get("venue"), dict) else {}
     return {
@@ -999,33 +1210,27 @@ def get_fixtures_headtohead_multi_season(
     max_seasons: int = 5,
 ) -> list[dict]:
     """
-    Tous les matchs H2H entre home_id et away_id sur les 5 dernières saisons.
-    Pour chaque saison on interroge les deux équipes (team=home_id et team=away_id) puis on fusionne
-    pour ne manquer aucun match (limite éventuelle de l'API par requête).
+    H2H between home_id and away_id.
+
+    Uses GET /fixtures/headtohead (1 request) instead of 10 seasonal fixture
+    calls — required on the 100 req/day plan. `ideal_seasons` / `max_seasons`
+    are kept for call-site compatibility and only used to slice the result.
     """
     if not _use_api():
         return []
-    pair = {home_id, away_id}
-    seen_ids: set[int] = set()
-    out: list[dict] = []
-    season = current_season()
-    seasons_to_try = list(range(season, season - max_seasons, -1))
-    for s in seasons_to_try:
-        for team_id in (home_id, away_id):
-            raw = _get("/fixtures", params={"team": team_id, "season": s, "status": "FT"})
-            for f in (raw.get("response") or []):
-                teams = f.get("teams") or {}
-                hid = (teams.get("home") or {}).get("id")
-                aid = (teams.get("away") or {}).get("id")
-                if not hid or not aid or {hid, aid} != pair:
-                    continue
-                fid = (f.get("fixture") or {}).get("id")
-                if fid is not None and fid in seen_ids:
-                    continue
-                seen_ids.add(fid)
-                out.append(f)
-    out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "", reverse=True)
-    return out
+    _ = ideal_seasons  # signature compatibility
+    raw = get_fixtures_headtohead(home_id, away_id, last_n=80)
+    if not raw:
+        return []
+    cur = current_season()
+    cutoff = cur - max(1, max_seasons)
+    out = []
+    for f in raw:
+        date_str = (f.get("fixture") or {}).get("date") or ""
+        season = _season_from_fixture_date(date_str, cur)
+        if season >= cutoff:
+            out.append(f)
+    return out or raw[:20]
 
 
 def get_weighted_h2h_home_pct(
@@ -1116,26 +1321,40 @@ def get_fixtures_by_date(date: str) -> list[dict]:
     return data.get("response") or []
 
 
+def _pick_team_id_from_list(name_lower: str, teams: list[dict]) -> Optional[int]:
+    exact_match: Optional[int] = None
+    prefix_match: Optional[int] = None
+    for t in teams:
+        n = (t.get("name") or "").strip().lower()
+        sn = (t.get("shortName") or "").strip().lower()
+        tid = t.get("id")
+        if tid is None:
+            continue
+        if name_lower == n or name_lower == sn:
+            return int(tid)
+        if n.startswith(name_lower) or sn.startswith(name_lower):
+            prefix_match = prefix_match or int(tid)
+        elif (n and name_lower.startswith(n)) or (sn and name_lower.startswith(sn)):
+            prefix_match = prefix_match or int(tid)
+    return exact_match if exact_match is not None else prefix_match
+
+
 def resolve_team_name_to_id(team_name: str, _league_id: Optional[int] = None) -> Optional[int]:
-    """Résout un nom d'équipe en ID API-Football (recherche dans le cache multi-ligues).
-    Privilégie correspondance exacte et préfixe pour éviter les faux positifs (ex: 'Angers' vs 'Rangers')."""
+    """Resolve a team name to an API-Football id (1 search request, not all leagues)."""
     if not _use_api() or not (team_name or "").strip():
         return None
     name_lower = team_name.strip().lower()
     _fill_teams_cache()
-    exact_match: Optional[int] = None
-    prefix_match: Optional[int] = None
-    for t in _teams_cache.values():
-        n = (t.get("name") or "").strip().lower()
-        sn = (t.get("shortName") or "").strip().lower()
-        if name_lower == n or name_lower == sn:
-            exact_match = int(t["id"])
-            break
-        if n.startswith(name_lower) or sn.startswith(name_lower):
-            prefix_match = prefix_match or int(t["id"])
-        elif name_lower.startswith(n) and n or (name_lower.startswith(sn) and sn):
-            prefix_match = prefix_match or int(t["id"])
-    return exact_match if exact_match is not None else prefix_match
+    cached = _pick_team_id_from_list(name_lower, list(_teams_cache.values()))
+    if cached is not None:
+        return cached
+    raw = get_teams_search(team_name.strip(), min_chars=2)
+    teams = []
+    for item in raw:
+        t = item.get("team") or item
+        if isinstance(t, dict):
+            teams.append({"id": t.get("id"), "name": t.get("name"), "shortName": t.get("name")})
+    return _pick_team_id_from_list(name_lower, teams)
 
 
 def _fixture_to_goals_and_form(team_id: int, fixtures: list[dict], last_n: int = 5) -> tuple[list[int], list[int], list[str]]:

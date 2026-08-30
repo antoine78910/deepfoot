@@ -39,6 +39,7 @@ def main() -> None:
         _use_api,
         get_fixtures_by_league,
         fixture_for_ingest,
+        remaining_requests,
     )
 
     if not _use_api():
@@ -49,6 +50,13 @@ def main() -> None:
     settings = get_settings()
     has_supabase = bool(settings.supabase_url and settings.supabase_key)
     season = current_season()
+    remaining = remaining_requests()
+    if remaining < len(LEAGUE_IDS):
+        print(
+            f"Quota API-Football insuffisant ({remaining} remaining, {len(LEAGUE_IDS)} leagues). "
+            "Ingest skipped. Use Sportmonks/Supabase or wait for daily reset."
+        )
+        return
 
     # Récupérer les matchs finis par ligue
     all_fixtures: list[dict] = []

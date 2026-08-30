@@ -43,11 +43,17 @@ def _build_search_terms(name: str) -> str:
 def main() -> None:
     from app.core.config import get_settings
     from app.core.leagues import LEAGUE_IDS, current_season
-    from app.services.api_football import _use_api, get_teams_by_league
+    from app.services.api_football import _use_api, get_teams_by_league, remaining_requests
 
     settings = get_settings()
     if not _use_api():
         print("API_FOOTBALL_KEY manquant dans .env")
+        sys.exit(1)
+    remaining = remaining_requests()
+    if remaining < len(LEAGUE_IDS):
+        print(
+            f"Quota API-Football insuffisant ({remaining} remaining, {len(LEAGUE_IDS)} leagues). Abort."
+        )
         sys.exit(1)
     if not (settings.supabase_url and settings.supabase_key):
         print("SUPABASE_URL et SUPABASE_KEY (ou SUPABASE_SERVICE_KEY) requis.")

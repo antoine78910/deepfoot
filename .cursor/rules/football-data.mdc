@@ -1,0 +1,38 @@
+---
+description: Football data sources — API-Football 100 req/day quota, cache first, never commit keys
+alwaysApply: true
+---
+
+# Football data (API-Football + Sportmonks)
+
+## Providers (do not mix keys)
+
+- **Sportmonks** (`SPORTMONKS_API_TOKEN`): live match analysis. Primary for `/predict`.
+- **API-Football** (`API_FOOTBALL_KEY`, api-sports.io v3): stats, teams, fixtures, pSEO data. **100 requests per day**.
+- **Supabase**: cached teams/results. Prefer this before any HTTP call.
+
+Keys live only in `backend/.env.local` (gitignored). Never write keys into rules, docs, commits, or client code.
+
+## Quota (hard limit)
+
+API-Football daily limit is **100**. Tracked in `backend/data/api-football/` (gitignored).
+
+Before any new call:
+
+1. Prefer disk cache / Supabase / Sportmonks.
+2. Check remaining via `python backend/scripts/api_football_quota.py` (local counter, 0 requests).
+3. Use `--refresh` only when you must sync with the provider (`GET /status` = 1 request).
+
+Never: loop `LEAGUE_IDS` to fill a team cache (~45 calls), multi-season H2H via 10 fixture calls (use `GET /fixtures/headtohead`), or generate pSEO pages with uncached live calls.
+
+If remaining is low, serve stale cache. Do not fail open into demo scores presented as real.
+
+## Client
+
+`backend/app/services/api_football.py` enforces disk cache + daily quota on every `_get`. Do not bypass it with raw `httpx` except the quota script.
+
+Typical analysis without cache is 17–21 calls — too expensive for this plan. Live analysis should stay on Sportmonks.
+
+## Agent usage
+
+When writing SEO pages, use named leagues/teams already in the repo or cached data. If a live fact is required and cache misses, make **one** targeted call, then stop.

@@ -13,11 +13,11 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     free_analyses_per_day: int = 1
     max_score_goals: int = 8  # grille Poisson 0..8
-    # API-Football (https://www.api-football.com/documentation-v3) — legacy, utilisé si Sportmonks non configuré
+    # API-Football (https://www.api-football.com/documentation-v3) — stats / pSEO; 100 req/day on free tier
     api_football_key: str = ""
     api_football_base_url: str = "https://v3.football.api-sports.io"
-    # Sportmonks Football API v3 (https://docs.sportmonks.com/v3/) — nouveau modèle data + prédictions
-    # Lit SPORTMONKS_API_TOKEN ou, à défaut, API_FOOTBALL_KEY (même clé possible côté user)
+    api_football_daily_limit: int = 100
+    # Sportmonks Football API v3 (https://docs.sportmonks.com/v3/) — live analysis. Separate key, never reuse API-Football.
     sportmonks_api_token: str = ""
     admin_api_key: str = ""  # Si défini, requiert X-Admin-Key pour /admin/*
     admin_dashboard_token: str = "Zjhfc82005??"  # Token simple pour /internal/admin/* (dashboard interne)
@@ -44,10 +44,10 @@ class Settings(BaseSettings):
         """Injecte les fallbacks env avant construction pour éviter model_copy (warning Pydantic)."""
         if not isinstance(data, dict):
             return data
-        # Sportmonks : depuis .env.local (api_football_key) ou SPORTMONKS_API_TOKEN / API_FOOTBALL_KEY
-        token = (data.get("sportmonks_api_token") or data.get("api_football_key") or "").strip()
+        # Sportmonks: SPORTMONKS_API_TOKEN only (API_FOOTBALL_KEY is a different provider)
+        token = (data.get("sportmonks_api_token") or "").strip()
         if not token:
-            token = (os.getenv("API_FOOTBALL_KEY") or os.getenv("SPORTMONKS_API_TOKEN") or "").strip()
+            token = (os.getenv("SPORTMONKS_API_TOKEN") or "").strip()
         if token:
             data["sportmonks_api_token"] = token
         # Supabase : NEXT_PUBLIC_* / SUPABASE_* si url/key vides
@@ -59,7 +59,8 @@ class Settings(BaseSettings):
         key = (data.get("supabase_key") or "").strip()
         if not key:
             key = (
-                os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+                os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+                or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
                 or os.getenv("SUPABASE_ANON_KEY")
                 or os.getenv("SUPABASE_KEY")
                 or ""

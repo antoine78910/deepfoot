@@ -1,0 +1,96 @@
+---
+description: Programmatic SEO for Deepfoot — scalable match, team, and league pages without thin content
+alwaysApply: true
+---
+
+# Programmatic SEO (pSEO) Rules — Deepfoot
+
+Create scalable, indexable landing pages for Deepfoot (AI football match predictor) without thin or duplicate content.
+
+## Where pSEO lives
+
+- App Router: `frontend/app/`
+- Helpers: `frontend/lib/seo/`
+- Discovery: `frontend/app/sitemap.ts`, `frontend/app/ai-sitemap.ts`
+- Canonical host: `https://deepfoot.io`
+
+## URL templates (mandatory)
+
+Lowercase, hyphens, no IDs, no query params, ideally under 60 characters.
+
+- Match: `/predictions/{league}/{team-a}-vs-{team-b}`
+- Team: `/teams/{team-name}`
+- League: `/leagues/{league-name}`
+- Comparison: `/compare/{tool-a}-vs-{tool-b}`
+- Alternative: `/alternatives/{competitor}-alternative`
+
+Keywords ≠ URLs. Clarity and hierarchy matter more than exact-match slugs.
+
+## Data for uniqueness (100 req/day)
+
+Uniqueness must come from real football data, not synonym spinning.
+
+Preferred order: Supabase / disk cache → Sportmonks → API-Football.
+
+API-Football free tier is **100 requests/day**. Do not generate thousands of pages with live API calls.
+
+- Batch and cache (TTL hours–days)
+- One `/fixtures/headtohead` call beats 10 seasonal fixture calls
+- Never loop all leagues to fill a team cache
+- Index a page only when it has real stats, form, and probabilities
+- Empty fixtures / name-swap templates → `noindex` or do not publish
+
+## Page contract (every indexable URL)
+
+- Unique title, unique meta description, one H1
+- Unique intro (not a cloned template sentence)
+- At least 2–3 unique data blocks (form, stats, probabilities, fixtures)
+- Internal links: parent hub + 2–6 related entities
+- Canonical path set
+- JSON-LD appropriate to the entity
+- In sitemap + linked from a hub
+
+Minimum uniqueness target: 60–70% unique content driven by data.
+
+## Match template
+
+H1: `[TEAM_A] vs [TEAM_B] Prediction`
+
+Required blocks: unique intro, match overview (league, date, venue), team form, AI probabilities (home / draw / away), explanation, CTA to Deepfoot analysis, related league/team links, FAQ, SportsEvent schema.
+
+Do not index without enough unique data.
+
+## Team template
+
+Overview, recent form, goals/defense, upcoming fixtures, likely next outcomes, links to league + matches, FAQ.
+
+## League template
+
+Overview, trends, featured matches, teams to watch, links down to teams/matches, FAQ.
+
+## Metadata
+
+- Title: keyword + brand via layout template (`| DeepFoot`)
+- Description: keyword + benefit + differentiator
+- `alternates.canonical` as a path (relies on `metadataBase`)
+- `index: false` for search/filter/pagination duplicates
+
+## Discovery
+
+Every URL: sitemap + HTML internal links from hubs (league → matches, homepage → money pages).
+
+If Search Console says “no referring sitemap/page”: add both.
+
+Faceted URLs (`?sort=`, `?q=`) are `noindex`. Paginated lists canonicalize to the main listing.
+
+## Performance at scale
+
+Server Components by default. Minimal client JS. Cache predictions. `revalidate` for freshness. No autoplay media.
+
+## Freshness
+
+Update probabilities, form, and fixtures from datasets. Never fake “updated today”.
+
+## Master directive
+
+Act as the Deepfoot Programmatic SEO agent: clean hierarchical URLs, entity-driven uniqueness, valid canonicals, football data over copy spinning. Reject thin or duplicate output.
