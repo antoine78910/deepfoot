@@ -1074,13 +1074,99 @@ def get_team_fixtures(team_id: int, season: Optional[int] = None, last_n: int = 
 
 
 def get_team_upcoming_fixtures(team_id: int, next_n: int = 10) -> list[dict]:
-    """Prochains matchs d'une équipe. Chaque item a fixture.date, teams.home, teams.away."""
+    """Prochains matchs d'une équipe. Chaque item a fixture.date, teams.home, teams.away.
+
+    Free plan rejects the `next` parameter and only allows fixtures by date for a
+    short rolling window (typically today and tomorrow). Paid plans use `next`.
+    """
+    if not _use_api() or not team_id:
+        return []
+    if not _api_football_is_free_plan():
+        data = _get("/fixtures", params={"team": int(team_id), "next": next_n})
+        raw = data.get("response") or []
+        raw.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
+        return raw[:next_n]
+    team_id = int(team_id)
+    out = [f for f in _fixtures_in_free_date_window() if _fixture_has_team(f, team_id)]
+    out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
+    return out[:next_n]
+
+
+_FEATURED_LEAGUE_IDS = {1, 2, 3, 4, 39, 61, 78, 88, 94, 135, 140, 144}
+
+
+def get_featured_upcoming_fixtures(next_n: int = 10, prefer_team_id: Optional[int] = None) -> list[dict]:
+    """Today/tomorrow matches: selected team first, then top leagues (LP suggestions)."""
     if not _use_api():
         return []
-    data = _get("/fixtures", params={"team": team_id, "next": next_n})
-    raw = data.get("response") or []
-    raw.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
-    return raw[:next_n]
+    if not _api_football_is_free_plan() and prefer_team_id:
+        return get_team_upcoming_fixtures(int(prefer_team_id), next_n)
+    raw = _fixtures_in_free_date_window()
+    prefer: list[dict] = []
+    featured: list[dict] = []
+    seen: set[int] = set()
+    pid = int(prefer_team_id) if prefer_team_id is not None else None
+    for f in raw:
+        fid = (f.get("fixture") or {}).get("id")
+        key = int(fid) if fid is not None else id(f)
+        if key in seen:
+            continue
+        if pid is not None and _fixture_has_team(f, pid):
+            seen.add(key)
+            prefer.append(f)
+            continue
+        lid = (f.get("league") or {}).get("id")
+        try:
+            lid_int = int(lid) if lid is not None else None
+        except (TypeError, ValueError):
+            lid_int = None
+        if lid_int in _FEATURED_LEAGUE_IDS:
+            seen.add(key)
+            featured.append(f)
+    out = prefer + featured
+    out.sort(key=lambda x: (0 if pid and _fixture_has_team(x, pid) else 1, (x.get("fixture") or {}).get("date") or ""))
+    return out[:next_n]
+
+
+def _api_football_is_free_plan() -> bool:
+    st = get_api_status()
+    if not isinstance(st, dict):
+        return True
+    sub = st.get("subscription") if isinstance(st.get("subscription"), dict) else {}
+    plan = str((sub or {}).get("plan") or "").lower()
+    return (not plan) or ("free" in plan)
+
+
+def _fixture_has_team(f: dict, team_id: int) -> bool:
+    teams = f.get("teams") or {}
+    hid = (teams.get("home") or {}).get("id")
+    aid = (teams.get("away") or {}).get("id")
+    return hid == team_id or aid == team_id
+
+
+def _fixtures_in_free_date_window() -> list[dict]:
+    """GET /fixtures?date=YYYY-MM-DD for today and tomorrow (cached). Skip kickoffs already started."""
+    from datetime import datetime, timezone, timedelta
+
+    today = datetime.now(timezone.utc).date()
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    out: list[dict] = []
+    seen: set[int] = set()
+    for delta in (0, 1):
+        day = (today + timedelta(days=delta)).isoformat()
+        data = _get("/fixtures", params={"date": day})
+        for f in data.get("response") or []:
+            date_str = ((f.get("fixture") or {}).get("date") or "")[:19]
+            if date_str and date_str < now_iso:
+                continue
+            fid = (f.get("fixture") or {}).get("id")
+            if fid is not None:
+                if int(fid) in seen:
+                    continue
+                seen.add(int(fid))
+            out.append(f)
+    out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
+    return out
 
 
 def get_predictions(fixture_id: int) -> Optional[dict]:
