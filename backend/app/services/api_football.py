@@ -30,7 +30,11 @@ _DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "api-football"
 _CACHE_DIR = _DATA_DIR / "cache"
 _QUOTA_PATH = _DATA_DIR / "quota.json"
 _TEAMS_INDEX_PATH = _DATA_DIR / "teams-index.json"
+_SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "teams_seed.json"
+_FIXTURES_WINDOW_PATH = _DATA_DIR / "fixtures-window.json"
 _quota_lock = threading.Lock()
+_upcoming_window_mem: list[dict] = []
+_upcoming_window_date: str = ""
 
 
 def _use_api() -> bool:
@@ -517,20 +521,53 @@ def _remember_teams_from_response(items: list) -> None:
             pass
 
 
+def _apply_local_team_row(row: dict) -> None:
+    """Merge one {id, name, crest, country} row into the in-memory index (no disk write)."""
+    if not isinstance(row, dict):
+        return
+    tid = row.get("id")
+    name = (row.get("name") or row.get("shortName") or "").strip()
+    if tid is None or not name:
+        return
+    crest = (row.get("crest") or row.get("logo") or "").strip() or None
+    country = row.get("country")
+    if country and " / " not in str(country):
+        country = _country_bilingual(str(country))
+    existing = _teams_cache.get(int(tid)) or {}
+    _teams_cache[int(tid)] = {
+        "id": int(tid),
+        "name": name,
+        "shortName": (row.get("shortName") or name).strip(),
+        "crest": crest or existing.get("crest"),
+        "country": country or existing.get("country"),
+    }
+
+
 def _fill_teams_cache() -> None:
-    """Load the on-disk team index. Never enumerates all leagues (that would burn the daily quota)."""
+    """Load the committed seed, then overlay the runtime index. Never enumerates all leagues."""
     global _teams_cache, _teams_cache_loaded
     if _teams_cache_loaded:
         return
     _teams_cache_loaded = True
+    if _SEED_PATH.exists():
+        try:
+            raw = json.loads(_SEED_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                for row in raw:
+                    _apply_local_team_row(row if isinstance(row, dict) else {})
+        except (OSError, ValueError):
+            pass
     if _TEAMS_INDEX_PATH.exists():
         try:
             raw = json.loads(_TEAMS_INDEX_PATH.read_text(encoding="utf-8"))
             for k, v in (raw or {}).items():
                 try:
-                    _teams_cache[int(k)] = v
+                    tid = int(k)
                 except (TypeError, ValueError):
                     continue
+                if isinstance(v, dict):
+                    v = {**v, "id": v.get("id") or tid}
+                    _apply_local_team_row(v)
         except (OSError, ValueError):
             pass
 
@@ -941,14 +978,52 @@ def _team_matches_query(team: dict, q_normalized: str) -> bool:
     return False
 
 
+def _teams_from_local_cache(q_normalized: str, limit: int) -> list[dict]:
+    """Filter the seeded/runtime team index. No HTTP."""
+    _fill_teams_cache()
+    teams_list = [
+        t
+        for t in _teams_cache.values()
+        if t.get("name")
+        and t.get("crest")
+        and not _is_non_primary_team_name(t.get("name") or "")
+    ]
+    if q_normalized:
+        teams_list = [t for t in teams_list if _team_matches_query(t, q_normalized)]
+        teams_list.sort(key=lambda t: _team_relevance_score(t.get("name") or "", q_normalized))
+    else:
+        teams_list.sort(
+            key=lambda t: (
+                _priority_for_name(_normalize_for_search(t.get("name") or "")),
+                (t.get("name") or "").lower(),
+            )
+        )
+    result: list[dict] = []
+    seen_names: set[str] = set()
+    for t in teams_list:
+        name = t.get("name") or t.get("shortName") or ""
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        result.append(
+            {"id": t.get("id"), "name": name, "crest": t.get("crest"), "country": t.get("country")}
+        )
+        if len(result) >= limit:
+            break
+    return result
+
+
 def get_teams_for_autocomplete(q: Optional[str] = None, limit: int = 80) -> list[dict]:
     """
     Liste d'équipes pour l'autocomplete (id, name, crest).
-    - Alias connus (aja, psg, om, etc.) : on utilise le cache pour résoudre (ex: aja → Auxerre).
-    - Sinon recherche API en une requête (rapide), puis fallback cache si vide.
+    Seed/local cache first (instant). Live API-Football only if the cache has no match.
     """
     q_clean = (q or "").strip()
     q_normalized = _normalize_for_search(q_clean) if q_clean else ""
+
+    local = _teams_from_local_cache(q_normalized, limit)
+    if not q_clean or local:
+        return local
 
     # Country/national team queries: serve instantly via API search (no league cache fill).
     if q_normalized and q_normalized in NATIONAL_QUERY_KEYS and len(q_clean) >= 2:
@@ -1076,39 +1151,46 @@ def get_team_fixtures(team_id: int, season: Optional[int] = None, last_n: int = 
 def get_team_upcoming_fixtures(team_id: int, next_n: int = 10) -> list[dict]:
     """Prochains matchs d'une équipe. Chaque item a fixture.date, teams.home, teams.away.
 
-    Free plan rejects the `next` parameter and only allows fixtures by date for a
-    short rolling window (typically today and tomorrow). Paid plans use `next`.
+    Free plan rejects `next` and only allows fixtures by date for today/tomorrow.
+    Always use that window (cached on disk) so the LP never waits on /status.
     """
-    if not _use_api() or not team_id:
+    if not team_id:
         return []
-    if not _api_football_is_free_plan():
-        data = _get("/fixtures", params={"team": int(team_id), "next": next_n})
-        raw = data.get("response") or []
-        raw.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
-        return raw[:next_n]
     team_id = int(team_id)
     out = [f for f in _fixtures_in_free_date_window() if _fixture_has_team(f, team_id)]
     out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
     return out[:next_n]
 
 
-_FEATURED_LEAGUE_IDS = {1, 2, 3, 4, 39, 61, 78, 88, 94, 135, 140, 144}
+_FEATURED_LEAGUE_IDS = {
+    1, 2, 3, 4,
+    39, 40, 41, 42,
+    61, 62,
+    78, 79,
+    88, 89,
+    94, 96,
+    135, 136,
+    140, 141,
+    144,
+    203, 207,
+}
 
 
 def get_featured_upcoming_fixtures(next_n: int = 10, prefer_team_id: Optional[int] = None) -> list[dict]:
-    """Today/tomorrow matches: selected team first, then top leagues (LP suggestions)."""
-    if not _use_api():
-        return []
-    if not _api_football_is_free_plan() and prefer_team_id:
-        return get_team_upcoming_fixtures(int(prefer_team_id), next_n)
+    """Today/tomorrow matches: selected team first, then top leagues, then any remaining NS."""
     raw = _fixtures_in_free_date_window()
     prefer: list[dict] = []
     featured: list[dict] = []
+    rest: list[dict] = []
     seen: set[int] = set()
     pid = int(prefer_team_id) if prefer_team_id is not None else None
-    for f in raw:
+
+    def _fid(f: dict) -> int:
         fid = (f.get("fixture") or {}).get("id")
-        key = int(fid) if fid is not None else id(f)
+        return int(fid) if fid is not None else id(f)
+
+    for f in raw:
+        key = _fid(f)
         if key in seen:
             continue
         if pid is not None and _fixture_has_team(f, pid):
@@ -1123,7 +1205,18 @@ def get_featured_upcoming_fixtures(next_n: int = 10, prefer_team_id: Optional[in
         if lid_int in _FEATURED_LEAGUE_IDS:
             seen.add(key)
             featured.append(f)
+        else:
+            rest.append(f)
     out = prefer + featured
+    if len(out) < next_n:
+        for f in rest:
+            key = _fid(f)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(f)
+            if len(out) >= next_n:
+                break
     out.sort(key=lambda x: (0 if pid and _fixture_has_team(x, pid) else 1, (x.get("fixture") or {}).get("date") or ""))
     return out[:next_n]
 
@@ -1144,29 +1237,79 @@ def _fixture_has_team(f: dict, team_id: int) -> bool:
     return hid == team_id or aid == team_id
 
 
-def _fixtures_in_free_date_window() -> list[dict]:
-    """GET /fixtures?date=YYYY-MM-DD for today and tomorrow (cached). Skip kickoffs already started."""
-    from datetime import datetime, timezone, timedelta
+def _filter_future_fixtures(raw: list[dict]) -> list[dict]:
+    from datetime import datetime, timezone
 
-    today = datetime.now(timezone.utc).date()
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     out: list[dict] = []
+    seen: set[int] = set()
+    for f in raw:
+        date_str = ((f.get("fixture") or {}).get("date") or "")[:19]
+        if date_str and date_str < now_iso:
+            continue
+        fid = (f.get("fixture") or {}).get("id")
+        if fid is not None:
+            if int(fid) in seen:
+                continue
+            seen.add(int(fid))
+        out.append(f)
+    out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
+    return out
+
+
+def _fixtures_in_free_date_window() -> list[dict]:
+    """Today + tomorrow fixtures. Memory/disk first, then API-Football HTTP cache."""
+    from datetime import datetime, timezone, timedelta
+
+    global _upcoming_window_mem, _upcoming_window_date
+    today = datetime.now(timezone.utc).date()
+    today_s = today.isoformat()
+    if _upcoming_window_date == today_s and _upcoming_window_mem:
+        return _filter_future_fixtures(_upcoming_window_mem)
+
+    stored: list[dict] = []
+    if _FIXTURES_WINDOW_PATH.exists():
+        try:
+            payload = json.loads(_FIXTURES_WINDOW_PATH.read_text(encoding="utf-8"))
+            if payload.get("date") == today_s and isinstance(payload.get("fixtures"), list):
+                stored = payload["fixtures"]
+        except (OSError, ValueError, TypeError):
+            stored = []
+
+    fetched: list[dict] = []
     seen: set[int] = set()
     for delta in (0, 1):
         day = (today + timedelta(days=delta)).isoformat()
         data = _get("/fixtures", params={"date": day})
         for f in data.get("response") or []:
-            date_str = ((f.get("fixture") or {}).get("date") or "")[:19]
-            if date_str and date_str < now_iso:
-                continue
             fid = (f.get("fixture") or {}).get("id")
             if fid is not None:
                 if int(fid) in seen:
                     continue
                 seen.add(int(fid))
-            out.append(f)
-    out.sort(key=lambda x: (x.get("fixture") or {}).get("date") or "")
-    return out
+            fetched.append(f)
+
+    window = fetched or stored
+    if window:
+        _upcoming_window_mem = window
+        _upcoming_window_date = today_s
+        if fetched:
+            try:
+                _ensure_data_dir()
+                _FIXTURES_WINDOW_PATH.write_text(
+                    json.dumps({"date": today_s, "fixtures": fetched}, default=str),
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+    return _filter_future_fixtures(window)
+
+
+def warmup_lp_caches() -> None:
+    """Preload team seed + today's fixture window so the first LP request is instant."""
+    _fill_teams_cache()
+    get_featured_upcoming_fixtures(next_n=10)
+    print(f"[api-football] LP cache ready: {len(_teams_cache)} teams")
 
 
 def get_predictions(fixture_id: int) -> Optional[dict]:

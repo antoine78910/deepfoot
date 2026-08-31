@@ -195,6 +195,7 @@ export function TeamAutocomplete({
         if (cancelled) return;
         const teams = (data.teams || [])
           .filter((t: TeamOption) => Boolean(t?.name));
+        if (teams.length === 0) return;
         warmTeamsRef.current = teams;
         writeTeamsToLocalCache(teams);
       } catch {

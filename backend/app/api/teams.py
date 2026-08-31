@@ -48,6 +48,13 @@ def list_teams(q: Optional[str] = None, limit: int = 80):
     q_clean = (q or "").strip()
     print(f"[teams] GET /teams q={q_clean!r} limit={limit}")
 
+    # Fast path: committed seed + runtime index (no Sportmonks, no live API).
+    local = get_teams_for_autocomplete(q=q, limit=limit)
+    if local:
+        local = _dedupe_teams_prefer_country(local)[:limit]
+        print(f"[teams] local cache -> {len(local)} teams")
+        return {"teams": local, "leagues": LEAGUES}
+
     # 1) Sportmonks configuré : Supabase, puis Sportmonks search, puis API-Football
     use_sm = _use_sportmonks()
     print(f"[teams] _use_sportmonks() = {use_sm}")

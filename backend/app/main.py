@@ -5,6 +5,8 @@ import logging
 for _name in ("app.api.teams", "app.services.sportmonks", "app.services.api_football"):
     logging.getLogger(_name).setLevel(logging.INFO)
 
+import threading
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import predict, teams, competitions, leagues, webhooks, internal, me as me_router
@@ -44,6 +46,18 @@ app.include_router(webhooks.router)
 app.include_router(competitions.router)
 app.include_router(internal.router)
 app.include_router(me_router.router)
+
+
+@app.on_event("startup")
+def startup_lp_caches():
+    def _run():
+        try:
+            from app.services.api_football import warmup_lp_caches
+            warmup_lp_caches()
+        except Exception as exc:
+            logger.warning("LP cache warmup failed: %s", exc)
+
+    threading.Thread(target=_run, daemon=True, name="lp-cache-warmup").start()
 
 
 @app.on_event("startup")
