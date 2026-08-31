@@ -39,3 +39,41 @@ export function oauthHopHref(opts: {
       : PRODUCTION_APP_ORIGIN;
   return `${origin}${path}?${params}`;
 }
+
+/** Supabase Redirect URLs must match this exactly — no ?next= query string. */
+export function oauthRedirectTo(origin: string): string {
+  return `${origin.replace(/\/$/, "")}/auth/callback`;
+}
+
+const OAUTH_NEXT_KEY = "df_oauth_next";
+const GOOGLE_OAUTH_LOCK = "df_google_oauth_lock";
+
+export function stashOAuthNext(next: string | null | undefined): void {
+  if (typeof sessionStorage === "undefined") return;
+  const safe = sanitizeNextPath(next ?? null);
+  if (safe) sessionStorage.setItem(OAUTH_NEXT_KEY, safe);
+  else sessionStorage.removeItem(OAUTH_NEXT_KEY);
+}
+
+export function takeOAuthNext(): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  const v = sessionStorage.getItem(OAUTH_NEXT_KEY);
+  sessionStorage.removeItem(OAUTH_NEXT_KEY);
+  return sanitizeNextPath(v);
+}
+
+export function claimGoogleOAuthStart(): boolean {
+  if (typeof sessionStorage === "undefined") return true;
+  const raw = sessionStorage.getItem(GOOGLE_OAUTH_LOCK);
+  if (raw) {
+    const started = Number(raw);
+    if (Number.isFinite(started) && Date.now() - started < 8000) return false;
+  }
+  sessionStorage.setItem(GOOGLE_OAUTH_LOCK, String(Date.now()));
+  return true;
+}
+
+export function clearGoogleOAuthLock(): void {
+  if (typeof sessionStorage === "undefined") return;
+  sessionStorage.removeItem(GOOGLE_OAUTH_LOCK);
+}

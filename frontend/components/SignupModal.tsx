@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getAppAuthCallbackUrl, SIGN_IN_HREF } from "@/lib/app-url";
-import { oauthHopHref } from "@/lib/oauth-callback";
+import { oauthHopHref, oauthRedirectTo, stashOAuthNext, claimGoogleOAuthStart, clearGoogleOAuthLock } from "@/lib/oauth-callback";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/supabase/profile";
 import { setAuthCookie, setUserInStorage, displayNameFromEmail } from "@/lib/auth";
@@ -115,15 +115,21 @@ export function SignupModal({ open, onClose, onSignIn, pendingMatch }: SignupMod
         window.location.assign(hop);
         return;
       }
+      stashOAuthNext(null);
+      if (!claimGoogleOAuthStart()) return;
       const supabase = getSupabaseBrowserClient();
-      const redirectTo = getAppAuthCallbackUrl();
-      await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
+          redirectTo: oauthRedirectTo(window.location.origin),
         },
       });
+      if (error) {
+        clearGoogleOAuthLock();
+        throw error;
+      }
     } catch (e: any) {
+      clearGoogleOAuthLock();
       alert(e?.message || "Google sign-in is not configured.");
     }
   };

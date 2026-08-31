@@ -5,6 +5,7 @@ import {
   isAppAuthHost,
   isOAuthCallbackParams,
   oauthHopHref,
+  oauthRedirectTo,
   sanitizeNextPath,
 } from "./oauth-callback";
 
@@ -62,5 +63,11 @@ describe("oauth helpers", () => {
     assert.equal(sanitizeNextPath("/matches"), "/matches");
     assert.equal(sanitizeNextPath("/?error=invalid_request&error_code=bad_oauth_state"), null);
     assert.equal(sanitizeNextPath("https://evil.com"), null);
+  });
+
+  it("builds a callback URL with no query string (Supabase allowlist is exact)", () => {
+    assert.equal(oauthRedirectTo("https://app.deepfoot.io"), "https://app.deepfoot.io/auth/callback");
+    assert.equal(oauthRedirectTo("https://app.deepfoot.io/"), "https://app.deepfoot.io/auth/callback");
+    assert.ok(!oauthRedirectTo("https://app.deepfoot.io").includes("?"));
   });
 });

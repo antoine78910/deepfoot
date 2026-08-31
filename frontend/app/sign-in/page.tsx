@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -9,8 +9,15 @@ import {
   displayNameFromEmail,
   type UserInfo,
 } from "@/lib/auth";
-import { SIGN_UP_HREF, getAppAuthCallbackUrl, getAppRootUrl } from "@/lib/app-url";
-import { oauthHopHref, sanitizeNextPath } from "@/lib/oauth-callback";
+import { SIGN_UP_HREF, getAppRootUrl } from "@/lib/app-url";
+import {
+  oauthHopHref,
+  oauthRedirectTo,
+  sanitizeNextPath,
+  stashOAuthNext,
+  claimGoogleOAuthStart,
+  clearGoogleOAuthLock,
+} from "@/lib/oauth-callback";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/supabase/profile";
 
@@ -24,6 +31,8 @@ function getSignInErrorMessage(err: unknown): string {
   return "Sign-in failed. Please try again.";
 }
 
+let googleOAuthAutoStarted = false;
+
 function SignInPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +40,6 @@ function SignInPageContent() {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const next = sanitizeNextPath(searchParams.get("next"));
-  const startedGoogle = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -42,9 +50,13 @@ function SignInPageContent() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("oauth") !== "google") return;
-    if (startedGoogle.current) return;
-    startedGoogle.current = true;
+    if (searchParams.get("oauth") !== "google") {
+      googleOAuthAutoStarted = false;
+      clearGoogleOAuthLock();
+      return;
+    }
+    if (googleOAuthAutoStarted) return;
+    googleOAuthAutoStarted = true;
     void handleGoogle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -104,17 +116,21 @@ function SignInPageContent() {
         window.location.assign(hop);
         return;
       }
+      stashOAuthNext(next);
+      if (!claimGoogleOAuthStart()) return;
       const supabase = getSupabaseBrowserClient();
-      const redirectTo = next
-        ? `${getAppAuthCallbackUrl()}?next=${encodeURIComponent(next)}`
-        : getAppAuthCallbackUrl();
-      await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
+          redirectTo: oauthRedirectTo(window.location.origin),
         },
       });
+      if (error) {
+        clearGoogleOAuthLock();
+        throw error;
+      }
     } catch (e: any) {
+      clearGoogleOAuthLock();
       alert(e?.message || "Google sign-in is not configured.");
     }
   };
