@@ -33,7 +33,7 @@ def _only_teams_with_country(teams: list) -> list:
 def list_teams(q: Optional[str] = None, limit: int = 80):
     """
     Liste des équipes pour autocomplete (id, name, crest).
-    Avec Sportmonks: uniquement Supabase (clubs synchronisés) ou API Sportmonks, pas API-Football.
+    Avec Sportmonks: Supabase (clubs synchronisés), sinon Sportmonks search, sinon API-Football.
     Doublons supprimés en gardant l'entrée avec country.
     """
     from app.services.sportmonks import _use_sportmonks, get_teams_for_autocomplete_sportmonks
@@ -48,7 +48,7 @@ def list_teams(q: Optional[str] = None, limit: int = 80):
     q_clean = (q or "").strip()
     print(f"[teams] GET /teams q={q_clean!r} limit={limit}")
 
-    # 1) Sportmonks configuré : uniquement Supabase (nos clubs) ou API Sportmonks, jamais API-Football
+    # 1) Sportmonks configuré : Supabase, puis Sportmonks search, puis API-Football
     use_sm = _use_sportmonks()
     print(f"[teams] _use_sportmonks() = {use_sm}")
     if use_sm:
@@ -73,6 +73,14 @@ def list_teams(q: Optional[str] = None, limit: int = 80):
             teams_sm = _dedupe_teams_prefer_country(teams_sm)[:limit]
             print(f"[teams] Sportmonks API -> {len(teams_sm)} teams")
             return {"teams": teams_sm, "leagues": LEAGUES}
+        # Sportmonks /teams/search is empty on some plans; new Supabase has no synced clubs yet.
+        # Fall back to API-Football so the landing-page autocomplete still works.
+        if q_clean and _use_api():
+            teams_af = get_teams_for_autocomplete(q=q, limit=limit)
+            teams_af = _dedupe_teams_prefer_country(teams_af)[:limit]
+            if teams_af:
+                print(f"[teams] API-Football fallback -> {len(teams_af)} teams")
+                return {"teams": teams_af, "leagues": LEAGUES}
         return {"teams": [], "leagues": LEAGUES}
 
     print("[teams] Sportmonks inactif -> Supabase / API-Football")

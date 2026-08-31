@@ -9,6 +9,8 @@ create table if not exists public.teams (
   logo_url text,
   last_updated timestamptz,
   stadium text,
+  country text,
+  search_terms text,
   created_at timestamptz default now()
 );
 
