@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ensureUserProfile } from "@/lib/supabase/profile";
 import {
   setAuthCookie,
   setUserInStorage,
@@ -62,6 +63,7 @@ export default function AuthCallbackPage() {
 
         setAuthCookie();
         setUserInStorage(info);
+        await ensureUserProfile(user?.id);
 
         setStatus("ok");
         trackDatafastGoal("account_verified_landing");

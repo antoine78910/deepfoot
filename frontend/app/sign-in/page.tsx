@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth";
 import { SIGN_UP_HREF, getAppAuthCallbackUrl, getAppRootUrl } from "@/lib/app-url";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ensureUserProfile } from "@/lib/supabase/profile";
 
 function getSignInErrorMessage(err: unknown): string {
   const msg = typeof err === "object" && err !== null && "message" in err ? String((err as { message: string }).message) : "";
@@ -71,6 +72,7 @@ function SignInPageContent() {
       };
       setAuthCookie();
       setUserInStorage(userInfo);
+      await ensureUserProfile(user?.id);
       const isApp = typeof window !== "undefined" && window.location.hostname.startsWith("app.");
       const safeNext = next && next.startsWith("/") ? next : null;
       const target = safeNext

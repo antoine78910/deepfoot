@@ -21,14 +21,17 @@ function getSupabaseUrl(): string {
 }
 
 function getSupabaseAnonKey(): string {
-  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (typeof process !== "undefined") {
+    const key =
+      process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (key) return key;
   }
   if (typeof window !== "undefined" && window.__SUPABASE_ENV__?.anonKey) {
     return window.__SUPABASE_ENV__.anonKey;
   }
   throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Copy frontend/.env.example to .env.local, add your Supabase anon key (Dashboard → Settings → API), then restart: npm run dev"
+    "Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY). Copy frontend/.env.example to .env.local, add your Supabase publishable key (Dashboard → Settings → API), then restart: npm run dev"
   );
 }
 
@@ -43,6 +46,7 @@ export function getSupabaseBrowserClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false, // we handle PKCE exchange in /auth/callback
+      flowType: "pkce",
     },
   });
 
