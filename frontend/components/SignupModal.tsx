@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getAppAuthCallbackUrl, SIGN_IN_HREF } from "@/lib/app-url";
+import { oauthHopHref } from "@/lib/oauth-callback";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/supabase/profile";
 import { setAuthCookie, setUserInStorage, displayNameFromEmail } from "@/lib/auth";
@@ -104,6 +105,15 @@ export function SignupModal({ open, onClose, onSignIn, pendingMatch }: SignupMod
         } catch {
           // ignore
         }
+      }
+      const hop = oauthHopHref({
+        hostname: window.location.hostname,
+        kind: "sign-up",
+        port: window.location.port,
+      });
+      if (hop) {
+        window.location.assign(hop);
+        return;
       }
       const supabase = getSupabaseBrowserClient();
       const redirectTo = getAppAuthCallbackUrl();

@@ -1,6 +1,6 @@
 export const PRODUCTION_APP_ORIGIN = "https://app.deepfoot.io";
 
-/** Absolute OAuth/email callback. Same origin on localhost; always app.deepfoot.io in prod. */
+/** Absolute OAuth/email callback. Must stay on the same origin as the PKCE verifier. */
 export function resolveAuthCallbackUrl(location: {
   hostname: string;
   protocol: string;
@@ -9,15 +9,6 @@ export function resolveAuthCallbackUrl(location: {
   const hostname = (location.hostname || "").toLowerCase();
   const protocol = location.protocol || "https:";
   const port = location.port ? `:${location.port}` : "";
-
-  if (
-    hostname === "deepfoot.io" ||
-    hostname === "www.deepfoot.io" ||
-    hostname === "app.deepfoot.io"
-  ) {
-    return `${PRODUCTION_APP_ORIGIN}/auth/callback`;
-  }
-
   return `${protocol}//${hostname}${port}/auth/callback`;
 }
 
@@ -100,6 +91,22 @@ export function getAppAuthCallbackUrl(): string {
   return `${PRODUCTION_APP_ORIGIN}/auth/callback`;
 }
 // Sign-in / sign-up are public routes on the same origin.
+export function getSignInHref(): string {
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h === "deepfoot.io" || h === "www.deepfoot.io") return `${PRODUCTION_APP_ORIGIN}/sign-in`;
+  }
+  return "/sign-in";
+}
+
+export function getSignUpHref(): string {
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h === "deepfoot.io" || h === "www.deepfoot.io") return `${PRODUCTION_APP_ORIGIN}/sign-up`;
+  }
+  return "/sign-up";
+}
+
 export const SIGN_IN_HREF = "/sign-in";
 export const SIGN_UP_HREF = "/sign-up";
 export const ANALYSE_HREF = getAnalyseHref();

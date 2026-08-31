@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isOAuthCallbackParams } from "@/lib/oauth-callback";
 
 /** Cookie name used for app subdomain auth (must match lib/auth.ts). Do not import @/lib/auth here – Edge can't bundle it. */
 const AUTH_COOKIE_NAME = "visifoot_session";
@@ -30,6 +31,17 @@ export function middleware(request: NextRequest) {
   }
 
   const pathname = request.nextUrl.pathname;
+
+  // OAuth must reach /auth/callback. Site URL often lands on /?code= or /?error= which
+  // would otherwise be bounced to /sign-in (losing the PKCE code / showing a raw error).
+  if (isOAuthCallbackParams(request.nextUrl.searchParams)) {
+    if (pathname !== "/auth/callback" && !pathname.startsWith("/auth/callback/")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/callback";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
 
   // Public routes on app subdomain: sign-in, sign-up, analyse (signup funnel), auth callback
   if (

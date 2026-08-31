@@ -10,6 +10,7 @@ import {
   type UserInfo,
 } from "@/lib/auth";
 import { getAppHref } from "@/lib/app-url";
+import { sanitizeNextPath } from "@/lib/oauth-callback";
 import { trackDatafastGoal } from "@/lib/datafast";
 
 export default function AuthCallbackPage() {
@@ -19,12 +20,20 @@ export default function AuthCallbackPage() {
   const nextUrl = useMemo(() => {
     if (typeof window === "undefined") return null;
     const url = new URL(window.location.href);
-    return url.searchParams.get("next");
+    return sanitizeNextPath(url.searchParams.get("next"));
   }, []);
 
   useEffect(() => {
     const run = async () => {
       try {
+        const url = new URL(window.location.href);
+        const oauthError = url.searchParams.get("error_description") || url.searchParams.get("error");
+        if (oauthError && !url.searchParams.get("code")) {
+          setError(decodeURIComponent(oauthError.replace(/\+/g, " ")));
+          setStatus("error");
+          return;
+        }
+
         const supabase = getSupabaseBrowserClient();
         const href = window.location.href;
         const hasHash = href.includes("#");
@@ -33,15 +42,17 @@ export default function AuthCallbackPage() {
         const refreshToken = hashParams?.get("refresh_token");
 
         if (accessToken && refreshToken) {
-          // Implicit flow: tokens in hash (e.g. Supabase redirected to Site URL with hash)
-          const { data, error: setError } = await supabase.auth.setSession({
+          const { error: setSessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
-          if (setError) throw setError;
+          if (setSessionError) throw setSessionError;
         } else {
-          // PKCE: exchange ?code=... for a session
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(href);
+          const code = url.searchParams.get("code");
+          if (!code) throw new Error("Missing OAuth code");
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`
+          );
           if (exchangeError) throw exchangeError;
         }
 
@@ -102,13 +113,19 @@ export default function AuthCallbackPage() {
 
         const isApp = window.location.hostname.startsWith("app.");
         target = nextUrl
-          ? nextUrl
+          ? (nextUrl.startsWith("http") ? nextUrl : `${window.location.origin}${nextUrl}`)
           : isApp
             ? `${window.location.origin}/`
             : getAppHref("/");
         window.location.replace(target);
       } catch (e: any) {
-        setError(e?.message || "OAuth callback failed");
+        const raw = e?.message || "OAuth callback failed";
+        const lower = String(raw).toLowerCase();
+        setError(
+          lower.includes("flow state") || lower.includes("oauth state")
+            ? "Google sign-in expired. Close extra tabs, then try again from this same page (app.deepfoot.io)."
+            : raw
+        );
         setStatus("error");
       }
     };

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BGPattern } from "@/components/BGPattern";
 import { LandingMatchSearch } from "@/components/LandingMatchSearch";
 import { LogoCloud } from "@/components/ui/logo-cloud";
-import { APP_HREF, SIGN_IN_HREF, SIGN_UP_HREF, ANALYSE_HREF } from "@/lib/app-url";
+import { APP_HREF, ANALYSE_HREF, PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
 
 export default function LandingPage() {
   // If Supabase sent tokens to the marketing homepage (Site URL), finish login on /auth/callback (same host).
@@ -34,13 +34,13 @@ export default function LandingPage() {
         </Link>
         <nav className="flex items-center gap-4 sm:gap-6">
           <Link
-            href={SIGN_IN_HREF}
+            href={`${PRODUCTION_APP_ORIGIN}/sign-in`}
             className="text-sm font-medium text-zinc-300 hover:text-white transition"
           >
             Log in
           </Link>
           <Link
-            href={SIGN_UP_HREF}
+            href={`${PRODUCTION_APP_ORIGIN}/sign-up`}
             className="text-sm font-semibold px-4 py-2 rounded-lg bg-[#00ffe8] text-black hover:opacity-90 transition"
           >
             Sign up

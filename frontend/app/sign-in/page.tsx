@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   type UserInfo,
 } from "@/lib/auth";
 import { SIGN_UP_HREF, getAppAuthCallbackUrl, getAppRootUrl } from "@/lib/app-url";
+import { oauthHopHref, sanitizeNextPath } from "@/lib/oauth-callback";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/supabase/profile";
 
@@ -29,20 +30,24 @@ function SignInPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  const next = searchParams.get("next");
+  const next = sanitizeNextPath(searchParams.get("next"));
+  const startedGoogle = useRef(false);
 
-  // If Supabase redirected here with tokens in hash (wrong Site URL in dashboard), redirect to /auth/callback on same host
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const { hash, hostname } = window.location;
+    const { hash } = window.location;
     if (hash && hash.includes("access_token=")) {
-      const callbackPath = "/auth/callback";
-      const target = hostname.startsWith("app.")
-        ? `${window.location.origin}${callbackPath}${hash.startsWith("#") ? hash : `#${hash}`}`
-        : `${getAppAuthCallbackUrl()}${hash.startsWith("#") ? hash : `#${hash}`}`;
-      window.location.replace(target);
+      window.location.replace(`/auth/callback${hash.startsWith("#") ? hash : `#${hash}`}`);
     }
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("oauth") !== "google") return;
+    if (startedGoogle.current) return;
+    startedGoogle.current = true;
+    void handleGoogle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const canSubmit = email.trim().length > 0 && password.trim().length >= 6 && !loading;
 
@@ -74,9 +79,8 @@ function SignInPageContent() {
       setUserInStorage(userInfo);
       await ensureUserProfile(user?.id);
       const isApp = typeof window !== "undefined" && window.location.hostname.startsWith("app.");
-      const safeNext = next && next.startsWith("/") ? next : null;
-      const target = safeNext
-        ? `${window.location.origin}${safeNext}`
+      const target = next
+        ? `${window.location.origin}${next}`
         : isApp
           ? `${window.location.origin}/`
           : getAppRootUrl();
@@ -90,10 +94,19 @@ function SignInPageContent() {
 
   const handleGoogle = async () => {
     try {
+      const hop = oauthHopHref({
+        hostname: window.location.hostname,
+        kind: "sign-in",
+        next,
+        port: window.location.port,
+      });
+      if (hop) {
+        window.location.assign(hop);
+        return;
+      }
       const supabase = getSupabaseBrowserClient();
-      const safeNext = next && next.startsWith("/") ? next : null;
-      const redirectTo = safeNext
-        ? `${getAppAuthCallbackUrl()}?next=${encodeURIComponent(safeNext)}`
+      const redirectTo = next
+        ? `${getAppAuthCallbackUrl()}?next=${encodeURIComponent(next)}`
         : getAppAuthCallbackUrl();
       await supabase.auth.signInWithOAuth({
         provider: "google",
