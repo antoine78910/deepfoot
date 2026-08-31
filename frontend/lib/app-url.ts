@@ -6,15 +6,20 @@ const PRODUCTION_APP_ORIGIN = "https://app.deepfoot.io";
  * Production: when on deepfoot.io we always use PRODUCTION_APP_ORIGIN so env typos don't break links.
  */
 function getAppOrigin(): string | null {
-  // In browser on production domain → always use correct app origin (avoids env typo like app.deepfoot.a)
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
+    if (h === "app.deepfoot.io") return window.location.origin;
     if (h === "deepfoot.io" || h === "www.deepfoot.io") return PRODUCTION_APP_ORIGIN;
+    if (h === "app.localhost") return window.location.origin;
   }
   if (typeof process === "undefined") return null;
   let origin = (process.env.NEXT_PUBLIC_APP_ORIGIN || "").trim().replace(/\/$/, "");
   if (!origin || !origin.startsWith("http")) return null;
-  // Force correct production URL (typo app.deepfoot.a or any wrong deepfoot domain in env)
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
+    if (typeof window !== "undefined" && window.location.hostname.includes("deepfoot.io")) {
+      return PRODUCTION_APP_ORIGIN;
+    }
+  }
   if (origin.includes("deepfoot")) {
     if (origin.includes("deepfoot.a") || !origin.includes("deepfoot.io")) {
       origin = PRODUCTION_APP_ORIGIN;
