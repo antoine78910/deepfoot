@@ -1,4 +1,25 @@
-const PRODUCTION_APP_ORIGIN = "https://app.deepfoot.io";
+export const PRODUCTION_APP_ORIGIN = "https://app.deepfoot.io";
+
+/** Absolute OAuth/email callback. Same origin on localhost; always app.deepfoot.io in prod. */
+export function resolveAuthCallbackUrl(location: {
+  hostname: string;
+  protocol: string;
+  port?: string;
+}): string {
+  const hostname = (location.hostname || "").toLowerCase();
+  const protocol = location.protocol || "https:";
+  const port = location.port ? `:${location.port}` : "";
+
+  if (
+    hostname === "deepfoot.io" ||
+    hostname === "www.deepfoot.io" ||
+    hostname === "app.deepfoot.io"
+  ) {
+    return `${PRODUCTION_APP_ORIGIN}/auth/callback`;
+  }
+
+  return `${protocol}//${hostname}${port}/auth/callback`;
+}
 
 /**
  * When NEXT_PUBLIC_APP_ORIGIN is set (e.g. https://app.deepfoot.io), all app links use it.
@@ -67,18 +88,16 @@ export function getAppRootUrl(): string {
   return "/app";
 }
 
-/** OAuth callback URL: always use app origin so after Google login we land on the app. */
+/** OAuth / email confirmation callback. Never send a relative URL (Supabase would fall back to Site URL). */
 export function getAppAuthCallbackUrl(): string {
-  const origin = getAppOrigin();
-  if (origin) return `${origin}/auth/callback`;
   if (typeof window !== "undefined") {
-    const { protocol, hostname, port } = window.location;
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      const p = port ? `:${port}` : "";
-      return `${protocol}//app.${hostname}${p}/auth/callback`;
-    }
+    return resolveAuthCallbackUrl({
+      hostname: window.location.hostname,
+      protocol: window.location.protocol,
+      port: window.location.port,
+    });
   }
-  return "/app/auth/callback";
+  return `${PRODUCTION_APP_ORIGIN}/auth/callback`;
 }
 // Sign-in / sign-up are public routes on the same origin.
 export const SIGN_IN_HREF = "/sign-in";

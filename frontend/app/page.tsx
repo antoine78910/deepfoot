@@ -5,15 +5,14 @@ import Link from "next/link";
 import { BGPattern } from "@/components/BGPattern";
 import { LandingMatchSearch } from "@/components/LandingMatchSearch";
 import { LogoCloud } from "@/components/ui/logo-cloud";
-import { APP_HREF, SIGN_IN_HREF, SIGN_UP_HREF, ANALYSE_HREF, getAppAuthCallbackUrl } from "@/lib/app-url";
+import { APP_HREF, SIGN_IN_HREF, SIGN_UP_HREF, ANALYSE_HREF } from "@/lib/app-url";
 
 export default function LandingPage() {
-  // If Supabase redirected here with tokens in hash (e.g. Site URL = localhost), send user to app callback
+  // If Supabase sent tokens to the marketing homepage (Site URL), finish login on /auth/callback (same host).
   useEffect(() => {
-    const { hostname, hash } = window.location;
-    if ((hostname === "localhost" || hostname === "127.0.0.1") && hash && hash.includes("access_token=")) {
-      const appCallback = getAppAuthCallbackUrl();
-      window.location.replace(`${appCallback}${hash}`);
+    const { hash, search } = window.location;
+    if (hash && hash.includes("access_token=")) {
+      window.location.replace(`/auth/callback${search}${hash}`);
     }
   }, []);
 

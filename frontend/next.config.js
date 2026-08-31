@@ -33,7 +33,13 @@ for (const key of Object.keys(envVars)) {
 const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: envVars.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || "",
-    NEXT_PUBLIC_APP_ORIGIN: envVars.NEXT_PUBLIC_APP_ORIGIN || process.env.NEXT_PUBLIC_APP_ORIGIN || "",
+    NEXT_PUBLIC_APP_ORIGIN: (() => {
+      const origin = envVars.NEXT_PUBLIC_APP_ORIGIN || process.env.NEXT_PUBLIC_APP_ORIGIN || "";
+      if (process.env.NODE_ENV === "production" && /localhost|127\.0\.0\.1/i.test(origin)) {
+        return "https://app.deepfoot.io";
+      }
+      return origin;
+    })(),
     NEXT_PUBLIC_SUPABASE_URL: envVars.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "",
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
       envVars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
