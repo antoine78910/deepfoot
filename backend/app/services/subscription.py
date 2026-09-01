@@ -3,9 +3,12 @@
 Limites d'analyses par plan : free (3/jour à 15% flouté), starter (1 complète/jour), pro/lifetime (illimité).
 Sans Supabase configuré, on autorise toujours (mode démo).
 """
+import logging
 from datetime import date, datetime, timezone
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase, get_supabase_admin
+
+logger = logging.getLogger(__name__)
 
 # Plans reconnus : free, starter, pro, lifetime (premium mappé sur pro)
 PLAN_FREE = "free"
@@ -17,6 +20,18 @@ PLAN_LIFETIME = "lifetime"
 def _use_supabase() -> bool:
     s = get_settings()
     return bool(s.supabase_url and s.supabase_key)
+
+
+def _is_missing_table_error(exc: BaseException) -> bool:
+    """PostgREST PGRST205 / schema cache when public.profiles (or similar) was never created."""
+    msg = str(exc).lower()
+    return (
+        "pgrst205" in msg
+        or "could not find the table" in msg
+        or "schema cache" in msg
+        or 'relation "profiles" does not exist' in msg
+        or "relation 'profiles' does not exist" in msg
+    )
 
 
 def _normalize_plan(plan: str) -> str:
@@ -46,13 +61,22 @@ def get_plan_and_usage(user_id: str) -> tuple[str, int, date | None, str | None,
             "subscription_ends_at, whop_membership_id"
         ).eq("id", user_id).execute()
     except Exception as e:
+        if _is_missing_table_error(e):
+            logger.warning("profiles table missing; treating user as free: %s", e)
+            return (PLAN_FREE, 0, None, None, None, None)
         err_msg = str(e).lower()
         if "42703" in err_msg or "does not exist" in err_msg:
-            r = supabase.table("profiles").select(
-                "plan, analyses_used_today, last_analysis_date, "
-                "full_analyses_used_today, last_full_analysis_date, "
-                "subscription_ends_at, whop_membership_id"
-            ).eq("id", user_id).execute()
+            try:
+                r = supabase.table("profiles").select(
+                    "plan, analyses_used_today, last_analysis_date, "
+                    "full_analyses_used_today, last_full_analysis_date, "
+                    "subscription_ends_at, whop_membership_id"
+                ).eq("id", user_id).execute()
+            except Exception as e2:
+                if _is_missing_table_error(e2):
+                    logger.warning("profiles table missing; treating user as free: %s", e2)
+                    return (PLAN_FREE, 0, None, None, None, None)
+                raise
         else:
             raise
     if not r.data or len(r.data) == 0:
@@ -131,7 +155,11 @@ def can_analyze(user_id: str) -> tuple[bool, str, bool, str | None]:
     if not _use_supabase():
         return (True, "", True, None)
     today = datetime.now(timezone.utc).date()
-    plan, used, last, _, _, _ = get_plan_and_usage(user_id)
+    try:
+        plan, used, last, _, _, _ = get_plan_and_usage(user_id)
+    except Exception as e:
+        logger.warning("can_analyze: get_plan_and_usage failed, allowing free analysis: %s", e)
+        return (True, "", False, None)
     used = reset_if_new_day(used, last, today)
     limit, full_analysis = get_analysis_limit(plan)
 
@@ -208,14 +236,20 @@ def consume_chat_ai(user_id: str) -> None:
     used = reset_if_new_day(used, last, today)
     new_used = used + 1
     supabase = get_supabase_admin() or get_supabase()
-    supabase.table("profiles").upsert(
-        {
-            "id": user_id,
-            "chat_requests_used_today": new_used,
-            "last_chat_date": today.isoformat(),
-        },
-        on_conflict="id",
-    ).execute()
+    try:
+        supabase.table("profiles").upsert(
+            {
+                "id": user_id,
+                "chat_requests_used_today": new_used,
+                "last_chat_date": today.isoformat(),
+            },
+            on_conflict="id",
+        ).execute()
+    except Exception as e:
+        if _is_missing_table_error(e):
+            logger.warning("profiles table missing; skip consume_chat_ai: %s", e)
+            return
+        raise
 
 
 def consume_analysis(user_id: str, home_team: str | None = None, away_team: str | None = None) -> None:
@@ -260,11 +294,20 @@ def consume_analysis(user_id: str, home_team: str | None = None, away_team: str 
     try:
         supabase.table("profiles").upsert(payload, on_conflict="id").execute()
     except Exception as e:
+        if _is_missing_table_error(e):
+            logger.warning("profiles table missing; skip consume_analysis: %s", e)
+            return
         if "42703" not in str(e) and "does not exist" not in str(e).lower():
             raise
         payload.pop("last_full_analysis_at", None)
         payload.pop("last_analysis_at", None)
-        supabase.table("profiles").upsert(payload, on_conflict="id").execute()
+        try:
+            supabase.table("profiles").upsert(payload, on_conflict="id").execute()
+        except Exception as e2:
+            if _is_missing_table_error(e2):
+                logger.warning("profiles table missing; skip consume_analysis: %s", e2)
+                return
+            raise
     try:
         supabase.table("analysis_events").insert(
             {

@@ -494,7 +494,13 @@ export function MatchInput({
       }).toString()}`;
       router.push(analyzeUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed.");
+      const raw = err instanceof Error ? err.message : "Analysis failed.";
+      const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw);
+      setError(
+        isNetwork
+          ? "Could not reach the analysis server. Please try again in a moment."
+          : raw,
+      );
       setProgress(0);
       setProgressStep("");
       runStepSequenceCleanup();

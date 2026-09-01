@@ -898,7 +898,18 @@ def predict_stream(
     X-User-Id optionnel : applique les limites du plan et ajoute full_analysis dans data.
     """
     user_id = (x_user_id or "").strip()
-    allowed, msg, full_analysis, limit_reason = can_analyze(user_id)
+    try:
+        allowed, msg, full_analysis, limit_reason = can_analyze(user_id)
+    except Exception as e:
+        logger.exception("predict/stream: can_analyze failed: %s", e)
+
+        def quota_error_stream():
+            yield json.dumps(
+                {"type": "error", "message": "Analysis temporarily unavailable. Please try again."},
+                ensure_ascii=False,
+            ) + "\n"
+
+        return StreamingResponse(quota_error_stream(), media_type="application/x-ndjson")
     logger.info(
         "predict/stream: user_id=%s allowed=%s full_analysis=%s",
         (user_id[:8] + "...") if len(user_id) > 8 else (user_id or "(none)"),
