@@ -283,7 +283,30 @@ def _format_api_football_fixture_for_upcoming(f: dict) -> dict:
         "league": {"name": (league.get("name") or "").strip() or None},
         "home": {"name": home.get("name") or "", "logo": home.get("logo") or None},
         "away": {"name": away.get("name") or "", "logo": away.get("logo") or None},
+        "sort_at": dt.isoformat() if dt else "",
     }
+
+
+def _merge_upcoming_rows(primary: list, extra: list) -> list:
+    """Keep selected-team fixtures; prefer first list on duplicates; chronological order."""
+    out: list = []
+    seen: set[tuple] = set()
+
+    def _n(s: str) -> str:
+        return " ".join((s or "").replace("-", " ").strip().lower().split())
+
+    for row in (primary or []) + (extra or []):
+        if not isinstance(row, dict):
+            continue
+        home = _n(((row.get("home") or {}).get("name") or ""))
+        away = _n(((row.get("away") or {}).get("name") or ""))
+        key = (row.get("date"), home, away)
+        if not home or not away or key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    out.sort(key=lambda r: (r.get("sort_at") or "", r.get("date") or "", r.get("time") or ""))
+    return out
 
 
 @router.get("/upcoming")
@@ -305,11 +328,12 @@ def upcoming_fixtures(team: Optional[str] = None, team_id: Optional[int] = None,
         api_tid = int(team_id) if team_id is not None else None
         if api_tid is None and team_name_clean and _use_api():
             api_tid = resolve_team_name_to_id(team_name_clean)
+        if team_name_clean:
+            fixtures = get_upcoming_for_team(team_name_clean, limit=limit)
         if api_tid is not None and _use_api():
             raw = get_team_upcoming_fixtures(int(api_tid), next_n=limit)
-            fixtures = [_format_api_football_fixture_for_upcoming(f) for f in raw]
-        if not fixtures and team_name_clean:
-            fixtures = get_upcoming_for_team(team_name_clean, limit=limit)
+            af_rows = [_format_api_football_fixture_for_upcoming(f) for f in raw]
+            fixtures = _merge_upcoming_rows(af_rows, fixtures)[:limit]
         if not fixtures and _use_sportmonks() and team_name_clean:
             tid = _resolve_team_id_sportmonks(team_name_clean)
             if tid is not None:

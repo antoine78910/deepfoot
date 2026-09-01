@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,7 @@ _CACHE_DIR = _DATA_DIR / "cache"
 _BASE = "https://www.thesportsdb.com/api/v1/json/123"
 _SEARCH_TTL = 7 * 24 * 3600
 _EVENTS_TTL = 6 * 3600
+_ROUND_TTL = 12 * 3600
 
 _SEARCH_ALIASES: dict[str, str] = {
     "paris saint germain": "Paris Saint Germain",
@@ -119,7 +121,56 @@ def format_event_for_upcoming(ev: dict) -> Optional[dict]:
         "league": {"name": (ev.get("strLeague") or "").strip() or None},
         "home": {"name": home, "logo": (ev.get("strHomeTeamBadge") or "").strip() or None},
         "away": {"name": away, "logo": (ev.get("strAwayTeamBadge") or "").strip() or None},
+        "sort_at": dt.isoformat() if dt else "",
     }
+
+
+def _current_soccer_season() -> str:
+    now = datetime.now(timezone.utc)
+    year = now.year
+    if now.month >= 7:
+        return f"{year}-{year + 1}"
+    return f"{year - 1}-{year}"
+
+
+def event_involves_team(ev: dict, team_id: Optional[str] = None, team_name: Optional[str] = None) -> bool:
+    if not isinstance(ev, dict):
+        return False
+    if team_id:
+        tid = str(team_id)
+        if tid and tid in (str(ev.get("idHomeTeam") or ""), str(ev.get("idAwayTeam") or "")):
+            return True
+    qn = _normalize(team_name or "")
+    if not qn:
+        return False
+    home = _normalize(ev.get("strHomeTeam") or "")
+    away = _normalize(ev.get("strAwayTeam") or "")
+    return qn == home or qn == away or qn in home or qn in away
+
+
+def fixtures_for_team_from_events(
+    events: list[dict],
+    team_id: Optional[str] = None,
+    team_name: Optional[str] = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Keep upcoming fixtures that involve the selected club, in source order."""
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for ev in events:
+        if not event_involves_team(ev, team_id=team_id, team_name=team_name):
+            continue
+        row = format_event_for_upcoming(ev)
+        if not row:
+            continue
+        key = (row["date"], row["time"], row["home"]["name"], row["away"]["name"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _pick_team(rows: list[dict], query: str) -> Optional[dict]:
@@ -151,13 +202,13 @@ def _pick_team(rows: list[dict], query: str) -> Optional[dict]:
     return scored[0][1] if scored else None
 
 
-def resolve_team_id(team_name: str) -> Optional[str]:
+def resolve_team(team_name: str) -> Optional[dict]:
     name = (team_name or "").strip()
     if not name:
         return None
     key = _normalize(name)
-    cached = _read_cache("team", key, _SEARCH_TTL)
-    if isinstance(cached, str) and cached:
+    cached = _read_cache("teaminfo", key, _SEARCH_TTL)
+    if isinstance(cached, dict) and cached.get("idTeam"):
         return cached
     search = _SEARCH_ALIASES.get(key) or name
     data = _http_get("/searchteams.php", {"t": search})
@@ -170,30 +221,126 @@ def resolve_team_id(team_name: str) -> Optional[str]:
     tid = str(picked.get("idTeam") or "").strip()
     if not tid:
         return None
+    info = {
+        "idTeam": tid,
+        "strTeam": (picked.get("strTeam") or name).strip(),
+        "idLeague": str(picked.get("idLeague") or "").strip() or None,
+        "strLeague": (picked.get("strLeague") or "").strip() or None,
+        "strTeamBadge": (picked.get("strTeamBadge") or "").strip() or None,
+    }
+    _write_cache("teaminfo", key, info)
     _write_cache("team", key, tid)
-    return tid
+    return info
+
+
+def resolve_team_id(team_name: str) -> Optional[str]:
+    info = resolve_team(team_name)
+    if not info:
+        return None
+    return str(info.get("idTeam") or "") or None
+
+
+def _events_next(team_id: str) -> list[dict]:
+    cached = _read_cache("events", team_id, _EVENTS_TTL)
+    if isinstance(cached, list):
+        return [e for e in cached if isinstance(e, dict)]
+    data = _http_get("/eventsnext.php", {"id": team_id})
+    raw = data.get("events") or []
+    events = [e for e in raw if isinstance(e, dict)]
+    _write_cache("events", team_id, events)
+    return events
+
+
+def fetch_round_events(league_id: str, season: str, rnd: int) -> list[dict]:
+    key = f"{league_id}:{season}:{rnd}"
+    cached = _read_cache("round", key, _ROUND_TTL)
+    if isinstance(cached, list):
+        return [e for e in cached if isinstance(e, dict)]
+    data = _http_get("/eventsround.php", {"id": str(league_id), "r": str(rnd), "s": season})
+    raw = data.get("events") or []
+    events = [e for e in raw if isinstance(e, dict)]
+    if events:
+        _write_cache("round", key, events)
+    return events
+
+
+def _fetch_rounds(league_id: str, season: str, rounds: list[int]) -> dict[int, list[dict]]:
+    out: dict[int, list[dict]] = {}
+    missing: list[int] = []
+    for rnd in rounds:
+        key = f"{league_id}:{season}:{rnd}"
+        cached = _read_cache("round", key, _ROUND_TTL)
+        if isinstance(cached, list):
+            out[rnd] = [e for e in cached if isinstance(e, dict)]
+        else:
+            missing.append(rnd)
+    if not missing:
+        return out
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futs = {pool.submit(fetch_round_events, league_id, season, rnd): rnd for rnd in missing}
+        for fut in as_completed(futs):
+            rnd = futs[fut]
+            try:
+                out[rnd] = fut.result()
+            except Exception:
+                out[rnd] = []
+    return out
 
 
 def get_upcoming_for_team(team_name: str, limit: int = 10) -> list[dict]:
-    """Next fixtures for a club name (cached). Empty if unknown or none scheduled."""
-    tid = resolve_team_id(team_name)
-    if not tid:
+    """Next league fixtures for a club (cached rounds). Aims for `limit` matches, not just the next one."""
+    info = resolve_team(team_name)
+    if not info:
         return []
-    cached = _read_cache("events", tid, _EVENTS_TTL)
-    events: list[dict]
-    if isinstance(cached, list):
-        events = [e for e in cached if isinstance(e, dict)]
-    else:
-        data = _http_get("/eventsnext.php", {"id": tid})
-        raw = data.get("events") or []
-        events = [e for e in raw if isinstance(e, dict)]
-        _write_cache("events", tid, events)
-    out: list[dict] = []
-    for ev in events:
-        row = format_event_for_upcoming(ev)
-        if not row:
-            continue
-        out.append(row)
-        if len(out) >= limit:
+    tid = str(info.get("idTeam") or "")
+    league_id = (info.get("idLeague") or "").strip() or None
+    display_name = (info.get("strTeam") or team_name).strip()
+    next_events = _events_next(tid) if tid else []
+    if next_events and not league_id:
+        league_id = str(next_events[0].get("idLeague") or "").strip() or None
+    season = (next_events[0].get("strSeason") if next_events else None) or _current_soccer_season()
+    start_round = 1
+    for ev in next_events:
+        raw_round = ev.get("intRound")
+        try:
+            start_round = max(1, int(raw_round))
             break
-    return out
+        except (TypeError, ValueError):
+            continue
+
+    collected: list[dict] = []
+    if league_id:
+        round_ids = list(range(start_round, start_round + 10))
+        by_round = _fetch_rounds(league_id, season, round_ids)
+        empty_streak = 0
+        for rnd in round_ids:
+            events = by_round.get(rnd) or []
+            if not events:
+                empty_streak += 1
+                if empty_streak >= 3:
+                    break
+                continue
+            empty_streak = 0
+            collected.extend(
+                fixtures_for_team_from_events(
+                    events, team_id=tid, team_name=display_name, limit=limit
+                )
+            )
+            if len(collected) >= limit:
+                break
+
+    if len(collected) < limit and next_events:
+        extra = fixtures_for_team_from_events(
+            next_events, team_id=tid, team_name=display_name, limit=limit
+        )
+        seen = {(r["date"], r["time"], r["home"]["name"], r["away"]["name"]) for r in collected}
+        for row in extra:
+            key = (row["date"], row["time"], row["home"]["name"], row["away"]["name"])
+            if key in seen:
+                continue
+            seen.add(key)
+            collected.append(row)
+            if len(collected) >= limit:
+                break
+
+    return collected[:limit]
