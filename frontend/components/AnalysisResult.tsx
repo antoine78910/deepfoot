@@ -243,6 +243,47 @@ function FormIcon({ result }: { result: string }) {
   return <span className={`inline-flex ${formIconSize} items-center justify-center rounded border border-zinc-500/50 text-zinc-500 text-xs flex-shrink-0`} title="À venir">?</span>;
 }
 
+function TeamCrest({
+  src,
+  name,
+  sizeClass = "w-6 h-6",
+}: {
+  src?: string | null;
+  name: string;
+  sizeClass?: string;
+}) {
+  if (src) {
+    return <img src={src} alt="" className={`${sizeClass} object-contain flex-shrink-0`} />;
+  }
+  return (
+    <div
+      className={`${sizeClass} rounded-md bg-[#1c1c28] flex items-center justify-center text-white font-bold text-[9px] sm:text-xs flex-shrink-0`}
+      aria-hidden
+    >
+      {(name || "?").slice(0, 2)}
+    </div>
+  );
+}
+
+function TeamLabel({
+  src,
+  name,
+  sizeClass = "w-5 h-5",
+  nameClass = "text-zinc-300",
+}: {
+  src?: string | null;
+  name: string;
+  sizeClass?: string;
+  nameClass?: string;
+}) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 min-w-0 ${nameClass}`}>
+      <TeamCrest src={src} name={name} sizeClass={sizeClass} />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
 function StatBar({
   label,
   homePct,
@@ -541,31 +582,19 @@ export function AnalysisResult({ result }: { result: Result }) {
             <div className="flex flex-col sm:hidden gap-1.5 min-w-0 items-center w-full">
               <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
-                  {result.home_team_logo ? (
-                    <img src={result.home_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
-                  ) : (
-                    <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{home.slice(0, 2)}</div>
-                  )}
+                  <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-11 h-11" />
                   <span className="text-white font-bold text-base truncate">{home}</span>
                 </div>
                 <span className="text-zinc-500 text-sm font-medium flex-shrink-0">vs</span>
                 <div className="flex items-center gap-2 min-w-0 max-w-[45%]">
-                  {result.away_team_logo ? (
-                    <img src={result.away_team_logo} alt="" className="w-11 h-11 object-contain flex-shrink-0" />
-                  ) : (
-                    <div className="w-11 h-11 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{away.slice(0, 2)}</div>
-                  )}
+                  <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-11 h-11" />
                   <span className="text-white font-bold text-base truncate">{away}</span>
                 </div>
               </div>
             </div>
             {/* Desktop: logo | text | logo */}
             <div className="hidden sm:flex items-center gap-4 min-w-0 flex-1">
-              {result.home_team_logo ? (
-                <img src={result.home_team_logo} alt="" className="w-14 h-14 object-contain flex-shrink-0" />
-              ) : (
-                <div className="w-14 h-14 rounded-xl bg-[#1c1c28] flex-shrink-0 flex items-center justify-center text-white font-bold">{home.slice(0, 2)}</div>
-              )}
+              <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-14 h-14" />
               <div className="min-w-0">
                 <h1 className="text-lg sm:text-xl md:text-2xl font-bold mt-0.5 text-white">
                   <span className="text-white">{home}</span>
@@ -573,11 +602,7 @@ export function AnalysisResult({ result }: { result: Result }) {
                   <span className="text-white">{away}</span>
                 </h1>
               </div>
-              {result.away_team_logo ? (
-                <img src={result.away_team_logo} alt="" className="w-14 h-14 object-contain flex-shrink-0" />
-              ) : (
-                <div className="w-14 h-14 rounded-xl bg-[#1c1c28] flex-shrink-0 flex items-center justify-center text-white font-bold">{away.slice(0, 2)}</div>
-              )}
+              <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-14 h-14" />
             </div>
           </div>
         </div>
@@ -619,11 +644,7 @@ export function AnalysisResult({ result }: { result: Result }) {
             <h2 className="text-lg font-semibold text-white text-center mb-6">{t("matchOver.finalScore")}</h2>
             <div className="flex items-center justify-center gap-6 flex-wrap">
               <div className="flex flex-col items-center gap-2 min-w-[100px]">
-                {result.home_team_logo ? (
-                  <img src={result.home_team_logo} alt="" className="w-16 h-16 object-contain" />
-                ) : (
-                  <div className="w-16 h-16 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold">{home.slice(0, 2)}</div>
-                )}
+                <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-16 h-16" />
                 <span className="text-white font-medium">{home}</span>
               </div>
               <div className="flex flex-col items-center gap-0.5">
@@ -635,11 +656,7 @@ export function AnalysisResult({ result }: { result: Result }) {
                 </div>
               </div>
               <div className="flex flex-col items-center gap-2 min-w-[100px]">
-                {result.away_team_logo ? (
-                  <img src={result.away_team_logo} alt="" className="w-16 h-16 object-contain" />
-                ) : (
-                  <div className="w-16 h-16 rounded-xl bg-[#1c1c28] flex items-center justify-center text-white font-bold">{away.slice(0, 2)}</div>
-                )}
+                <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-16 h-16" />
                 <span className="text-white font-medium">{away}</span>
               </div>
             </div>
@@ -705,11 +722,7 @@ export function AnalysisResult({ result }: { result: Result }) {
             {/* Toujours côte à côte (mobile: plus compact) */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
               <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
-                {result.home_team_logo ? (
-                  <img src={result.home_team_logo} alt="" className="w-6 h-6 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[9px] sm:text-xs">{home.slice(0, 2)}</div>
-                )}
+                <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-6 h-6 sm:w-9 sm:h-9" />
                 <p className="font-semibold text-white text-[10px] sm:text-sm truncate min-w-0">{home}</p>
               </div>
               <div className="min-w-0 flex-1 flex flex-col gap-0.5">
@@ -726,11 +739,7 @@ export function AnalysisResult({ result }: { result: Result }) {
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
               <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink-0">
-                {result.away_team_logo ? (
-                  <img src={result.away_team_logo} alt="" className="w-6 h-6 sm:w-9 sm:h-9 object-contain flex-shrink-0" />
-                ) : (
-                  <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg bg-dark-input flex-shrink-0 flex items-center justify-center text-white font-bold text-[9px] sm:text-xs">{away.slice(0, 2)}</div>
-                )}
+                <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-6 h-6 sm:w-9 sm:h-9" />
                 <p className="font-semibold text-white text-[10px] sm:text-sm truncate min-w-0">{away}</p>
               </div>
               <div className="min-w-0 flex-1 flex flex-col gap-0.5">
@@ -767,12 +776,12 @@ export function AnalysisResult({ result }: { result: Result }) {
             <span className="text-[#00ffe8] text-xs sm:text-base">⚔️</span> {t("analysis.matchImportance")}
           </h2>
           <div className="rounded-xl bg-[#1c1c28] border border-white/5 p-2.5 sm:p-4 flex flex-wrap gap-2 sm:gap-4">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-zinc-400 text-xs sm:text-sm">{result.home_team}</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <TeamLabel src={result.home_team_logo} name={home} sizeClass="w-5 h-5 sm:w-6 sm:h-6" nameClass="text-zinc-400 text-xs sm:text-sm" />
               <span className="text-white font-medium text-xs sm:text-base capitalize">{result.home_motivation_label || "—"}</span>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-zinc-400 text-xs sm:text-sm">{result.away_team}</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <TeamLabel src={result.away_team_logo} name={away} sizeClass="w-5 h-5 sm:w-6 sm:h-6" nameClass="text-zinc-400 text-xs sm:text-sm" />
               <span className="text-white font-medium text-xs sm:text-base capitalize">{result.away_motivation_label || "—"}</span>
             </div>
           </div>
@@ -866,21 +875,27 @@ export function AnalysisResult({ result }: { result: Result }) {
           <>
             <div className="space-y-3 mb-4">
               <div className="flex items-center gap-2">
-                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{home} win</span>
+                <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0 inline-flex items-center gap-1.5 min-w-0">
+                  <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">{home} win</span>
+                </span>
                 <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#00ffe8] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_home ?? result.prob_home ?? 0}%` }} />
                 </div>
                 <span className="text-[#00ffe8] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Draw</span>
+                <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0">Draw</span>
                 <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#a3a3a3] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_draw ?? result.prob_draw ?? 0}%` }} />
                 </div>
                 <span className="text-zinc-300 font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{away} win</span>
+                <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0 inline-flex items-center gap-1.5 min-w-0">
+                  <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">{away} win</span>
+                </span>
                 <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                   <div className="h-full bg-[#ef4444] rounded-full transition-all duration-500" style={{ width: `${result.internal_prob_away ?? result.prob_away ?? 0}%` }} />
                 </div>
@@ -891,9 +906,15 @@ export function AnalysisResult({ result }: { result: Result }) {
               <>
                 <p className="text-zinc-500 text-xs mb-2 mt-3">{t("betting.impliedOdds")} (decimal, compare with bookmakers)</p>
                 <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
-                  <span>{home} ~{result.implied_odds_home}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-4 h-4" />
+                    {home} ~{result.implied_odds_home}
+                  </span>
                   <span>Draw ~{result.implied_odds_draw ?? "—"}</span>
-                  <span>{away} ~{result.implied_odds_away ?? "—"}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-4 h-4" />
+                    {away} ~{result.implied_odds_away ?? "—"}
+                  </span>
                 </div>
               </>
             )}
@@ -903,21 +924,27 @@ export function AnalysisResult({ result }: { result: Result }) {
             <div className="select-none pointer-events-none blur-sm opacity-85" aria-hidden>
               <div className="space-y-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{home} win</span>
+                  <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0 inline-flex items-center gap-1.5 min-w-0">
+                    <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="truncate">{home} win</span>
+                  </span>
                   <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_home ?? result.prob_home ?? 0}%` }} />
                   </div>
                   <span className="text-[#00ffe8] font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_home ?? result.prob_home ?? 0}%</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">Draw</span>
+                  <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0">Draw</span>
                   <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_draw ?? result.prob_draw ?? 0}%` }} />
                   </div>
                   <span className="text-zinc-300 font-semibold text-sm w-9 text-right flex-shrink-0 tabular-nums">{result.internal_prob_draw ?? result.prob_draw ?? 0}%</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-300 text-sm w-20 flex-shrink-0">{away} win</span>
+                  <span className="text-zinc-300 text-sm w-28 sm:w-36 flex-shrink-0 inline-flex items-center gap-1.5 min-w-0">
+                    <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="truncate">{away} win</span>
+                  </span>
                   <div className="flex-1 min-w-0 h-2 bg-dark-input rounded-full overflow-hidden">
                     <div className="h-full bg-[#00ffe8] rounded-full" style={{ width: `${result.internal_prob_away ?? result.prob_away ?? 0}%` }} />
                   </div>
@@ -972,10 +999,14 @@ export function AnalysisResult({ result }: { result: Result }) {
         <section className="pt-6 border-t border-white/5">
           <h2 className="text-lg font-semibold text-white mb-4">🎯 {t("betting.mostLikelyScore")} & distributions</h2>
           {result.most_likely_score && (
-            <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
               <div>
-                <p className="text-zinc-400 text-sm mb-1">{t("betting.mostLikelyScore")}</p>
-                <p className="text-xl font-bold text-white">{result.most_likely_score.home}-{result.most_likely_score.away} <span className="text-[#00ffe8]">({result.most_likely_score.probability}%)</span></p>
+                <p className="text-zinc-400 text-sm mb-2">{t("betting.mostLikelyScore")}</p>
+                <div className="flex items-center gap-3">
+                  <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-8 h-8 sm:w-10 sm:h-10" />
+                  <p className="text-xl font-bold text-white">{result.most_likely_score.home}-{result.most_likely_score.away} <span className="text-[#00ffe8]">({result.most_likely_score.probability}%)</span></p>
+                  <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-8 h-8 sm:w-10 sm:h-10" />
+                </div>
                 <p className="text-zinc-500 text-xs mt-1">{t("analysis.expectedGoals")} (xG): {result.xg_home ?? 0} – {result.xg_away ?? 0}</p>
               </div>
               {result.exact_scores && result.exact_scores.length > 1 && (
@@ -1036,10 +1067,22 @@ export function AnalysisResult({ result }: { result: Result }) {
             <div className="mb-4">
               <p className="text-zinc-400 text-sm mb-2">{t("betting.asianHandicap")}</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-lg bg-dark-input px-3 py-2"><span className="text-white font-semibold">{home}</span> -1: <span className="text-[#00ffe8] font-medium">{result.asian_handicap.home_neg1_pct}%</span></div>
-                <div className="rounded-lg bg-dark-input px-3 py-2"><span className="text-white font-semibold">{home}</span> +1: <span className="text-[#00ffe8] font-medium">{result.asian_handicap.home_plus1_pct}%</span></div>
-                <div className="rounded-lg bg-dark-input px-3 py-2"><span className="text-white font-semibold">{away}</span> -1: <span className="text-[#ef4444] font-medium">{result.asian_handicap.away_neg1_pct}%</span></div>
-                <div className="rounded-lg bg-dark-input px-3 py-2"><span className="text-white font-semibold">{away}</span> +1: <span className="text-[#ef4444] font-medium">{result.asian_handicap.away_plus1_pct}%</span></div>
+                <div className="rounded-lg bg-dark-input px-3 py-2 flex items-center gap-2 min-w-0">
+                  <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-5 h-5" />
+                  <span className="text-white font-semibold truncate">{home}</span> -1: <span className="text-[#00ffe8] font-medium">{result.asian_handicap.home_neg1_pct}%</span>
+                </div>
+                <div className="rounded-lg bg-dark-input px-3 py-2 flex items-center gap-2 min-w-0">
+                  <TeamCrest src={result.home_team_logo} name={home} sizeClass="w-5 h-5" />
+                  <span className="text-white font-semibold truncate">{home}</span> +1: <span className="text-[#00ffe8] font-medium">{result.asian_handicap.home_plus1_pct}%</span>
+                </div>
+                <div className="rounded-lg bg-dark-input px-3 py-2 flex items-center gap-2 min-w-0">
+                  <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-5 h-5" />
+                  <span className="text-white font-semibold truncate">{away}</span> -1: <span className="text-[#ef4444] font-medium">{result.asian_handicap.away_neg1_pct}%</span>
+                </div>
+                <div className="rounded-lg bg-dark-input px-3 py-2 flex items-center gap-2 min-w-0">
+                  <TeamCrest src={result.away_team_logo} name={away} sizeClass="w-5 h-5" />
+                  <span className="text-white font-semibold truncate">{away}</span> +1: <span className="text-[#ef4444] font-medium">{result.asian_handicap.away_plus1_pct}%</span>
+                </div>
               </div>
             </div>
           )}
@@ -1059,7 +1102,9 @@ export function AnalysisResult({ result }: { result: Result }) {
           <div className="grid gap-6 sm:grid-cols-2">
             {result.key_forces_home && result.key_forces_home.length > 0 && (
               <div>
-                <p className="font-semibold mb-2 text-white">{home}</p>
+                <p className="font-semibold mb-2 text-white">
+                  <TeamLabel src={result.home_team_logo} name={home} sizeClass="w-6 h-6" nameClass="text-white font-semibold" />
+                </p>
                 <ul className="space-y-1.5 text-sm text-zinc-300">
                   {result.key_forces_home.map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
@@ -1072,7 +1117,9 @@ export function AnalysisResult({ result }: { result: Result }) {
             )}
             {result.key_forces_away && result.key_forces_away.length > 0 && (
               <div>
-                <p className="font-semibold mb-2 text-white">{away}</p>
+                <p className="font-semibold mb-2 text-white">
+                  <TeamLabel src={result.away_team_logo} name={away} sizeClass="w-6 h-6" nameClass="text-white font-semibold" />
+                </p>
                 <ul className="space-y-1.5 text-sm text-zinc-300">
                   {result.key_forces_away.map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
@@ -1091,9 +1138,9 @@ export function AnalysisResult({ result }: { result: Result }) {
       <section className="pt-6 border-t border-white/5">
         <h2 className="text-lg font-semibold text-white mb-2">📊 {t("analysis.recentPerformanceComparison")}</h2>
         <p className="text-zinc-500 text-xs mb-3">{t("analysis.statsSource").replace("{source}", comparisonSourceLabel)}</p>
-        <div className="flex justify-between text-sm font-semibold mb-3 px-1">
-          <span className={HOME_COLOR}>{home}</span>
-          <span className={AWAY_COLOR}>{away}</span>
+        <div className="flex justify-between text-sm font-semibold mb-3 px-1 gap-2">
+          <TeamLabel src={result.home_team_logo} name={home} sizeClass="w-5 h-5 sm:w-6 sm:h-6" nameClass={HOME_COLOR} />
+          <TeamLabel src={result.away_team_logo} name={away} sizeClass="w-5 h-5 sm:w-6 sm:h-6" nameClass={AWAY_COLOR} />
         </div>
         <div className="space-y-5">
           <StatBar label="Attack" homePct={result.attack_home_pct} homeColor={HOME_COLOR} awayColor={AWAY_COLOR} />
@@ -1112,12 +1159,12 @@ export function AnalysisResult({ result }: { result: Result }) {
           <div className="rounded-2xl bg-white/5 border border-white/10 p-4 sm:p-5">
             <h3 className="text-base font-semibold text-white mb-3">Expected goals</h3>
             <div className="space-y-1 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300">{home}</span>
+              <div className="flex items-center justify-between gap-2">
+                <TeamLabel src={result.home_team_logo} name={home} sizeClass="w-5 h-5" nameClass="text-zinc-300 text-sm" />
                 <span className="font-semibold tabular-nums" style={{ color: HOME_HEX }}>{typeof result.xg_home === "number" ? result.xg_home.toFixed(2) : "0.00"} goals</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-300">{away}</span>
+              <div className="flex items-center justify-between gap-2">
+                <TeamLabel src={result.away_team_logo} name={away} sizeClass="w-5 h-5" nameClass="text-zinc-300 text-sm" />
                 <span className="font-semibold tabular-nums" style={{ color: AWAY_HEX }}>{typeof result.xg_away === "number" ? result.xg_away.toFixed(2) : "0.00"} goals</span>
               </div>
               <div className="h-px bg-white/10 my-2" />

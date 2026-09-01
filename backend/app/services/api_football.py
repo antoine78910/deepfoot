@@ -1385,8 +1385,53 @@ def get_fixture_statistics(
     ]
 
 
+def logo_url_for_team(*, team_id: Optional[int] = None, name: Optional[str] = None) -> Optional[str]:
+    """
+    Crest from the local seed/index only (no HTTP).
+    `team_id` must be an API-Football id (autocomplete). Never use Sportmonks ids here.
+    """
+    _fill_teams_cache()
+    if team_id is not None:
+        try:
+            tid = int(team_id)
+        except (TypeError, ValueError):
+            tid = None
+        else:
+            row = _teams_cache.get(tid)
+            crest = ((row or {}).get("crest") or "").strip()
+            if crest:
+                return crest
+    q = (name or "").strip()
+    if not q:
+        return None
+    matches = _teams_from_local_cache(_normalize_for_search(q), limit=8)
+    if not matches:
+        return None
+    qn = _normalize_for_search(q)
+    for m in matches:
+        mn = _normalize_for_search(m.get("name") or "")
+        if mn == qn or mn.startswith(qn) or qn.startswith(mn):
+            crest = (m.get("crest") or "").strip()
+            if crest:
+                return crest
+    return (matches[0].get("crest") or "").strip() or None
+
+
 def get_team_by_id(team_id: int) -> Optional[dict]:
-    """Infos d'une équipe (id, name, logo, venue/stadium). 1 requête par équipe."""
+    """Infos d'une équipe (id, name, logo, venue/stadium). Local cache first, then 1 request."""
+    _fill_teams_cache()
+    try:
+        tid = int(team_id)
+    except (TypeError, ValueError):
+        return None
+    cached = _teams_cache.get(tid)
+    if cached and (cached.get("name") or "").strip():
+        return {
+            "id": tid,
+            "name": (cached.get("name") or "").strip(),
+            "logo": (cached.get("crest") or "").strip() or None,
+            "stadium": None,
+        }
     if not _use_api():
         return None
     data = _get("/teams", params={"id": team_id})

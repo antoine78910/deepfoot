@@ -34,6 +34,31 @@ def _use_supabase() -> bool:
     return bool(s.supabase_url and s.supabase_key)
 
 
+def _attach_team_logos(
+    ctx: dict[str, Any],
+    home_team: str,
+    away_team: str,
+    home_team_id: Optional[int],
+    away_team_id: Optional[int],
+) -> dict[str, Any]:
+    """Fill missing crests from the local API-Football seed. Do not use Sportmonks ids."""
+    try:
+        from app.services.api_football import logo_url_for_team
+    except Exception:
+        return ctx
+    if not ctx.get("home_team_logo"):
+        ctx["home_team_logo"] = logo_url_for_team(
+            team_id=home_team_id,
+            name=str(ctx.get("home_team") or home_team or ""),
+        )
+    if not ctx.get("away_team_logo"):
+        ctx["away_team_logo"] = logo_url_for_team(
+            team_id=away_team_id,
+            name=str(ctx.get("away_team") or away_team or ""),
+        )
+    return ctx
+
+
 def get_team_results(team_slug: str, is_home: bool, last_n: int = 5) -> tuple[list[int], list[int]]:
     """
     Récupère les N derniers matchs (goals_for, goals_against) pour une équipe en home ou away.
@@ -452,7 +477,7 @@ def load_match_context(
             from app.services.sportmonks import load_match_context_sportmonks
             ctx = load_match_context_sportmonks(home_team, away_team, progress_callback=progress_callback)
             if ctx is not None:
-                return ctx
+                return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
         except Exception:
             pass
 
@@ -465,7 +490,7 @@ def load_match_context(
             away_team_id=away_team_id,
         )
         if ctx is not None:
-            return ctx
+            return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
 
     report("Loading match data…", 10)
     h = normalize_team_name(home_team)
@@ -528,17 +553,23 @@ def load_match_context(
         "raw_home_form": list(home_form) if isinstance(home_form, (list, tuple)) else [],
         "raw_away_form": list(away_form) if isinstance(away_form, (list, tuple)) else [],
     }
-    return {
-        "home_team": home_team,
-        "away_team": away_team,
-        "lambda_home": lambda_home,
-        "lambda_away": lambda_away,
-        "home_form": home_form,
-        "away_form": away_form,
-        "home_wdl": form_to_wdl(home_form),
-        "away_wdl": form_to_wdl(away_form),
-        "home_form_label": form_to_label(hw, hd, hl),
-        "away_form_label": form_to_label(aw, ad, al),
-        "comparison_pcts": pcts,
-        "data_recap": data_recap,
-    }
+    return _attach_team_logos(
+        {
+            "home_team": home_team,
+            "away_team": away_team,
+            "lambda_home": lambda_home,
+            "lambda_away": lambda_away,
+            "home_form": home_form,
+            "away_form": away_form,
+            "home_wdl": form_to_wdl(home_form),
+            "away_wdl": form_to_wdl(away_form),
+            "home_form_label": form_to_label(hw, hd, hl),
+            "away_form_label": form_to_label(aw, ad, al),
+            "comparison_pcts": pcts,
+            "data_recap": data_recap,
+        },
+        home_team,
+        away_team,
+        home_team_id,
+        away_team_id,
+    )

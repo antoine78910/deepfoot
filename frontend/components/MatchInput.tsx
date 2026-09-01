@@ -441,6 +441,8 @@ export function MatchInput({
 
       // Si une nouvelle soumission a été lancée entre-temps, on ignore ce résultat
       if (submitId !== submitIdRef.current) return;
+      if (!data.home_team_logo && homeTeamOption?.crest) data.home_team_logo = homeTeamOption.crest;
+      if (!data.away_team_logo && awayTeamOption?.crest) data.away_team_logo = awayTeamOption.crest;
       sessionStorage.setItem("visifoot_analysis", JSON.stringify(data));
       const historyKey = getHistoryKey();
       const maxHistory = 50;
