@@ -288,48 +288,47 @@ def _format_api_football_fixture_for_upcoming(f: dict) -> dict:
 
 @router.get("/upcoming")
 def upcoming_fixtures(team: Optional[str] = None, team_id: Optional[int] = None, limit: int = 10):
-    """Prochains matchs pour la LP. API-Football d'abord (mêmes IDs que l'autocomplete), Sportmonks en secours."""
+    """Prochains matchs de l'équipe choisie uniquement (jamais un remplissage aléatoire)."""
     from app.services.sportmonks import _use_sportmonks, team_upcoming_fixtures
     from app.services.api_football import (
         _use_api,
         get_featured_upcoming_fixtures,
+        get_team_upcoming_fixtures,
         resolve_team_name_to_id,
     )
+    from app.services.thesportsdb import get_upcoming_for_team
 
     team_name_clean = (team or "").strip()
     fixtures: list = []
 
-    if _use_api():
+    if team_name_clean or team_id is not None:
         api_tid = int(team_id) if team_id is not None else None
-        if api_tid is None and team_name_clean:
+        if api_tid is None and team_name_clean and _use_api():
             api_tid = resolve_team_name_to_id(team_name_clean)
-        if api_tid is not None:
-            raw = get_featured_upcoming_fixtures(next_n=limit, prefer_team_id=int(api_tid))
+        if api_tid is not None and _use_api():
+            raw = get_team_upcoming_fixtures(int(api_tid), next_n=limit)
             fixtures = [_format_api_football_fixture_for_upcoming(f) for f in raw]
-            if fixtures:
-                return {"fixtures": fixtures}
-            return {"fixtures": []}
-        raw = get_featured_upcoming_fixtures(next_n=limit)
-        fixtures = [_format_api_football_fixture_for_upcoming(f) for f in raw]
-        if fixtures:
-            return {"fixtures": fixtures}
-        return {"fixtures": []}
-
-    if _use_sportmonks() and team_name_clean:
-        tid = _resolve_team_id_sportmonks(team_name_clean)
-        if tid is not None:
-            team_norm = team_name_clean.lower()
-            team_words = [w for w in team_norm.replace("é", "e").replace("è", "e").split() if len(w) > 2]
-            for f in team_upcoming_fixtures(int(tid), limit=limit * 2):
-                row = _format_sportmonks_fixture_for_upcoming(f)
-                if not row:
-                    continue
-                home_n = ((row.get("home") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
-                away_n = ((row.get("away") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
-                if team_norm not in home_n and team_norm not in away_n:
-                    if not team_words or not any(w in home_n or w in away_n for w in team_words):
+        if not fixtures and team_name_clean:
+            fixtures = get_upcoming_for_team(team_name_clean, limit=limit)
+        if not fixtures and _use_sportmonks() and team_name_clean:
+            tid = _resolve_team_id_sportmonks(team_name_clean)
+            if tid is not None:
+                team_norm = team_name_clean.lower()
+                team_words = [w for w in team_norm.replace("é", "e").replace("è", "e").split() if len(w) > 2]
+                for f in team_upcoming_fixtures(int(tid), limit=limit * 2):
+                    row = _format_sportmonks_fixture_for_upcoming(f)
+                    if not row:
                         continue
-                fixtures.append(row)
-            fixtures = fixtures[:limit]
+                    home_n = ((row.get("home") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
+                    away_n = ((row.get("away") or {}).get("name") or "").lower().replace("é", "e").replace("è", "e")
+                    if team_norm not in home_n and team_norm not in away_n:
+                        if not team_words or not any(w in home_n or w in away_n for w in team_words):
+                            continue
+                    fixtures.append(row)
+                fixtures = fixtures[:limit]
+        return {"fixtures": fixtures[:limit]}
 
-    return {"fixtures": fixtures}
+    if _use_api():
+        raw = get_featured_upcoming_fixtures(next_n=limit)
+        return {"fixtures": [_format_api_football_fixture_for_upcoming(f) for f in raw]}
+    return {"fixtures": []}
