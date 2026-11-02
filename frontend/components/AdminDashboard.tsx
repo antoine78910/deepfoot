@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { displayNameFromEmail, getUserFromStorage, setAuthCookie, setUserInStorage } from "@/lib/auth";
 import { getSignInHref } from "@/lib/app-url";
+import { getApiUrl } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ADMIN_TOKEN_COOKIE = "deepfoot_admin_token";
 const COOKIE_MAX_AGE_DAYS = 30;
 const OWNER_EMAIL = "anto.delbos@gmail.com";
@@ -102,7 +101,7 @@ export function AdminDashboard() {
     try {
       const params = new URLSearchParams({ days: String(days) });
       if (query.trim()) params.set("q", query.trim());
-      const res = await fetch(`${API_URL}/internal/admin/summary?${params}`, {
+      const res = await fetch(`${getApiUrl()}/internal/admin/summary?${params}`, {
         headers: adminHeaders(),
       });
       if (!res.ok) {
@@ -151,7 +150,7 @@ export function AdminDashboard() {
       const uid = user?.id;
       if (uid) {
         try {
-          const res = await fetch(`${API_URL}/internal/admin/session`, {
+          const res = await fetch(`${getApiUrl()}/internal/admin/session`, {
             headers: { "X-User-Id": uid },
           });
           const payload = res.ok ? await res.json() : null;
@@ -186,7 +185,7 @@ export function AdminDashboard() {
     setPredCount(null);
     setPredStatus("loading");
     try {
-      const res = await fetch(`${API_URL}/internal/admin/users/${encodeURIComponent(u.user_id)}/predictions?limit=150`, {
+      const res = await fetch(`${getApiUrl()}/internal/admin/users/${encodeURIComponent(u.user_id)}/predictions?limit=150`, {
         headers: adminHeaders(),
       });
       if (!res.ok) throw new Error(await res.text());

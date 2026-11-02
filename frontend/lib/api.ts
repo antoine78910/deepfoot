@@ -6,7 +6,7 @@
 const ENV_API_URL = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 const DEFAULT_API_URL = ENV_API_URL && ENV_API_URL !== "undefined" ? ENV_API_URL : "http://localhost:8000";
 
-const PRODUCTION_HOSTS = ["www.deepfoot.io", "deepfoot.io"];
+const PRODUCTION_HOSTS = ["www.deepfoot.io", "deepfoot.io", "app.deepfoot.io"];
 const PRODUCTION_API_URL = "https://api.deepfoot.io";
 
 export function getApiUrl(): string {
