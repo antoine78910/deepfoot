@@ -545,6 +545,7 @@ def _build_analysis_recap(
         },
         "api_requests_estimate": "~17–21 requests (API-Football)" if recap.get("data_source") == "API-Football" else None,
         "pipeline_steps": steps,
+        "placeholder_form": bool(recap.get("placeholder_form")),
         "sportmonks_fixture_with_predictions": recap.get("sportmonks_fixture_with_predictions"),
         "sportmonks_value_bets": recap.get("sportmonks_value_bets"),
     }

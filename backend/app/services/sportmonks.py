@@ -381,6 +381,28 @@ def fixtures_search(query: str, limit: int = 10) -> list[dict[str, Any]]:
     return data.get("data") or []
 
 
+def _fixture_search_queries(home: str, away: str) -> list[str]:
+    """Name queries that can find a fixture when /teams/search is empty on the plan."""
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(value: str) -> None:
+        q = (value or "").strip()
+        key = q.lower()
+        if q and key not in seen:
+            seen.add(key)
+            out.append(q)
+
+    h = (home or "").strip()
+    a = (away or "").strip()
+    if h and a:
+        add(f"{h} vs {a}")
+        add(f"{a} vs {h}")
+    add(h)
+    add(a)
+    return out
+
+
 # H2H recency model (5 seasons): weight = 0.6^years_ago
 H2H_DECAY_BASE = 0.6
 H2H_MAX_SEASONS = 5
@@ -1303,10 +1325,12 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
     resolved_away_name = (away_candidate.get("name") or "").strip() if away_candidate else (away_team or "").strip()
 
     if not home_team_id or not away_team_id:
-        print(f"[sportmonks] Cannot resolve team IDs: home={home_team_id}, away={away_team_id}")
-        return None
-
-    print(f"[sportmonks] Team IDs: home={home_team_id}, away={away_team_id}")
+        print(
+            f"[sportmonks] teams/search empty (home={home_team_id}, away={away_team_id}); "
+            "will try fixtures/search"
+        )
+    else:
+        print(f"[sportmonks] Team IDs: home={home_team_id}, away={away_team_id}")
 
     def _fetch_full_fixture(fid: Any) -> Optional[dict[str, Any]]:
         if not fid:
@@ -1331,69 +1355,108 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
             inner["metadata"] = full.get("metadata")
         return inner
 
-    # Chercher via /fixtures/search (plus fiable que /between qui donne souvent 404)
-    query = f"{resolved_home_name or home_team} vs {resolved_away_name or away_team}"
-    print(f"[sportmonks] Searching fixtures: {query!r}")
-    search_results = fixtures_search(query, limit=20)
+    # /fixtures/search still works on plans where /teams/search returns 200 empty.
+    search_queries: list[str] = []
+    seen_queries: set[str] = set()
+    for h_name, a_name in (
+        (resolved_home_name or home_team, resolved_away_name or away_team),
+        (home_team, away_team),
+    ):
+        for query in _fixture_search_queries(h_name, a_name):
+            key = query.lower()
+            if key not in seen_queries:
+                seen_queries.add(key)
+                search_queries.append(query)
 
     fixture_found = None
     h_core = _normalize_team_core(resolved_home_name or home_team)
     a_core = _normalize_team_core(resolved_away_name or away_team)
+    seen_fids: set[int] = set()
 
-    for f in search_results:
-        name = (f.get("name") or "").strip()
-        name_core = _normalize_team_core(name)
-        if not name_core or (h_core and h_core not in name_core) or (a_core and a_core not in name_core):
-            continue
-
-        fid = f.get("id")
-        if not fid:
-            continue
-
-        # Vérifier que c'est futur
-        sat = f.get("starting_at") or ""
-        if sat:
-            try:
-                dt_str = sat.replace("T", " ")[:19].strip()
-                fd = datetime.fromisoformat(dt_str.replace(" ", "T").replace("Z", "+00:00"))
-                if fd.tzinfo is None:
-                    fd = fd.replace(tzinfo=timezone.utc)
-                if fd < now:
-                    continue
-            except Exception:
+    for query in search_queries:
+        if fixture_found:
+            break
+        print(f"[sportmonks] Searching fixtures: {query!r}")
+        search_results = fixtures_search(query, limit=20)
+        for f in search_results:
+            name = (f.get("name") or "").strip()
+            name_core = _normalize_team_core(name)
+            if not name_core or (h_core and h_core not in name_core) or (a_core and a_core not in name_core):
                 continue
 
-        # Match trouvé - récupérer les détails complets
-        print(f"[sportmonks] Found fixture {fid} via search: {name}")
-        inner = _fetch_full_fixture(fid)
-        if not inner:
-            continue
+            fid = f.get("id")
+            if not fid:
+                continue
+            try:
+                fid_int = int(fid)
+            except (TypeError, ValueError):
+                continue
+            if fid_int in seen_fids:
+                continue
+            seen_fids.add(fid_int)
 
-        # Vérifier que les deux équipes sont bien dans ce match
-        if not _fixture_involves_team(inner, home_team_id) or not _fixture_involves_team(inner, away_team_id):
-            print(f"[sportmonks] Fixture {fid} does not involve both teams, skipping")
-            continue
+            # Keep tonight/live kickoffs; skip older finished matches.
+            sat = f.get("starting_at") or ""
+            if sat:
+                try:
+                    dt_str = sat.replace("T", " ")[:19].strip()
+                    fd = datetime.fromisoformat(dt_str.replace(" ", "T").replace("Z", "+00:00"))
+                    if fd.tzinfo is None:
+                        fd = fd.replace(tzinfo=timezone.utc)
+                    if fd < now - timedelta(hours=12):
+                        continue
+                except Exception:
+                    continue
 
-        fixture_found = inner
-        break
+            print(f"[sportmonks] Found fixture {fid} via search: {name}")
+            inner = _fetch_full_fixture(fid)
+            if not inner:
+                continue
 
-    if not fixture_found:
+            if home_team_id and away_team_id:
+                if not _fixture_involves_team(inner, home_team_id) or not _fixture_involves_team(inner, away_team_id):
+                    print(f"[sportmonks] Fixture {fid} does not involve both teams, skipping")
+                    continue
+
+            fixture_found = inner
+            if not home_team_id or not away_team_id:
+                hp, ap = _extract_participants(inner)
+                try:
+                    if hp and (hp.get("id") or hp.get("team_id")) is not None:
+                        home_team_id = int(hp.get("id") or hp.get("team_id"))
+                    if ap and (ap.get("id") or ap.get("team_id")) is not None:
+                        away_team_id = int(ap.get("id") or ap.get("team_id"))
+                except (TypeError, ValueError):
+                    pass
+                print(f"[sportmonks] Team IDs from fixture {fid}: home={home_team_id}, away={away_team_id}")
+            break
+
+    if not fixture_found and home_team_id:
         print("[sportmonks] Search fallback: scanning home upcoming fixtures")
         for raw in team_upcoming_fixtures(home_team_id, limit=25):
-            if _fixture_involves_team(raw, home_team_id) and _fixture_involves_team(raw, away_team_id):
-                fixture_found = _fetch_full_fixture(raw.get("id")) or raw
-                print(f"[sportmonks] Found fixture {raw.get('id')} via home upcoming fixtures")
-                break
+            if away_team_id and not (
+                _fixture_involves_team(raw, home_team_id) and _fixture_involves_team(raw, away_team_id)
+            ):
+                continue
+            fixture_found = _fetch_full_fixture(raw.get("id")) or raw
+            print(f"[sportmonks] Found fixture {raw.get('id')} via home upcoming fixtures")
+            break
 
-    if not fixture_found:
+    if not fixture_found and away_team_id:
         print("[sportmonks] Search fallback: scanning away upcoming fixtures")
         for raw in team_upcoming_fixtures(away_team_id, limit=25):
-            if _fixture_involves_team(raw, home_team_id) and _fixture_involves_team(raw, away_team_id):
-                fixture_found = _fetch_full_fixture(raw.get("id")) or raw
-                print(f"[sportmonks] Found fixture {raw.get('id')} via away upcoming fixtures")
-                break
+            if home_team_id and not (
+                _fixture_involves_team(raw, home_team_id) and _fixture_involves_team(raw, away_team_id)
+            ):
+                continue
+            fixture_found = _fetch_full_fixture(raw.get("id")) or raw
+            print(f"[sportmonks] Found fixture {raw.get('id')} via away upcoming fixtures")
+            break
 
     if not fixture_found:
+        if not home_team_id or not away_team_id:
+            print("[sportmonks] Cannot resolve fixture or team IDs")
+            return None
         print("[sportmonks] No upcoming fixture found; building fallback team context")
         fixture_found = {
             "participants": [
@@ -1405,15 +1468,17 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
             "metadata": {},
         }
 
-    # Récupérer le H2H via endpoint dédié
-    print(f"[sportmonks] Fetching H2H for {home_team_id} vs {away_team_id}")
-    h2h_data = _get_allow_404(f"/fixtures/head-to-head/{home_team_id}/{away_team_id}", params={"per_page": 10})
-    h2h_list = h2h_data.get("data") if isinstance(h2h_data.get("data"), list) else []
-    if h2h_list:
-        fixture_found["h2h"] = h2h_list
-        print(f"[sportmonks] H2H found: {len(h2h_list)} matches")
+    if home_team_id and away_team_id:
+        print(f"[sportmonks] Fetching H2H for {home_team_id} vs {away_team_id}")
+        h2h_data = _get_allow_404(f"/fixtures/head-to-head/{home_team_id}/{away_team_id}", params={"per_page": 10})
+        h2h_list = h2h_data.get("data") if isinstance(h2h_data.get("data"), list) else []
+        if h2h_list:
+            fixture_found["h2h"] = h2h_list
+            print(f"[sportmonks] H2H found: {len(h2h_list)} matches")
+        else:
+            print("[sportmonks] No H2H data available")
+            fixture_found["h2h"] = []
     else:
-        print(f"[sportmonks] No H2H data available")
         fixture_found["h2h"] = []
 
     return fixture_found
@@ -2151,6 +2216,7 @@ def load_match_context_sportmonks(
         "h2h_raw_away_wins": int(h2h_details.get("raw_away_wins") or 0),
         "h2h_season_breakdown": h2h_details.get("season_breakdown") or [],
         "h2h_weighting": [round(float(w), 4) for w in H2H_SEASON_WEIGHTS],
+        "placeholder_form": not home_goals_for or not away_goals_for,
         "match_context_summary": motivation_ctx.get("match_context_summary"),
         "home_motivation_score": motivation_ctx.get("home_motivation_score"),
         "away_motivation_score": motivation_ctx.get("away_motivation_score"),

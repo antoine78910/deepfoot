@@ -1,7 +1,8 @@
 # backend/app/services/data_loader.py
 """
 Charge les données équipes/matchs pour le feature engineering.
-Priorité: 1) Sportmonks (nouveau modèle) si token configuré, 2) API-Football (legacy), 3) Supabase, 4) démo.
+Priorité: 1) Sportmonks si token configuré, 2) API-Football (legacy), 3) Supabase.
+Never substitute missing form with demo scores.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional
@@ -62,10 +63,11 @@ def _attach_team_logos(
 def get_team_results(team_slug: str, is_home: bool, last_n: int = 5) -> tuple[list[int], list[int]]:
     """
     Récupère les N derniers matchs (goals_for, goals_against) pour une équipe en home ou away.
-    Retourne (goals_for_list, goals_against_list).
+    Retourne (goals_for_list, goals_against_list). Empty lists if no real results — never demo scores.
     """
+    empty: tuple[list[int], list[int]] = ([], [])
     if not _use_supabase():
-        return ([1, 2, 1, 0, 2], [1, 0, 2, 1, 1]) if is_home else ([0, 1, 1, 2, 0], [2, 1, 0, 1, 2])
+        return empty
     from app.core.supabase_client import get_supabase
     supabase = get_supabase()
     team_col = "home_team_id" if is_home else "away_team_id"
@@ -73,36 +75,35 @@ def get_team_results(team_slug: str, is_home: bool, last_n: int = 5) -> tuple[li
     goals_against_col = "away_goals" if is_home else "home_goals"
     r = supabase.table("results").select("*").eq(team_col, team_slug).order("date", desc=True).limit(last_n).execute()
     if not r.data:
-        return ([1, 2, 1, 0, 2], [1, 0, 2, 1, 1]) if is_home else ([0, 1, 1, 2, 0], [2, 1, 0, 1, 2])
+        return empty
     goals_for = [int(row.get(goals_for_col, 1)) for row in r.data]
     goals_against = [int(row.get(goals_against_col, 1)) for row in r.data]
     return (goals_for, goals_against)
 
 
 def get_team_form(team_slug: str, last_n: int = 5) -> tuple[list[str], int, int, int]:
-    """Form = liste ['W','D','L',...], puis W, D, L counts."""
+    """Form = liste ['W','D','L',...], puis W, D, L counts. Empty if no real results."""
+    empty: tuple[list[str], int, int, int] = ([], 0, 0, 0)
     if not _use_supabase():
-        form = ["W", "D", "L", "W", "W"]
-        return (form, 3, 1, 1)
+        return empty
     from app.core.supabase_client import get_supabase
     supabase = get_supabase()
     r = supabase.table("results").select("home_team_id, away_team_id, home_goals, away_goals").eq("home_team_id", team_slug).order("date", desc=True).limit(last_n).execute()
     if not r.data:
         r = supabase.table("results").select("home_team_id, away_team_id, home_goals, away_goals").eq("away_team_id", team_slug).order("date", desc=True).limit(last_n).execute()
-    form = []
     if not r.data:
-        form = ["W", "D", "L", "W", "W"]
-    else:
-        for row in r.data:
-            is_home = row.get("home_team_id") == team_slug
-            hg = int(row.get("home_goals", 0))
-            ag = int(row.get("away_goals", 0))
-            if hg > ag:
-                form.append("W" if is_home else "L")
-            elif hg < ag:
-                form.append("L" if is_home else "W")
-            else:
-                form.append("D")
+        return empty
+    form = []
+    for row in r.data:
+        is_home = row.get("home_team_id") == team_slug
+        hg = int(row.get("home_goals", 0))
+        ag = int(row.get("away_goals", 0))
+        if hg > ag:
+            form.append("W" if is_home else "L")
+        elif hg < ag:
+            form.append("L" if is_home else "W")
+        else:
+            form.append("D")
     w = sum(1 for x in form if x == "W")
     d = sum(1 for x in form if x == "D")
     l = sum(1 for x in form if x == "L")
@@ -112,7 +113,7 @@ def get_team_form(team_slug: str, last_n: int = 5) -> tuple[list[str], int, int,
 def get_h2h(home_slug: str, away_slug: str) -> tuple[int, int, int]:
     """Nombre de victoires home, draw, away en H2H."""
     if not _use_supabase():
-        return (1, 1, 1)
+        return (0, 0, 0)
     from app.core.supabase_client import get_supabase
     supabase = get_supabase()
     r = supabase.table("h2h").select("home_wins, draws, away_wins").eq("home_team_id", home_slug).eq("away_team_id", away_slug).execute()
@@ -231,14 +232,11 @@ def _load_match_context_api_football(
         away_id, away_fixtures, last_n=FORM_STATS_MATCHES
     )
     report("Fetching head-to-head…", 52)
+    placeholder_form = False
     if not home_goals_for and not home_goals_against:
-        home_goals_for, home_goals_against = [1, 2, 1, 0, 2], [1, 0, 2, 1, 1]
+        placeholder_form = True
     if not away_goals_for and not away_goals_against:
-        away_goals_for, away_goals_against = [0, 1, 1, 2, 0], [2, 1, 0, 1, 2]
-    if not home_form:
-        home_form = ["W", "D", "L", "W", "W"]
-    if not away_form:
-        away_form = ["W", "D", "L", "W", "W"]
+        placeholder_form = True
     # Attack/Defense/Goals bars and lambda: weighted avg over up to FORM_STATS_MATCHES (recency-weighted)
     h_for_avg, h_against_avg = compute_weighted_goals_avg(home_goals_for, home_goals_against)
     a_for_avg, a_against_avg = compute_weighted_goals_avg(away_goals_for, away_goals_against)
@@ -366,7 +364,8 @@ def _load_match_context_api_football(
         f"Attack/Defense/Goals & lambda: last {min(len(home_goals_for), FORM_STATS_MATCHES)} matches each (recency-weighted). Form bar: last 5. "
         f"Home: goals_for={home_goals_for[:8] if len(home_goals_for) > 8 else home_goals_for}{'...' if len(home_goals_for) > 8 else ''}, form_5={home_form_5}. "
         f"Away: goals_for={away_goals_for[:8] if len(away_goals_for) > 8 else away_goals_for}{'...' if len(away_goals_for) > 8 else ''}, form_5={away_form_5}. "
-        f"Weighted avgs: home {h_for_avg:.2f} scored / {h_against_avg:.2f} conceded, away {a_for_avg:.2f} scored / {a_against_avg:.2f} conceded.",
+        f"Weighted avgs: home {h_for_avg:.2f} scored / {h_against_avg:.2f} conceded, away {a_for_avg:.2f} scored / {a_against_avg:.2f} conceded."
+        + (" No finished fixtures in cache — form not substituted with demo scores." if placeholder_form else ""),
     })
     steps.append({
         "order": 5,
@@ -420,6 +419,7 @@ def _load_match_context_api_football(
         "league": league,
         "venue": venue,
         "pipeline_steps": steps,
+        "placeholder_form": placeholder_form,
         "raw_home_goals_for": home_goals_for,
         "raw_home_goals_against": home_goals_against,
         "raw_away_goals_for": away_goals_for,
@@ -465,7 +465,7 @@ def load_match_context(
 ) -> dict[str, Any]:
     """
     Charge tout le contexte pour un match : form, goals for/against home/away, H2H.
-    Priorité: Sportmonks (si token) → API-Football (legacy) → Supabase → démo.
+    Priorité: Sportmonks (si token) → API-Football (legacy) → Supabase.
     Si home_team_id/away_team_id sont fournis (sélection autocomplete), ils sont utilisés en priorité (API-Football/Supabase).
     """
     def report(step: str, percent: int) -> None:
@@ -478,8 +478,9 @@ def load_match_context(
             ctx = load_match_context_sportmonks(home_team, away_team, progress_callback=progress_callback)
             if ctx is not None:
                 return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
-        except Exception:
-            pass
+            print("[data_loader] Sportmonks returned no fixture; trying API-Football")
+        except Exception as exc:
+            print(f"[data_loader] Sportmonks failed: {exc}")
 
     if _use_api_football():
         ctx = _load_match_context_api_football(
@@ -546,6 +547,7 @@ def load_match_context(
         "league": None,
         "venue": None,
         "pipeline_steps": steps_supabase,
+        "placeholder_form": not home_goals_for or not away_goals_for,
         "raw_home_goals_for": home_goals_for,
         "raw_home_goals_against": home_goals_against,
         "raw_away_goals_for": away_goals_for,

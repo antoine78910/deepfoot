@@ -136,6 +136,24 @@ def _prediction_summary(row: dict) -> dict:
     if mls.get("home") is not None and mls.get("away") is not None:
         score = f"{mls.get('home')}-{mls.get('away')}"
     cost_eur, cost_estimated = cost_from_result(result)
+    recap = result.get("analysis_recap") if isinstance(result.get("analysis_recap"), dict) else {}
+    placeholder_form = bool(recap.get("placeholder_form"))
+    if not placeholder_form:
+        steps_blob = " ".join(
+            str(s.get("detail") or "") for s in (recap.get("pipeline_steps") or []) if isinstance(s, dict)
+        )
+        if "goals_for=[1, 2, 1, 0, 2]" in steps_blob and "goals_for=[0, 1, 1, 2, 0]" in steps_blob:
+            placeholder_form = True
+        else:
+            try:
+                if (
+                    round(float(result.get("xg_home")), 2) == 1.07
+                    and round(float(result.get("xg_away")), 2) == 0.59
+                    and round(float(result.get("prob_home")), 1) == 46.7
+                ):
+                    placeholder_form = True
+            except (TypeError, ValueError):
+                pass
     return {
         "id": row.get("id"),
         "user_id": row.get("user_id"),
@@ -154,6 +172,10 @@ def _prediction_summary(row: dict) -> dict:
         "source": row.get("source") or "history",
         "cost_eur": cost_eur,
         "cost_estimated": cost_estimated,
+        "data_source": recap.get("data_source") or result.get("data_source"),
+        "placeholder_form": placeholder_form,
+        "xg_home": result.get("xg_home"),
+        "xg_away": result.get("xg_away"),
     }
 
 

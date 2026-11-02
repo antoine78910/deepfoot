@@ -61,6 +61,50 @@ class AdminDashboardHelperTests(unittest.TestCase):
         self.assertEqual(card["most_likely_score_pct"], 11.4)
         self.assertTrue(card["cost_estimated"])
         self.assertGreater(card["cost_eur"], 0)
+        self.assertFalse(card["placeholder_form"])
+
+    def test_placeholder_form_detected_from_demo_signature(self) -> None:
+        card = _prediction_summary(
+            {
+                "home_team": "Liverpool",
+                "away_team": "Arsenal",
+                "result": {
+                    "prob_home": 46.7,
+                    "prob_draw": 33.1,
+                    "prob_away": 20.2,
+                    "xg_home": 1.07,
+                    "xg_away": 0.59,
+                    "most_likely_score": {"home": 1, "away": 0, "probability": 20.3},
+                    "analysis_recap": {
+                        "data_source": "API-Football",
+                        "pipeline_steps": [
+                            {
+                                "detail": "Home: goals_for=[1, 2, 1, 0, 2]. Away: goals_for=[0, 1, 1, 2, 0].",
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+        self.assertTrue(card["placeholder_form"])
+        self.assertEqual(card["data_source"], "API-Football")
+
+    def test_placeholder_form_detected_from_xg_signature(self) -> None:
+        card = _prediction_summary(
+            {
+                "home_team": "KFUM Oslo",
+                "away_team": "HamKam",
+                "result": {
+                    "prob_home": 46.7,
+                    "prob_draw": 33.1,
+                    "prob_away": 20.2,
+                    "xg_home": 1.07,
+                    "xg_away": 0.59,
+                    "most_likely_score": {"home": 1, "away": 0, "probability": 20.3},
+                },
+            }
+        )
+        self.assertTrue(card["placeholder_form"])
 
 
 if __name__ == "__main__":

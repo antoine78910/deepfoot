@@ -82,6 +82,10 @@ type PredictionCard = {
   source?: string;
   cost_eur?: number | null;
   cost_estimated?: boolean;
+  data_source?: string | null;
+  placeholder_form?: boolean;
+  xg_home?: number | null;
+  xg_away?: number | null;
 };
 
 function pct(n?: number | null) {
@@ -165,6 +169,12 @@ function PredictionList({
               </p>
               {p.away_logo ? <img src={p.away_logo} alt="" className="w-6 h-6 object-contain" /> : null}
               {p.league ? <span className="text-xs text-zinc-500">{p.league}</span> : null}
+              {p.data_source ? <span className="text-[11px] text-zinc-600">{p.data_source}</span> : null}
+              {p.placeholder_form ? (
+                <span className="text-[11px] rounded bg-amber-500/15 text-amber-300 px-1.5 py-0.5">
+                  Default form — 1X2 not match-specific
+                </span>
+              ) : null}
             </div>
             <p className="text-xs text-zinc-500 mb-2">
               {formatWhen(p.created_at)}
@@ -177,6 +187,9 @@ function PredictionList({
             </p>
             <p className="text-sm text-zinc-300">
               1 {pct(p.prob_home)} · X {pct(p.prob_draw)} · 2 {pct(p.prob_away)}
+              {typeof p.xg_home === "number" && typeof p.xg_away === "number"
+                ? ` · xG ${p.xg_home.toFixed(2)}–${p.xg_away.toFixed(2)}`
+                : ""}
             </p>
             {p.quick_summary ? (
               <p className="text-xs text-zinc-400 mt-2 whitespace-pre-wrap">{p.quick_summary}</p>
