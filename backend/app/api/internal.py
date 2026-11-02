@@ -107,14 +107,15 @@ def _check_admin(x_admin_key: str | None) -> None:
 
 
 def _check_dashboard_admin(
-    x_admin_key: str | None,
     x_user_id: str | None = None,
+    x_user_email: str | None = None,
 ) -> None:
-    if is_dashboard_admin_email(_email_for_user_id(x_user_id or "")):
+    uid = (x_user_id or "").strip()
+    looked_up = _email_for_user_id(uid)
+    if is_dashboard_admin_email(looked_up):
         return
-    s = get_settings()
-    expected = (s.admin_dashboard_token or s.admin_api_key or "").strip()
-    if expected and (x_admin_key or "").strip() == expected:
+    # Fallback when Auth admin lookup is unavailable: signed-in owner session.
+    if uid and is_dashboard_admin_email(x_user_email):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
 
@@ -130,6 +131,7 @@ def _prediction_summary(row: dict) -> dict:
         score = f"{mls.get('home')}-{mls.get('away')}"
     return {
         "id": row.get("id"),
+        "user_id": row.get("user_id"),
         "created_at": row.get("created_at"),
         "home_team": home,
         "away_team": away,
@@ -189,8 +191,14 @@ def create_feedback(payload: FeedbackPayload):
 
 
 @router.get("/admin/session")
-def admin_session(x_user_id: str | None = Header(None, alias="X-User-Id")):
-    email = _email_for_user_id(x_user_id or "")
+def admin_session(
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    x_user_email: str | None = Header(None, alias="X-User-Email"),
+):
+    uid = (x_user_id or "").strip()
+    email = _email_for_user_id(uid)
+    if not is_dashboard_admin_email(email) and uid and is_dashboard_admin_email(x_user_email):
+        email = (x_user_email or "").strip()
     return {"admin": is_dashboard_admin_email(email), "email": email}
 
 
@@ -198,10 +206,10 @@ def admin_session(x_user_id: str | None = Header(None, alias="X-User-Id")):
 def admin_summary(
     days: int = 30,
     q: str | None = None,
-    x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
     x_user_id: str | None = Header(None, alias="X-User-Id"),
+    x_user_email: str | None = Header(None, alias="X-User-Email"),
 ):
-    _check_dashboard_admin(x_admin_key, x_user_id)
+    _check_dashboard_admin(x_user_id, x_user_email)
     supabase = get_supabase_admin() or get_supabase()
     days = max(1, min(int(days or 30), 365))
 
@@ -399,15 +407,61 @@ def admin_summary(
     }
 
 
+@router.get("/admin/predictions")
+def admin_recent_predictions(
+    limit: int = 200,
+    q: str | None = None,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    x_user_email: str | None = Header(None, alias="X-User-Email"),
+):
+    """Latest predictions across all users for the admin console."""
+    _check_dashboard_admin(x_user_id, x_user_email)
+    limit = max(1, min(int(limit or 200), 400))
+    supabase = get_supabase_admin() or get_supabase()
+    rows: list[dict] = []
+    try:
+        r = (
+            supabase.table("analysis_history")
+            .select("id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, result")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = [row for row in (r.data or []) if isinstance(row, dict)]
+    except Exception:
+        rows = []
+    uid_to_email = _fetch_auth_emails_via_http()
+    q_norm = (q or "").strip().lower()
+    predictions: list[dict] = []
+    for row in rows:
+        card = _prediction_summary({**row, "source": "history"})
+        uid = str(row.get("user_id") or "").strip()
+        card["email"] = uid_to_email.get(uid)
+        if q_norm:
+            hay = " ".join(
+                [
+                    str(card.get("email") or ""),
+                    str(card.get("home_team") or ""),
+                    str(card.get("away_team") or ""),
+                    str(card.get("league") or ""),
+                    uid,
+                ]
+            ).lower()
+            if q_norm not in hay:
+                continue
+        predictions.append(card)
+    return {"predictions_count": len(predictions), "predictions": predictions}
+
+
 @router.get("/admin/users/{user_id}/predictions")
 def admin_user_predictions(
     user_id: str,
     limit: int = 100,
-    x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
     x_user_id: str | None = Header(None, alias="X-User-Id"),
+    x_user_email: str | None = Header(None, alias="X-User-Email"),
 ):
     """All saved predictions for one user (history first, events as fallback)."""
-    _check_dashboard_admin(x_admin_key, x_user_id)
+    _check_dashboard_admin(x_user_id, x_user_email)
     uid = (user_id or "").strip()
     if not uid or uid == "anonymous":
         raise HTTPException(status_code=400, detail="user_id required")

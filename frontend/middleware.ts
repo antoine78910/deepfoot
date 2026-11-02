@@ -43,7 +43,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Public routes on app subdomain: sign-in, sign-up, analyse (signup funnel), auth callback
+  // Public routes on app subdomain: sign-in, sign-up, analyse (signup funnel), auth callback, admin console
   if (
     pathname === "/sign-in" ||
     pathname.startsWith("/sign-in/") ||
@@ -52,7 +52,9 @@ export function middleware(request: NextRequest) {
     pathname === "/analyse" ||
     pathname.startsWith("/analyse/") ||
     pathname === "/auth/callback" ||
-    pathname.startsWith("/auth/callback/")
+    pathname.startsWith("/auth/callback/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/")
   ) {
     return NextResponse.next();
   }

@@ -15,20 +15,31 @@ class AdminDashboardHelperTests(unittest.TestCase):
         self.assertFalse(is_dashboard_admin_email("user@example.com"))
         self.assertFalse(is_dashboard_admin_email(""))
 
-    def test_owner_user_id_skips_token(self) -> None:
+    def test_looked_up_owner_email_allows(self) -> None:
         with patch("app.api.internal._email_for_user_id", return_value="anto.delbos@gmail.com"):
-            _check_dashboard_admin(None, "owner-id")
+            _check_dashboard_admin(x_user_id="owner-id")
+
+    def test_claimed_owner_email_allows_when_lookup_fails(self) -> None:
+        with patch("app.api.internal._email_for_user_id", return_value=None):
+            _check_dashboard_admin(x_user_id="owner-id", x_user_email="Anto.Delbos@gmail.com")
+
+    def test_claimed_owner_email_without_user_id_is_rejected(self) -> None:
+        with patch("app.api.internal._email_for_user_id", return_value=None):
+            with self.assertRaises(HTTPException) as ctx:
+                _check_dashboard_admin(x_user_email="anto.delbos@gmail.com")
+        self.assertEqual(ctx.exception.status_code, 403)
 
     def test_non_admin_is_rejected(self) -> None:
         with patch("app.api.internal._email_for_user_id", return_value="user@example.com"):
             with self.assertRaises(HTTPException) as ctx:
-                _check_dashboard_admin("wrong-token", "user-id")
+                _check_dashboard_admin(x_user_id="user-id", x_user_email="user@example.com")
         self.assertEqual(ctx.exception.status_code, 403)
 
     def test_prediction_summary_from_history(self) -> None:
         card = _prediction_summary(
             {
                 "id": "abc",
+                "user_id": "u1",
                 "created_at": "2026-11-02T10:00:00+00:00",
                 "home_team": "PSG",
                 "away_team": "OM",
@@ -44,6 +55,7 @@ class AdminDashboardHelperTests(unittest.TestCase):
         )
         self.assertEqual(card["home_team"], "PSG")
         self.assertEqual(card["away_team"], "OM")
+        self.assertEqual(card["user_id"], "u1")
         self.assertEqual(card["prob_home"], 52.1)
         self.assertEqual(card["most_likely_score"], "2-1")
         self.assertEqual(card["most_likely_score_pct"], 11.4)

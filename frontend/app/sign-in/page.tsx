@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   setAuthCookie,
   setUserInStorage,
+  getUserFromStorage,
   displayNameFromEmail,
   type UserInfo,
 } from "@/lib/auth";
@@ -48,6 +49,14 @@ function SignInPageContent() {
       window.location.replace(`/auth/callback${hash.startsWith("#") ? hash : `#${hash}`}`);
     }
   }, []);
+
+  useEffect(() => {
+    if (next !== "/admin") return;
+    const user = getUserFromStorage();
+    if (user?.id && (user.email || "").toLowerCase() === "anto.delbos@gmail.com") {
+      window.location.replace(`${window.location.origin}/admin`);
+    }
+  }, [next]);
 
   useEffect(() => {
     if (searchParams.get("oauth") !== "google") {
