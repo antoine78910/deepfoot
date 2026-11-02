@@ -7,28 +7,12 @@ import logging
 import os
 from typing import Any
 from fastapi import APIRouter, Request, HTTPException
+from app.services.whop_plans import WHOP_PLAN_TO_APP, app_plan_from_whop
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
 DATAFAST_PAYMENTS_URL = "https://datafa.st/api/v1/payments"
-
-# Whop plan IDs (from frontend CHECKOUT_URLS) → our plan name. Single product, 3 plans × 3 currencies.
-WHOP_PLAN_TO_APP = {
-    # GBP (9 / 19 / 99)
-    "plan_PEt1oIDXTTimX": "starter",
-    "plan_4txPPDCv7OjiR": "pro",
-    "plan_h5Om2F0ga6UhT": "lifetime",
-    # EUR (9 / 19 / 99)
-    "plan_3pzB8Vw1GIjSb": "starter",
-    "plan_35zzQVid4lE9Z": "pro",
-    "plan_ErLwV2KgiMiC1": "lifetime",
-    # USD (9 / 19.99 / 99.99)
-    "plan_XNiSpw7OKJoIi": "starter",
-    "plan_LwCFHHdytBkM6": "pro",
-    "plan_MlCRcQibssX37": "lifetime",
-}
-
 
 def _pick_first(obj: dict, keys: tuple[str, ...]) -> Any:
     for k in keys:
@@ -85,6 +69,16 @@ def _is_payment_succeeded_event(event: str) -> bool:
     # Accept Whop variants: payment.succeeded, payment_succeeded, payments.payment_succeeded, etc.
     normalized = event.replace("-", "_").replace(".", "_")
     return ("payment" in normalized) and ("succeeded" in normalized)
+
+
+def _is_grant_access_event(event: str) -> bool:
+    """Lifetime one-time purchases often emit membership.went_valid / membership.activated, not only payment.succeeded."""
+    if not event:
+        return False
+    normalized = event.replace("-", "_").replace(".", "_")
+    if "membership" not in normalized:
+        return False
+    return any(token in normalized for token in ("went_valid", "activated", "created", "completed"))
 
 
 def _is_revoke_access_event(event: str) -> bool:
@@ -240,15 +234,20 @@ def _extract_whop_member_plan_and_membership(body: dict) -> tuple[str | None, st
             or _deep_find_first(obj, {"user_email", "email", "email_address"})
             or ""
         ).strip()
-    plan_obj = obj.get("plan") if isinstance(obj.get("plan"), dict) else {}
-    plan_id = (
-        _pick_first(obj, ("plan_id",))
-        or _pick_first(plan_obj, ("id", "plan_id"))
-        or _deep_find_first(obj, {"plan_id"})
-    )
-    plan_id = (plan_id or "").strip()
-    app_plan = WHOP_PLAN_TO_APP.get(plan_id) if plan_id else None
+    app_plan = app_plan_from_whop(obj)
+    if not app_plan:
+        nested = _deep_find_first(obj, {"plan_id"})
+        if nested:
+            app_plan = WHOP_PLAN_TO_APP.get(str(nested).strip())
+        if not app_plan:
+            app_plan = app_plan_from_whop({"plan_id": nested}) if nested else None
     membership_id = (_pick_first(obj, ("membership_id",)) or "").strip() or None
+    mem_obj = obj.get("membership")
+    if not membership_id and isinstance(mem_obj, dict):
+        membership_id = (mem_obj.get("id") or mem_obj.get("membership_id") or "").strip() or None
+    obj_id = str(obj.get("id") or "").strip()
+    if not membership_id and obj_id.startswith("mem_"):
+        membership_id = obj_id
     return (email or None, app_plan, membership_id)
 
 
@@ -452,7 +451,8 @@ async def whop_webhook(request: Request):
             logger.warning("Whop webhook: revoke event=%s but no email/membership_id in payload", event)
         return {"ok": True, "event": event, "plan_set_to_free": bool(email or membership_id)}
 
-    if not _is_payment_succeeded_event(event):
+    is_grant = _is_payment_succeeded_event(event) or _is_grant_access_event(event)
+    if not is_grant:
         logger.info("Whop webhook: ignored event=%s", event or "unknown")
         return {"ok": True, "ignored": True, "event": event}
 
@@ -474,6 +474,9 @@ async def whop_webhook(request: Request):
                     logger.warning("Whop webhook: could not cancel previous memberships for Lifetime: %s", e)
     else:
         logger.warning("Whop webhook: missing member_email or app_plan (email=%s, plan=%s)", bool(member_email), app_plan or "none")
+
+    if not _is_payment_succeeded_event(event):
+        return {"ok": True, "event": event, "plan": app_plan}
 
     parsed = _extract_whop_payment(body)
     if not parsed:
