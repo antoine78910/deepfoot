@@ -83,6 +83,47 @@ class FixtureSearchResolveTests(unittest.TestCase):
         self.assertEqual(away_p["id"], 222)
         self.assertTrue(fixtures_search.called)
 
+    @patch("app.services.sportmonks.team_upcoming_fixtures", return_value=[])
+    @patch("app.services.sportmonks._get_allow_404", return_value={"data": []})
+    @patch("app.services.sportmonks._get")
+    @patch("app.services.sportmonks._subscribed_fixtures_window")
+    @patch("app.services.sportmonks.fixtures_search", return_value=[])
+    @patch("app.services.sportmonks._resolve_team_candidate", return_value=None)
+    @patch("app.services.sportmonks._use_sportmonks", return_value=True)
+    def test_resolves_via_subscribed_fixture_window(
+        self,
+        _use_sm,
+        _resolve_team,
+        _search,
+        window,
+        get_mock,
+        _h2h,
+        _upcoming,
+    ) -> None:
+        kickoff = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        window.return_value = [
+            {"id": 19713878, "name": "Sonderjyske Fodbold vs FC Kobenhavn", "starting_at": kickoff},
+        ]
+
+        def fake_get(path, params=None, include=None):
+            if str(path).startswith("/fixtures/19713878"):
+                return {
+                    "data": {
+                        "id": 19713878,
+                        "name": "Sonderjyske Fodbold vs FC Kobenhavn",
+                        "participants": [
+                            {"id": 390, "name": "Sonderjyske Fodbold", "meta": {"location": "home"}},
+                            {"id": 85, "name": "FC Kobenhavn", "meta": {"location": "away"}},
+                        ],
+                    }
+                }
+            return {}
+
+        get_mock.side_effect = fake_get
+        out = resolve_fixture_and_teams("Sonderjyske Fodbold", "FC Kobenhavn")
+        self.assertIsNotNone(out)
+        self.assertEqual(out["id"], 19713878)
+
 
 if __name__ == "__main__":
     unittest.main()

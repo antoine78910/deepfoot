@@ -381,6 +381,35 @@ def fixtures_search(query: str, limit: int = 10) -> list[dict[str, Any]]:
     return data.get("data") or []
 
 
+def _subscribed_fixtures_window(days_back: int = 1, days_forward: int = 21) -> list[dict[str, Any]]:
+    """Fixtures in leagues on this Sportmonks plan. Search endpoints are often empty."""
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    end = (now + timedelta(days=days_forward)).strftime("%Y-%m-%d")
+    out: list[dict[str, Any]] = []
+    page = 1
+    while page <= 6:
+        data = _get_allow_404(
+            f"/fixtures/between/{start}/{end}",
+            params={"per_page": 50, "page": page},
+            include="participants",
+        )
+        raw = data.get("data") or []
+        if isinstance(raw, dict):
+            raw = raw.get("data") if isinstance(raw.get("data"), list) else []
+        if not isinstance(raw, list) or not raw:
+            break
+        out.extend(row for row in raw if isinstance(row, dict))
+        pag = data.get("pagination") if isinstance(data.get("pagination"), dict) else {}
+        if not pag.get("has_more") and not pag.get("next_page"):
+            break
+        page += 1
+    print(f"[sportmonks] subscribed fixture window {start}..{end} -> {len(out)}")
+    return out
+
+
 def _fixture_search_queries(home: str, away: str) -> list[str]:
     """Name queries that can find a fixture when /teams/search is empty on the plan."""
     seen: set[str] = set()
@@ -1418,6 +1447,31 @@ def resolve_fixture_and_teams(home_team: str, away_team: str) -> Optional[dict[s
                     print(f"[sportmonks] Fixture {fid} does not involve both teams, skipping")
                     continue
 
+            fixture_found = inner
+            if not home_team_id or not away_team_id:
+                hp, ap = _extract_participants(inner)
+                try:
+                    if hp and (hp.get("id") or hp.get("team_id")) is not None:
+                        home_team_id = int(hp.get("id") or hp.get("team_id"))
+                    if ap and (ap.get("id") or ap.get("team_id")) is not None:
+                        away_team_id = int(ap.get("id") or ap.get("team_id"))
+                except (TypeError, ValueError):
+                    pass
+                print(f"[sportmonks] Team IDs from fixture {fid}: home={home_team_id}, away={away_team_id}")
+            break
+
+    if not fixture_found:
+        print("[sportmonks] Search fallback: scanning subscribed-league fixture window")
+        for raw in _subscribed_fixtures_window():
+            name = (raw.get("name") or "").strip()
+            name_core = _normalize_team_core(name)
+            if not name_core or (h_core and h_core not in name_core) or (a_core and a_core not in name_core):
+                continue
+            fid = raw.get("id")
+            if not fid:
+                continue
+            print(f"[sportmonks] Found fixture {fid} via subscribed window: {name}")
+            inner = _fetch_full_fixture(fid) or raw
             fixture_found = inner
             if not home_team_id or not away_team_id:
                 hp, ap = _extract_participants(inner)

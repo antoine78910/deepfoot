@@ -26,6 +26,12 @@ _SEARCH_ALIASES: dict[str, str] = {
     "atletico madrid": "Atletico Madrid",
     "olympique marseille": "Marseille",
     "olympique lyon": "Lyon",
+    "kfum oslo": "KFUM-Kameratene Oslo",
+    "kfum": "KFUM-Kameratene Oslo",
+    "hamkam": "Hamarkameratene",
+    "ham kam": "Hamarkameratene",
+    "fc kobenhavn": "FC Copenhagen",
+    "kobenhavn": "FC Copenhagen",
 }
 
 
@@ -175,7 +181,9 @@ def fixtures_for_team_from_events(
 
 def _pick_team(rows: list[dict], query: str) -> Optional[dict]:
     qn = _normalize(query)
+    q_tokens = [t for t in qn.split() if len(t) >= 3]
     scored: list[tuple[int, dict]] = []
+    soccer_rows: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -189,17 +197,25 @@ def _pick_team(rows: list[dict], query: str) -> Optional[dict]:
         league = _normalize(row.get("strLeague") or "")
         if any(tok in nn for tok in ("talon", "esport", " u19", " u21", " women", " wfc")):
             continue
+        if "esports" in league or "mobile" in league:
+            continue
+        soccer_rows.append(row)
+        n_tokens = nn.split()
         if nn == qn:
             score = 0
         elif qn in nn or nn in qn:
             score = 1
+        elif q_tokens and all(any(qt in nt or nt.startswith(qt) for nt in n_tokens) for qt in q_tokens):
+            score = 2
         else:
-            continue
-        if "esports" in league or "mobile" in league:
             continue
         scored.append((score, row))
     scored.sort(key=lambda x: (x[0], x[1].get("strTeam") or ""))
-    return scored[0][1] if scored else None
+    if scored:
+        return scored[0][1]
+    if len(soccer_rows) == 1:
+        return soccer_rows[0]
+    return None
 
 
 def resolve_team(team_name: str) -> Optional[dict]:
@@ -210,12 +226,19 @@ def resolve_team(team_name: str) -> Optional[dict]:
     cached = _read_cache("teaminfo", key, _SEARCH_TTL)
     if isinstance(cached, dict) and cached.get("idTeam"):
         return cached
-    search = _SEARCH_ALIASES.get(key) or name
-    data = _http_get("/searchteams.php", {"t": search})
-    rows = data.get("teams") or []
-    if not isinstance(rows, list):
-        rows = []
-    picked = _pick_team(rows, search)
+    search_terms = [name]
+    alias = _SEARCH_ALIASES.get(key)
+    if alias and _normalize(alias) != key:
+        search_terms.append(alias)
+    picked = None
+    for search in search_terms:
+        data = _http_get("/searchteams.php", {"t": search})
+        rows = data.get("teams") or []
+        if not isinstance(rows, list):
+            rows = []
+        picked = _pick_team(rows, name) or _pick_team(rows, search)
+        if picked:
+            break
     if not picked:
         return None
     tid = str(picked.get("idTeam") or "").strip()
@@ -231,6 +254,103 @@ def resolve_team(team_name: str) -> Optional[dict]:
     _write_cache("teaminfo", key, info)
     _write_cache("team", key, tid)
     return info
+
+
+def _events_last(team_id: str) -> list[dict]:
+    cached = _read_cache("eventslast", team_id, _EVENTS_TTL)
+    if isinstance(cached, list):
+        return [e for e in cached if isinstance(e, dict)]
+    data = _http_get("/eventslast.php", {"id": team_id})
+    raw = data.get("results") or data.get("events") or []
+    events = [e for e in raw if isinstance(e, dict)]
+    _write_cache("eventslast", team_id, events)
+    return events
+
+
+def _events_season(league_id: str, season: str) -> list[dict]:
+    key = f"{league_id}:{season}"
+    cached = _read_cache("season", key, _ROUND_TTL)
+    if isinstance(cached, list):
+        return [e for e in cached if isinstance(e, dict)]
+    data = _http_get("/eventsseason.php", {"id": str(league_id), "s": str(season)})
+    events = [e for e in (data.get("events") or []) if isinstance(e, dict)]
+    if events:
+        _write_cache("season", key, events)
+    return events
+
+
+def _event_sort_key(ev: dict) -> str:
+    ts = (ev.get("strTimestamp") or "").strip()
+    if ts:
+        return ts.replace("Z", "")
+    date_event = (ev.get("dateEvent") or "")[:10]
+    time_raw = (ev.get("strTime") or "00:00:00")[:8]
+    return f"{date_event}T{time_raw}"
+
+
+def results_to_goals_and_form(
+    events: list[dict],
+    team_id: str,
+    last_n: int = 10,
+) -> tuple[list[int], list[int], list[str]]:
+    """Finished TheSportsDB events → (goals_for, goals_against, W/D/L) for one club."""
+    goals_for: list[int] = []
+    goals_against: list[int] = []
+    form: list[str] = []
+    tid = str(team_id or "")
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        try:
+            home_goals = int(ev.get("intHomeScore"))
+            away_goals = int(ev.get("intAwayScore"))
+        except (TypeError, ValueError):
+            continue
+        is_home = tid and str(ev.get("idHomeTeam") or "") == tid
+        is_away = tid and str(ev.get("idAwayTeam") or "") == tid
+        if not is_home and not is_away:
+            continue
+        scored, conceded = (home_goals, away_goals) if is_home else (away_goals, home_goals)
+        goals_for.append(scored)
+        goals_against.append(conceded)
+        if scored > conceded:
+            form.append("W")
+        elif scored < conceded:
+            form.append("L")
+        else:
+            form.append("D")
+        if len(form) >= last_n:
+            break
+    return goals_for, goals_against, form
+
+
+def team_last_results(team_name: str, last_n: int = 10) -> tuple[list[int], list[int], list[str]]:
+    """Last finished matches for a club. Cached. Does not use API-Football quota."""
+    info = resolve_team(team_name)
+    if not info:
+        return ([], [], [])
+    tid = str(info.get("idTeam") or "")
+    if not tid:
+        return ([], [], [])
+    merged: list[dict] = list(_events_last(tid))
+    league_id = str(info.get("idLeague") or "").strip()
+    if league_id:
+        year = datetime.now(timezone.utc).year
+        seen_ids: set[str] = {
+            str(ev.get("idEvent") or "")
+            for ev in merged
+            if ev.get("idEvent") is not None
+        }
+        for season in (str(year), str(year - 1)):
+            for ev in _events_season(league_id, season):
+                eid = str(ev.get("idEvent") or "")
+                if eid and eid in seen_ids:
+                    continue
+                if eid:
+                    seen_ids.add(eid)
+                merged.append(ev)
+    merged.sort(key=_event_sort_key, reverse=True)
+    return results_to_goals_and_form(merged, tid, last_n=last_n)
 
 
 def resolve_team_id(team_name: str) -> Optional[str]:

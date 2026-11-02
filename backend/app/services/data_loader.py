@@ -232,11 +232,24 @@ def _load_match_context_api_football(
         away_id, away_fixtures, last_n=FORM_STATS_MATCHES
     )
     report("Fetching head-to-head…", 52)
-    placeholder_form = False
-    if not home_goals_for and not home_goals_against:
-        placeholder_form = True
-    if not away_goals_for and not away_goals_against:
-        placeholder_form = True
+    form_source = "API-Football"
+    placeholder_form = (not home_goals_for and not home_goals_against) or (
+        not away_goals_for and not away_goals_against
+    )
+    if placeholder_form:
+        from app.services.thesportsdb import team_last_results
+
+        if not home_goals_for:
+            hg, ha, hf = team_last_results(home_team, last_n=FORM_STATS_MATCHES)
+            if hg:
+                home_goals_for, home_goals_against, home_form = hg, ha, hf
+                form_source = "TheSportsDB"
+        if not away_goals_for:
+            ag, aa, af_ = team_last_results(away_team, last_n=FORM_STATS_MATCHES)
+            if ag:
+                away_goals_for, away_goals_against, away_form = ag, aa, af_
+                form_source = "TheSportsDB"
+        placeholder_form = not home_goals_for or not away_goals_for
     # Attack/Defense/Goals bars and lambda: weighted avg over up to FORM_STATS_MATCHES (recency-weighted)
     h_for_avg, h_against_avg = compute_weighted_goals_avg(home_goals_for, home_goals_against)
     a_for_avg, a_against_avg = compute_weighted_goals_avg(away_goals_for, away_goals_against)
@@ -365,7 +378,11 @@ def _load_match_context_api_football(
         f"Home: goals_for={home_goals_for[:8] if len(home_goals_for) > 8 else home_goals_for}{'...' if len(home_goals_for) > 8 else ''}, form_5={home_form_5}. "
         f"Away: goals_for={away_goals_for[:8] if len(away_goals_for) > 8 else away_goals_for}{'...' if len(away_goals_for) > 8 else ''}, form_5={away_form_5}. "
         f"Weighted avgs: home {h_for_avg:.2f} scored / {h_against_avg:.2f} conceded, away {a_for_avg:.2f} scored / {a_against_avg:.2f} conceded."
-        + (" No finished fixtures in cache — form not substituted with demo scores." if placeholder_form else ""),
+        + (
+            " No finished fixtures — form not substituted with demo scores."
+            if placeholder_form
+            else (f" Form source: {form_source}." if form_source != "API-Football" else "")
+        ),
     })
     steps.append({
         "order": 5,
@@ -400,7 +417,7 @@ def _load_match_context_api_football(
         })
 
     data_recap = {
-        "data_source": "API-Football",
+        "data_source": form_source,
         "form_home_matches": len(home_goals_for),
         "form_away_matches": len(away_goals_for),
         "home_goals_for_avg": round(h_for_avg, 2),
@@ -505,6 +522,27 @@ def load_match_context(
     home_form, hw, hd, hl = get_team_form(h)
     away_form, aw, ad, al = get_team_form(a)
 
+    data_source = "Supabase"
+    if not home_goals_for or not away_goals_for:
+        from app.services.thesportsdb import team_last_results
+
+        if not home_goals_for:
+            hg, ha, hf = team_last_results(home_team, last_n=10)
+            if hg:
+                home_goals_for, home_goals_against, home_form = hg, ha, hf
+                hw = sum(1 for x in home_form[:5] if x == "W")
+                hd = sum(1 for x in home_form[:5] if x == "D")
+                hl = sum(1 for x in home_form[:5] if x == "L")
+                data_source = "TheSportsDB"
+        if not away_goals_for:
+            ag, aa, af_ = team_last_results(away_team, last_n=10)
+            if ag:
+                away_goals_for, away_goals_against, away_form = ag, aa, af_
+                aw = sum(1 for x in away_form[:5] if x == "W")
+                ad = sum(1 for x in away_form[:5] if x == "D")
+                al = sum(1 for x in away_form[:5] if x == "L")
+                data_source = "TheSportsDB"
+
     report("Fetching head-to-head…", 50)
     h2h_h, h2h_d, h2h_a = get_h2h(h, a)
     report("Computing features…", 58)
@@ -522,13 +560,13 @@ def load_match_context(
     )
     h2h_total = h2h_h + h2h_d + h2h_a
     steps_supabase = [
-        {"order": 1, "title_key": "recap.step.data_source_supabase", "detail": "Data from Supabase (results + h2h tables)."},
+        {"order": 1, "title_key": "recap.step.data_source_supabase", "detail": f"Data from {data_source} (results + h2h tables)."},
         {"order": 2, "title_key": "recap.step.form", "detail": f"Team results: last 5 each. Home goals_for/against avg {h_for_avg:.2f}/{h_against_avg:.2f}, away {a_for_avg:.2f}/{a_against_avg:.2f}. Form W-D-L."},
         {"order": 3, "title_key": "recap.step.h2h", "detail": f"H2H from table: home_wins={h2h_h}, draws={h2h_d}, away_wins={h2h_a}."},
         {"order": 4, "title_key": "recap.step.features", "detail": f"Feature engineering: lambda_home={lambda_home:.2f}, lambda_away={lambda_away:.2f}. Comparison percentages."},
     ]
     data_recap = {
-        "data_source": "Supabase",
+        "data_source": data_source,
         "form_home_matches": len(home_goals_for),
         "form_away_matches": len(away_goals_for),
         "home_goals_for_avg": round(h_for_avg, 2),
