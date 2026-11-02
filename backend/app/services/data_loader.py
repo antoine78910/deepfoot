@@ -60,6 +60,156 @@ def _attach_team_logos(
     return ctx
 
 
+def _goal_list(value: Any) -> list[int]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    out: list[int] = []
+    for item in value:
+        try:
+            out.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _form_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item).upper() for item in value if str(item).strip()]
+
+
+def apply_thesportsdb_form_if_missing(
+    ctx: dict[str, Any],
+    home_team: str,
+    away_team: str,
+) -> dict[str, Any]:
+    """
+    If either side has no finished matches, fill form from TheSportsDB and recompute lambdas.
+    Sportmonks must not block this: an empty SM context used to keep every match on default 1.2/1.2.
+    """
+    recap = dict(ctx.get("data_recap") or {})
+    home_goals = _goal_list(recap.get("raw_home_goals_for"))
+    home_against = _goal_list(recap.get("raw_home_goals_against"))
+    away_goals = _goal_list(recap.get("raw_away_goals_for"))
+    away_against = _goal_list(recap.get("raw_away_goals_against"))
+    home_form = _form_list(recap.get("raw_home_form") or ctx.get("home_form"))
+    away_form = _form_list(recap.get("raw_away_form") or ctx.get("away_form"))
+
+    if home_goals and away_goals:
+        recap["placeholder_form"] = False
+        ctx["data_recap"] = recap
+        return ctx
+
+    from app.services.thesportsdb import team_last_results
+
+    filled = False
+    home_name = str(ctx.get("home_team") or home_team or "").strip()
+    away_name = str(ctx.get("away_team") or away_team or "").strip()
+    if not home_goals:
+        hg, ha, hf = team_last_results(home_name, last_n=FORM_STATS_MATCHES)
+        if hg:
+            home_goals, home_against, home_form = hg, ha, hf
+            filled = True
+    if not away_goals:
+        ag, aa, af_ = team_last_results(away_name, last_n=FORM_STATS_MATCHES)
+        if ag:
+            away_goals, away_against, away_form = ag, aa, af_
+            filled = True
+
+    if not home_goals or not away_goals:
+        recap["placeholder_form"] = True
+        ctx["data_recap"] = recap
+        print(
+            f"[data_loader] form still missing after TheSportsDB "
+            f"({home_name} n={len(home_goals)}, {away_name} n={len(away_goals)})"
+        )
+        return ctx
+
+    home_form_5 = home_form[:5]
+    away_form_5 = away_form[:5]
+    hw = sum(1 for x in home_form_5 if x == "W")
+    hd = sum(1 for x in home_form_5 if x == "D")
+    hl = sum(1 for x in home_form_5 if x == "L")
+    aw = sum(1 for x in away_form_5 if x == "W")
+    ad = sum(1 for x in away_form_5 if x == "D")
+    al = sum(1 for x in away_form_5 if x == "L")
+    h_for_avg, h_against_avg = compute_weighted_goals_avg(home_goals, home_against)
+    a_for_avg, a_against_avg = compute_weighted_goals_avg(away_goals, away_against)
+    lambda_home, lambda_away = compute_lambda_home_away(
+        home_goals, home_against, away_goals, away_against
+    )
+    pcts = dict(ctx.get("comparison_pcts") or {})
+    pcts.update(
+        build_comparison_pcts(
+            hw, hd, hl, aw, ad, al,
+            h_for_avg, a_for_avg, h_against_avg, a_against_avg,
+            int(recap.get("h2h_home_wins") or 0),
+            int(recap.get("h2h_draws") or 0),
+            int(recap.get("h2h_away_wins") or 0),
+        )
+    )
+
+    ctx["lambda_home"] = lambda_home
+    ctx["lambda_away"] = lambda_away
+    ctx["home_form"] = home_form
+    ctx["away_form"] = away_form
+    ctx["home_wdl"] = form_to_wdl(home_form_5)
+    ctx["away_wdl"] = form_to_wdl(away_form_5)
+    ctx["home_form_label"] = form_to_label(hw, hd, hl)
+    ctx["away_form_label"] = form_to_label(aw, ad, al)
+    ctx["comparison_pcts"] = pcts
+
+    recap["placeholder_form"] = False
+    recap["form_source"] = "TheSportsDB"
+    recap["form_home_matches"] = len(home_goals)
+    recap["form_away_matches"] = len(away_goals)
+    recap["home_goals_for_avg"] = round(h_for_avg, 2)
+    recap["home_goals_against_avg"] = round(h_against_avg, 2)
+    recap["away_goals_for_avg"] = round(a_for_avg, 2)
+    recap["away_goals_against_avg"] = round(a_against_avg, 2)
+    recap["home_wdl"] = form_to_wdl(home_form_5)
+    recap["away_wdl"] = form_to_wdl(away_form_5)
+    recap["raw_home_goals_for"] = home_goals
+    recap["raw_home_goals_against"] = home_against
+    recap["raw_away_goals_for"] = away_goals
+    recap["raw_away_goals_against"] = away_against
+    recap["raw_home_form"] = home_form
+    recap["raw_away_form"] = away_form
+    steps = list(recap.get("pipeline_steps") or [])
+    if filled:
+        steps.append({
+            "order": 9,
+            "title_key": "recap.step.form",
+            "detail": (
+                f"Form filled from TheSportsDB (Sportmonks/API-Football had no finished matches). "
+                f"Home goals_for={home_goals[:8]} form_5={home_form_5}. "
+                f"Away goals_for={away_goals[:8]} form_5={away_form_5}. "
+                f"lambda_home={lambda_home:.2f}, lambda_away={lambda_away:.2f}."
+            ),
+        })
+        recap["pipeline_steps"] = steps
+        print(
+            f"[data_loader] TheSportsDB form {home_name} vs {away_name}: "
+            f"lambda {lambda_home:.2f}/{lambda_away:.2f}"
+        )
+    ctx["data_recap"] = recap
+    return ctx
+
+
+def _finalize_match_context(
+    ctx: dict[str, Any],
+    home_team: str,
+    away_team: str,
+    home_team_id: Optional[int],
+    away_team_id: Optional[int],
+) -> dict[str, Any]:
+    try:
+        ctx = apply_thesportsdb_form_if_missing(ctx, home_team, away_team)
+    except Exception as exc:
+        print(f"[data_loader] TheSportsDB form fill failed: {exc}")
+    return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
+
+
 def get_team_results(team_slug: str, is_home: bool, last_n: int = 5) -> tuple[list[int], list[int]]:
     """
     Récupère les N derniers matchs (goals_for, goals_against) pour une équipe en home ou away.
@@ -494,7 +644,7 @@ def load_match_context(
             from app.services.sportmonks import load_match_context_sportmonks
             ctx = load_match_context_sportmonks(home_team, away_team, progress_callback=progress_callback)
             if ctx is not None:
-                return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
+                return _finalize_match_context(ctx, home_team, away_team, home_team_id, away_team_id)
             print("[data_loader] Sportmonks returned no fixture; trying API-Football")
         except Exception as exc:
             print(f"[data_loader] Sportmonks failed: {exc}")
@@ -508,7 +658,7 @@ def load_match_context(
             away_team_id=away_team_id,
         )
         if ctx is not None:
-            return _attach_team_logos(ctx, home_team, away_team, home_team_id, away_team_id)
+            return _finalize_match_context(ctx, home_team, away_team, home_team_id, away_team_id)
 
     report("Loading match data…", 10)
     h = normalize_team_name(home_team)
@@ -593,7 +743,7 @@ def load_match_context(
         "raw_home_form": list(home_form) if isinstance(home_form, (list, tuple)) else [],
         "raw_away_form": list(away_form) if isinstance(away_form, (list, tuple)) else [],
     }
-    return _attach_team_logos(
+    return _finalize_match_context(
         {
             "home_team": home_team,
             "away_team": away_team,

@@ -125,5 +125,62 @@ class FixtureSearchResolveTests(unittest.TestCase):
         self.assertEqual(out["id"], 19713878)
 
 
+class TheSportsDbFormEnrichTests(unittest.TestCase):
+    def test_empty_sportmonks_context_gets_match_specific_lambdas(self) -> None:
+        from app.ml.poisson import predict_all
+        from app.services.data_loader import apply_thesportsdb_form_if_missing
+
+        def fake_results(name: str, last_n: int = 10):
+            if "Liverpool" in name:
+                return ([2, 1, 3, 0, 2], [1, 1, 1, 1, 0], ["W", "D", "W", "L", "W"])
+            if "Arsenal" in name:
+                return ([1, 0, 2, 1, 1], [1, 2, 0, 0, 2], ["D", "L", "W", "W", "L"])
+            if "HamKam" in name:
+                return ([0, 1, 0, 2, 0], [3, 2, 1, 1, 2], ["L", "L", "L", "W", "L"])
+            return ([2, 2, 1, 3, 1], [2, 0, 1, 1, 1], ["D", "W", "D", "W", "D"])
+
+        empty = {"lambda_home": 1.2, "lambda_away": 1.2, "data_recap": {"placeholder_form": True}}
+        with patch("app.services.thesportsdb.team_last_results", side_effect=fake_results):
+            liv = apply_thesportsdb_form_if_missing(
+                {**empty, "home_team": "Liverpool", "away_team": "Arsenal"},
+                "Liverpool",
+                "Arsenal",
+            )
+            kfum = apply_thesportsdb_form_if_missing(
+                {**empty, "home_team": "KFUM Oslo", "away_team": "HamKam"},
+                "KFUM Oslo",
+                "HamKam",
+            )
+        self.assertNotEqual(
+            (round(float(liv["lambda_home"]), 2), round(float(liv["lambda_away"]), 2)),
+            (round(float(kfum["lambda_home"]), 2), round(float(kfum["lambda_away"]), 2)),
+        )
+        p1 = predict_all(liv["lambda_home"], liv["lambda_away"])
+        p2 = predict_all(kfum["lambda_home"], kfum["lambda_away"])
+        self.assertNotEqual(
+            (p1["prob_home"], p1["prob_draw"], p1["prob_away"]),
+            (p2["prob_home"], p2["prob_draw"], p2["prob_away"]),
+        )
+        self.assertFalse(liv["data_recap"]["placeholder_form"])
+        self.assertFalse(kfum["data_recap"]["placeholder_form"])
+
+    def test_keeps_real_form_without_calling_thesportsdb(self) -> None:
+        from app.services.data_loader import apply_thesportsdb_form_if_missing
+
+        ctx = {
+            "lambda_home": 1.8,
+            "lambda_away": 1.1,
+            "data_recap": {
+                "raw_home_goals_for": [1, 2, 0],
+                "raw_away_goals_for": [3, 1, 1],
+            },
+        }
+        with patch("app.services.thesportsdb.team_last_results") as mocked:
+            out = apply_thesportsdb_form_if_missing(ctx, "A", "B")
+        mocked.assert_not_called()
+        self.assertEqual(out["lambda_home"], 1.8)
+        self.assertFalse(out["data_recap"]["placeholder_form"])
+
+
 if __name__ == "__main__":
     unittest.main()
