@@ -138,7 +138,9 @@ def _prediction_summary(row: dict) -> dict:
     cost_eur, cost_estimated = cost_from_result(result)
     recap = result.get("analysis_recap") if isinstance(result.get("analysis_recap"), dict) else {}
     placeholder_form = bool(recap.get("placeholder_form"))
-    if not placeholder_form:
+    if recap.get("recalculated_from_form") or result.get("recalculated_from_form"):
+        placeholder_form = False
+    elif not placeholder_form:
         steps_blob = " ".join(
             str(s.get("detail") or "") for s in (recap.get("pipeline_steps") or []) if isinstance(s, dict)
         )

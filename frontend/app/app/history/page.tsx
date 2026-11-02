@@ -24,6 +24,19 @@ function readString(v: unknown): string | null {
   return s ? s : null;
 }
 
+function readPct(result: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = result[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function formatPct(n: number | null): string {
+  if (n == null) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
 function Logo({ src, alt }: { src: string | null; alt: string }) {
   if (!src) {
     return <div className="w-8 h-8 rounded-full bg-dark-input flex-shrink-0" aria-hidden />;
@@ -144,6 +157,11 @@ export default function HistoryPage() {
                 const homeLogo = item.home_logo ?? readString(r?.home_team_logo);
                 const awayLogo = item.away_logo ?? readString(r?.away_team_logo);
                 const league = item.league ?? readString(r?.league);
+                const p1 = readPct(r, ["internal_prob_home", "prob_home"]);
+                const px = readPct(r, ["internal_prob_draw", "prob_draw"]);
+                const p2 = readPct(r, ["internal_prob_away", "prob_away"]);
+                const mls = r?.most_likely_score;
+                const mlsObj = mls && typeof mls === "object" ? (mls as { home?: number; away?: number; probability?: number }) : null;
                 return (
               <button
                 type="button"
@@ -165,6 +183,14 @@ export default function HistoryPage() {
                       ) : null}
                       <span className="text-zinc-500 text-xs">{formatDate(item.created_at)}</span>
                     </div>
+                    {p1 != null && px != null && p2 != null ? (
+                      <p className="text-xs text-zinc-300 mt-2 tabular-nums">
+                        1 {formatPct(p1)} · X {formatPct(px)} · 2 {formatPct(p2)}
+                        {typeof mlsObj?.home === "number" && typeof mlsObj?.away === "number"
+                          ? ` · ${mlsObj.home}–${mlsObj.away}${typeof mlsObj.probability === "number" ? ` (${mlsObj.probability}%)` : ""}`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <Logo src={awayLogo} alt={item.away_team} />
                 </div>

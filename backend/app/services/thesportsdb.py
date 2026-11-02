@@ -17,9 +17,13 @@ _BASE = "https://www.thesportsdb.com/api/v1/json/123"
 _SEARCH_TTL = 7 * 24 * 3600
 _EVENTS_TTL = 6 * 3600
 _ROUND_TTL = 12 * 3600
+_MIN_HTTP_INTERVAL = 2.0
+_last_http_at = 0.0
+_RESOLVE_MISS: set[str] = set()
 
 _SEARCH_ALIASES: dict[str, str] = {
     "paris saint germain": "Paris Saint Germain",
+    "psg": "Paris Saint Germain",
     "bayern munchen": "Bayern Munich",
     "bayern munich": "Bayern Munich",
     "internazionale": "Inter",
@@ -32,6 +36,59 @@ _SEARCH_ALIASES: dict[str, str] = {
     "ham kam": "Hamarkameratene",
     "fc kobenhavn": "FC Copenhagen",
     "kobenhavn": "FC Copenhagen",
+    "copenhagen": "FC Copenhagen",
+    "tottenham": "Tottenham",
+    "nottingham forest": "Nottingham Forest",
+    "west brom": "West Bromwich",
+    "west bromwich albion": "West Bromwich",
+    "hamburger sv": "Hamburg",
+    "fsv mainz 05": "Mainz",
+    "mainz 05": "Mainz",
+    "la gantoise": "Gent",
+    "kaa gent": "Gent",
+    "leeds": "Leeds United",
+    "newcastle": "Newcastle United",
+    "estac troyes": "Troyes",
+    "bodoe glimt": "Bodo/Glimt",
+    "bodo glimt": "Bodo/Glimt",
+    "fredrikstadfk": "Fredrikstad",
+    "djugurden": "Djurgarden",
+    "fc porto": "Porto",
+    "west ham": "West Ham",
+    "ipswich": "Ipswich",
+    "bournemouth": "AFC Bournemouth",
+    "athletic bilbao": "Athletic Club",
+    "osasuna": "Osasuna",
+    "parme": "Parma",
+    "stade brestois 29": "Brest",
+    "cologne": "FC Cologne",
+    "hearts": "Hearts",
+    "sporting cp": "Sporting Lisbon",
+    "famalicao": "Famalicao",
+    "inter miami": "Inter Miami",
+    "new england": "New England Revolution",
+    "sao pablo": "Sao Paulo",
+    "fluminesnes": "Fluminense",
+    "lillestroem sk": "Lillestrom",
+    "ik start": "Start",
+    "kristiansund bk": "Kristiansund",
+    "vaalerenga if": "Valerenga",
+    "tromsoe il": "Tromso",
+    "sudtirol": "Sudtirol",
+    "atletico san luis": "Atletico San Luis",
+    "racing santander": "Racing Santander",
+}
+
+_CYRILLIC_ALIASES: dict[str, str] = {
+    "ноттингем": "Nottingham Forest",
+    "тоттенхэм": "Tottenham",
+    "тоттенхем": "Tottenham",
+    "шальке": "Schalke 04",
+    "бавария": "Bayern Munich",
+    "эспаньол": "Espanyol",
+    "севилья": "Sevilla",
+    "фенербахче": "Fenerbahce",
+    "рома": "Roma",
 }
 
 
@@ -79,16 +136,32 @@ def _write_cache(kind: str, key: str, data: Any) -> None:
         pass
 
 
-def _http_get(path: str, params: dict[str, str]) -> dict[str, Any]:
+def _http_get(path: str, params: dict[str, str]) -> Optional[dict[str, Any]]:
+    """GET TheSportsDB. None means a transport/HTTP error (do not cache)."""
+    global _last_http_at
     url = f"{_BASE}{path}" if path.startswith("/") else f"{_BASE}/{path}"
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            r = client.get(url, params=params)
-        r.raise_for_status()
-        return r.json() or {}
-    except Exception as exc:
-        print(f"[thesportsdb] GET {path} error: {exc}")
-        return {}
+    for attempt in range(3):
+        wait = _MIN_HTTP_INTERVAL - (time.time() - _last_http_at)
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                r = client.get(url, params=params)
+            _last_http_at = time.time()
+            if r.status_code == 429:
+                time.sleep(5.0)
+                continue
+            r.raise_for_status()
+            data = r.json() if r.content else {}
+            return data if isinstance(data, dict) else {}
+        except Exception as exc:
+            _last_http_at = time.time()
+            print(f"[thesportsdb] GET {path} error: {exc}")
+            if attempt < 2 and "429" in str(exc):
+                time.sleep(5.0)
+                continue
+            return None
+    return None
 
 
 def format_event_for_upcoming(ev: dict) -> Optional[dict]:
@@ -223,16 +296,31 @@ def resolve_team(team_name: str) -> Optional[dict]:
     if not name:
         return None
     key = _normalize(name)
+    if key in _RESOLVE_MISS:
+        return None
     cached = _read_cache("teaminfo", key, _SEARCH_TTL)
     if isinstance(cached, dict) and cached.get("idTeam"):
         return cached
-    search_terms = [name]
     alias = _SEARCH_ALIASES.get(key)
-    if alias and _normalize(alias) != key:
+    if not alias:
+        for needle, english in _CYRILLIC_ALIASES.items():
+            if needle in key:
+                alias = english
+                break
+    search_terms: list[str] = []
+    if alias:
         search_terms.append(alias)
+    if name not in search_terms:
+        search_terms.append(name)
     picked = None
+    saw_response = False
+    had_error = False
     for search in search_terms:
         data = _http_get("/searchteams.php", {"t": search})
+        if data is None:
+            had_error = True
+            continue
+        saw_response = True
         rows = data.get("teams") or []
         if not isinstance(rows, list):
             rows = []
@@ -240,6 +328,8 @@ def resolve_team(team_name: str) -> Optional[dict]:
         if picked:
             break
     if not picked:
+        if saw_response and not had_error:
+            _RESOLVE_MISS.add(key)
         return None
     tid = str(picked.get("idTeam") or "").strip()
     if not tid:
@@ -258,21 +348,26 @@ def resolve_team(team_name: str) -> Optional[dict]:
 
 def _events_last(team_id: str) -> list[dict]:
     cached = _read_cache("eventslast", team_id, _EVENTS_TTL)
-    if isinstance(cached, list):
+    if isinstance(cached, list) and cached:
         return [e for e in cached if isinstance(e, dict)]
     data = _http_get("/eventslast.php", {"id": team_id})
+    if data is None:
+        return []
     raw = data.get("results") or data.get("events") or []
     events = [e for e in raw if isinstance(e, dict)]
-    _write_cache("eventslast", team_id, events)
+    if events:
+        _write_cache("eventslast", team_id, events)
     return events
 
 
 def _events_season(league_id: str, season: str) -> list[dict]:
     key = f"{league_id}:{season}"
     cached = _read_cache("season", key, _ROUND_TTL)
-    if isinstance(cached, list):
+    if isinstance(cached, list) and cached:
         return [e for e in cached if isinstance(e, dict)]
     data = _http_get("/eventsseason.php", {"id": str(league_id), "s": str(season)})
+    if data is None:
+        return []
     events = [e for e in (data.get("events") or []) if isinstance(e, dict)]
     if events:
         _write_cache("season", key, events)
@@ -324,8 +419,15 @@ def results_to_goals_and_form(
     return goals_for, goals_against, form
 
 
+_TEAM_RESULTS_MEM: dict[str, tuple[list[int], list[int], list[str]]] = {}
+
+
 def team_last_results(team_name: str, last_n: int = 10) -> tuple[list[int], list[int], list[str]]:
     """Last finished matches for a club. Cached. Does not use API-Football quota."""
+    mem_key = f"{_normalize(team_name)}:{last_n}"
+    cached_mem = _TEAM_RESULTS_MEM.get(mem_key)
+    if cached_mem is not None:
+        return cached_mem
     info = resolve_team(team_name)
     if not info:
         return ([], [], [])
@@ -334,14 +436,16 @@ def team_last_results(team_name: str, last_n: int = 10) -> tuple[list[int], list
         return ([], [], [])
     merged: list[dict] = list(_events_last(tid))
     league_id = str(info.get("idLeague") or "").strip()
-    if league_id:
+    scored = results_to_goals_and_form(merged, tid, last_n=last_n)
+    # Skip extra season HTTP only when we already have a real scored-form window.
+    if league_id and len(scored[0]) < 3:
         year = datetime.now(timezone.utc).year
         seen_ids: set[str] = {
             str(ev.get("idEvent") or "")
             for ev in merged
             if ev.get("idEvent") is not None
         }
-        for season in (str(year), str(year - 1)):
+        for season in (f"{year - 1}-{year}", str(year)):
             for ev in _events_season(league_id, season):
                 eid = str(ev.get("idEvent") or "")
                 if eid and eid in seen_ids:
@@ -349,8 +453,12 @@ def team_last_results(team_name: str, last_n: int = 10) -> tuple[list[int], list
                 if eid:
                     seen_ids.add(eid)
                 merged.append(ev)
-    merged.sort(key=_event_sort_key, reverse=True)
-    return results_to_goals_and_form(merged, tid, last_n=last_n)
+        merged.sort(key=_event_sort_key, reverse=True)
+        scored = results_to_goals_and_form(merged, tid, last_n=last_n)
+    out = scored
+    if out[0]:
+        _TEAM_RESULTS_MEM[mem_key] = out
+    return out
 
 
 def resolve_team_id(team_name: str) -> Optional[str]:
@@ -365,9 +473,12 @@ def _events_next(team_id: str) -> list[dict]:
     if isinstance(cached, list):
         return [e for e in cached if isinstance(e, dict)]
     data = _http_get("/eventsnext.php", {"id": team_id})
+    if data is None:
+        return []
     raw = data.get("events") or []
     events = [e for e in raw if isinstance(e, dict)]
-    _write_cache("events", team_id, events)
+    if events:
+        _write_cache("events", team_id, events)
     return events
 
 
@@ -377,6 +488,8 @@ def fetch_round_events(league_id: str, season: str, rnd: int) -> list[dict]:
     if isinstance(cached, list):
         return [e for e in cached if isinstance(e, dict)]
     data = _http_get("/eventsround.php", {"id": str(league_id), "r": str(rnd), "s": season})
+    if data is None:
+        return []
     raw = data.get("events") or []
     events = [e for e in raw if isinstance(e, dict)]
     if events:

@@ -106,6 +106,32 @@ class AdminDashboardHelperTests(unittest.TestCase):
         )
         self.assertTrue(card["placeholder_form"])
 
+    def test_recalculated_form_is_not_flagged_placeholder(self) -> None:
+        card = _prediction_summary(
+            {
+                "home_team": "Liverpool",
+                "away_team": "Arsenal",
+                "result": {
+                    "prob_home": 61.2,
+                    "prob_draw": 22.0,
+                    "prob_away": 16.8,
+                    "xg_home": 1.66,
+                    "xg_away": 0.44,
+                    "recalculated_from_form": True,
+                    "analysis_recap": {
+                        "placeholder_form": False,
+                        "recalculated_from_form": True,
+                        "pipeline_steps": [
+                            {
+                                "detail": "Home: goals_for=[1, 2, 1, 0, 2]. Away: goals_for=[0, 1, 1, 2, 0].",
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+        self.assertFalse(card["placeholder_form"])
+
 
 if __name__ == "__main__":
     unittest.main()

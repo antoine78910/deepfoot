@@ -120,8 +120,8 @@ def apply_thesportsdb_form_if_missing(
         recap["placeholder_form"] = True
         ctx["data_recap"] = recap
         print(
-            f"[data_loader] form still missing after TheSportsDB "
-            f"({home_name} n={len(home_goals)}, {away_name} n={len(away_goals)})"
+            "[data_loader] form still missing after TheSportsDB "
+            f"(home n={len(home_goals)}, away n={len(away_goals)})"
         )
         return ctx
 
@@ -188,10 +188,7 @@ def apply_thesportsdb_form_if_missing(
             ),
         })
         recap["pipeline_steps"] = steps
-        print(
-            f"[data_loader] TheSportsDB form {home_name} vs {away_name}: "
-            f"lambda {lambda_home:.2f}/{lambda_away:.2f}"
-        )
+        print(f"[data_loader] TheSportsDB form filled: lambda {lambda_home:.2f}/{lambda_away:.2f}")
     ctx["data_recap"] = recap
     return ctx
 

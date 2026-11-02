@@ -42,6 +42,28 @@ class TheSportsDbFormTests(unittest.TestCase):
         self.assertEqual(gf, [4])
         self.assertEqual(form, ["W"])
 
+    def test_cyrillic_alias_used_in_search(self) -> None:
+        from unittest.mock import patch
+
+        from app.services import thesportsdb as tsdb
+
+        tsdb._TEAM_RESULTS_MEM.clear()
+        tsdb._RESOLVE_MISS.clear()
+        calls: list[str] = []
+
+        def fake_http(path: str, params: dict):
+            calls.append(str(params.get("t") or ""))
+            if params.get("t") == "Bayern Munich":
+                return {"teams": [{"strTeam": "Bayern Munich", "strSport": "Soccer", "idTeam": "1", "idLeague": "4331"}]}
+            return {"teams": []}
+
+        with patch("app.services.thesportsdb._http_get", side_effect=fake_http), patch(
+            "app.services.thesportsdb._read_cache", return_value=None
+        ), patch("app.services.thesportsdb._write_cache"):
+            info = tsdb.resolve_team("Бавария Германия")
+        self.assertIsNotNone(info)
+        self.assertEqual(calls[0], "Bayern Munich")
+
     def test_pick_team_token_and_single_hit(self) -> None:
         kfum = _pick_team(
             [{"strTeam": "KFUM-Kameratene Oslo", "strSport": "Soccer", "strLeague": "Eliteserien"}],
@@ -59,6 +81,38 @@ class TheSportsDbFormTests(unittest.TestCase):
 
         with patch("app.services.thesportsdb.resolve_team", return_value=None):
             self.assertEqual(team_last_results("Unknown FC"), ([], [], []))
+
+    def test_season_fill_when_last_events_lack_scores(self) -> None:
+        from unittest.mock import patch
+
+        last = [{"idEvent": "a", "idHomeTeam": "1", "idAwayTeam": "2"}] * 5
+        last[0] = {
+            "idEvent": "a0",
+            "idHomeTeam": "1",
+            "idAwayTeam": "2",
+            "intHomeScore": "2",
+            "intAwayScore": "0",
+        }
+        season = [
+            {
+                "idEvent": f"s{i}",
+                "idHomeTeam": "1",
+                "idAwayTeam": "9",
+                "intHomeScore": str(i % 3),
+                "intAwayScore": "1",
+            }
+            for i in range(6)
+        ]
+        from app.services import thesportsdb as tsdb
+
+        tsdb._TEAM_RESULTS_MEM.clear()
+        info = {"idTeam": "1", "idLeague": "4334"}
+        with patch("app.services.thesportsdb.resolve_team", return_value=info), patch(
+            "app.services.thesportsdb._events_last", return_value=last
+        ), patch("app.services.thesportsdb._events_season", return_value=season):
+            gf, _ga, form = team_last_results("Lyon")
+        self.assertGreaterEqual(len(gf), 5)
+        self.assertGreaterEqual(len(form), 5)
 
 
 if __name__ == "__main__":
