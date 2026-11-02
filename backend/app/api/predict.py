@@ -626,6 +626,8 @@ def _build_response(
     }
     if analysis_recap is not None:
         resp["analysis_recap"] = analysis_recap
+    if ai.get("llm_usage"):
+        resp["llm_usage"] = ai.get("llm_usage")
     # Format Sportmonks (fixture + predictions avec type) pour affichage / réutilisation
     sportmonks_fixture = (ctx.get("data_recap") or {}).get("sportmonks_fixture_with_predictions")
     if sportmonks_fixture is not None:

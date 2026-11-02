@@ -131,6 +131,7 @@ class PredictResponse(BaseModel):
     # News scraping + motivation analysis (fiabilité prédictions)
     scraped_news_count: Optional[int] = None
     motivation_analysis: Optional[str] = None  # Full GPT motivation analysis text
+    llm_usage: Optional[dict[str, Any]] = None  # OpenAI tokens + estimated cost (admin)
 
 
 class TranslateRequest(BaseModel):

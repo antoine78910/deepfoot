@@ -59,6 +59,8 @@ class AdminDashboardHelperTests(unittest.TestCase):
         self.assertEqual(card["prob_home"], 52.1)
         self.assertEqual(card["most_likely_score"], "2-1")
         self.assertEqual(card["most_likely_score_pct"], 11.4)
+        self.assertTrue(card["cost_estimated"])
+        self.assertGreater(card["cost_eur"], 0)
 
 
 if __name__ == "__main__":

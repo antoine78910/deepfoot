@@ -7,6 +7,12 @@ from pydantic import BaseModel
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase, get_supabase_admin
 from app.services.fixture_polling import run_poll_finished_fixtures
+from app.services.prediction_costs import (
+    cost_from_result,
+    economics_payload,
+    estimated_cost_eur,
+    revenue_for_plan,
+)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -129,6 +135,7 @@ def _prediction_summary(row: dict) -> dict:
     score = None
     if mls.get("home") is not None and mls.get("away") is not None:
         score = f"{mls.get('home')}-{mls.get('away')}"
+    cost_eur, cost_estimated = cost_from_result(result)
     return {
         "id": row.get("id"),
         "user_id": row.get("user_id"),
@@ -145,6 +152,8 @@ def _prediction_summary(row: dict) -> dict:
         "most_likely_score_pct": mls.get("probability"),
         "quick_summary": result.get("quick_summary"),
         "source": row.get("source") or "history",
+        "cost_eur": cost_eur,
+        "cost_estimated": cost_estimated,
     }
 
 
@@ -325,6 +334,21 @@ def admin_summary(
             }
         )
 
+    unit_cost = estimated_cost_eur()
+    plan_counts = {"starter": 0, "pro": 0, "lifetime": 0, "free": 0}
+    for u in users:
+        total = int(u.get("analyses_total") or 0)
+        window_n = int(u.get("analyses_last_days") or 0)
+        u["cost_eur"] = round(total * unit_cost, 4)
+        u["cost_last_days_eur"] = round(window_n * unit_cost, 4)
+        u["revenue_eur"] = revenue_for_plan(u.get("plan"))
+        if u.get("user_id") == "anonymous":
+            continue
+        plan = str(u.get("plan") or "free").strip().lower()
+        if plan not in plan_counts:
+            plan = "free"
+        plan_counts[plan] += 1
+
     users.sort(key=lambda x: (x.get("analyses_total") or 0), reverse=True)
     top_matches = sorted(
         [{"match": k, "count": v} for k, v in match_counts.items()],
@@ -386,6 +410,15 @@ def admin_summary(
             except Exception:
                 pass
 
+    predictions_all_time = sum(int(u.get("analyses_total") or 0) for u in users)
+    predictions_window = sum(int(u.get("analyses_last_days") or 0) for u in users)
+    economics = economics_payload(
+        predictions_all_time=predictions_all_time,
+        predictions_window=predictions_window,
+        window_days=days,
+        plan_counts=plan_counts,
+    )
+
     q_norm = (q or "").strip().lower()
     if q_norm:
         users = [
@@ -404,6 +437,7 @@ def admin_summary(
         "users_count": len(users),
         "users": users[:500],
         "top_requested_matches": top_matches,
+        "economics": economics,
     }
 
 

@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from openai import OpenAI
 from app.core.config import get_settings
+from app.services.prediction_costs import usage_from_openai
 
 SPORTMONKS_ANALYST_SYSTEM = """You are a professional football match analyst.
 
@@ -275,6 +276,7 @@ def generate_ai_analysis_sportmonks(
         if not raw:
             return default
         data = json.loads(raw)
+        llm_usage = usage_from_openai(r)
         sections = [
             ("1. MATCH OVERVIEW", data.get("match_overview")),
             ("2. WIN PROBABILITY ANALYSIS", data.get("win_probability_analysis")),
@@ -299,6 +301,8 @@ def generate_ai_analysis_sportmonks(
             "professional_analysis": professional_analysis,
         }
         result = _normalize_scenarios_payload(result, default)
+        if llm_usage:
+            result["llm_usage"] = llm_usage
         return result
     except Exception:
         return default
@@ -367,6 +371,9 @@ Return only valid JSON, no markdown."""
         data.setdefault("scenario_1", default["scenario_1"])
         data.setdefault("key_forces_home", default["key_forces_home"])
         data.setdefault("key_forces_away", default["key_forces_away"])
+        llm_usage = usage_from_openai(r)
+        if llm_usage:
+            data["llm_usage"] = llm_usage
         return data
     except Exception:
         return default

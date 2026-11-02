@@ -19,6 +19,29 @@ type AdminUser = {
   analyses_last_days: number;
   last_analysis_date?: string | null;
   recent_matches?: string[];
+  cost_eur?: number;
+  cost_last_days_eur?: number;
+  revenue_eur?: number;
+};
+
+type AdminEconomics = {
+  currency: string;
+  model: string;
+  cost_per_prediction_eur: number;
+  cost_per_prediction_usd?: number;
+  cost_estimated: boolean;
+  cost_note: string;
+  predictions_all_time: number;
+  predictions_window: number;
+  cost_all_time_eur: number;
+  cost_window_eur: number;
+  paid: { starter: number; pro: number; lifetime: number; free: number };
+  mrr_eur: number;
+  lifetime_revenue_eur: number;
+  revenue_window_eur: number;
+  profit_window_eur: number;
+  profit_all_time_eur: number;
+  profitable_window: boolean;
 };
 
 type AdminSummary = {
@@ -37,6 +60,7 @@ type AdminSummary = {
   users_count: number;
   users: AdminUser[];
   top_requested_matches: Array<{ match: string; count: number }>;
+  economics?: AdminEconomics;
 };
 
 type PredictionCard = {
@@ -56,11 +80,28 @@ type PredictionCard = {
   most_likely_score_pct?: number | null;
   quick_summary?: string | null;
   source?: string;
+  cost_eur?: number | null;
+  cost_estimated?: boolean;
 };
 
 function pct(n?: number | null) {
   if (typeof n !== "number" || Number.isNaN(n)) return "—";
   return `${n.toFixed(1)}%`;
+}
+
+function formatEur(n?: number | null, digits = 2) {
+  if (typeof n !== "number" || Number.isNaN(n)) return "—";
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(n);
+}
+
+function formatCost(n?: number | null) {
+  if (typeof n !== "number" || Number.isNaN(n)) return "—";
+  return formatEur(n, n > 0 && n < 0.01 ? 4 : 2);
 }
 
 function isOwnerEmail(email?: string | null) {
@@ -130,6 +171,9 @@ function PredictionList({
               {email ? ` · ${email}` : ""}
               {p.most_likely_score ? ` · most likely ${p.most_likely_score}` : ""}
               {typeof p.most_likely_score_pct === "number" ? ` (${p.most_likely_score_pct}%)` : ""}
+              {typeof p.cost_eur === "number"
+                ? ` · ${formatCost(p.cost_eur)}${p.cost_estimated ? " est." : ""}`
+                : ""}
             </p>
             <p className="text-sm text-zinc-300">
               1 {pct(p.prob_home)} · X {pct(p.prob_draw)} · 2 {pct(p.prob_away)}
@@ -278,9 +322,10 @@ export function AdminDashboard() {
     return map;
   }, [users]);
   const predictionsTotal = useMemo(
-    () => users.reduce((sum, u) => sum + (u.analyses_total || 0), 0),
-    [users]
+    () => data?.economics?.predictions_all_time ?? users.reduce((sum, u) => sum + (u.analyses_total || 0), 0),
+    [data, users]
   );
+  const economics = data?.economics;
   const signInHref = `${getSignInHref()}?next=${encodeURIComponent("/admin")}`;
 
   const nav: Array<{ id: AdminSection; label: string }> = [
@@ -403,6 +448,54 @@ export function AdminDashboard() {
                 <p className="text-2xl font-semibold">{data?.window_days ?? days} days</p>
               </div>
             </div>
+            <section className="rounded-xl border border-white/10 bg-[#14141c] p-4 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">Costs and profitability</h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {economics?.cost_note ||
+                    "OpenAI gpt-4o-mini cost per generated prediction. Sportmonks, Railway and Vercel monthly fees are not included."}
+                </p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-white/10 bg-[#1c1c28] p-3">
+                  <p className="text-zinc-400 text-xs">Cost / prediction</p>
+                  <p className="text-xl font-semibold">{formatCost(economics?.cost_per_prediction_eur)}</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-[#1c1c28] p-3">
+                  <p className="text-zinc-400 text-xs">Total cost ({economics?.predictions_window ?? 0} in window)</p>
+                  <p className="text-xl font-semibold">{formatEur(economics?.cost_window_eur)}</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    All-time {formatEur(economics?.cost_all_time_eur)} · {economics?.predictions_all_time ?? 0} predictions
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-[#1c1c28] p-3">
+                  <p className="text-zinc-400 text-xs">Est. revenue (window)</p>
+                  <p className="text-xl font-semibold">{formatEur(economics?.revenue_window_eur)}</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    MRR {formatEur(economics?.mrr_eur)} · Lifetime collected {formatEur(economics?.lifetime_revenue_eur)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-[#1c1c28] p-3">
+                  <p className="text-zinc-400 text-xs">Margin (window)</p>
+                  <p
+                    className={`text-xl font-semibold ${
+                      economics?.profitable_window ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {formatEur(economics?.profit_window_eur)}
+                  </p>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    {economics?.profitable_window ? "Profitable on OpenAI this window" : "OpenAI cost above prorated MRR"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Paid mix: {economics?.paid.starter ?? 0} Starter · {economics?.paid.pro ?? 0} Pro ·{" "}
+                {economics?.paid.lifetime ?? 0} Lifetime · {economics?.paid.free ?? 0} Free. Window revenue is current MRR
+                prorated over {data?.window_days ?? days} days (Starter €9, Pro €19). Lifetime €99 is counted in all-time
+                margin only.
+              </p>
+            </section>
             <section className="rounded-xl border border-white/10 bg-[#14141c] p-4">
               <h2 className="text-lg font-semibold mb-3">Most requested matches</h2>
               <div className="space-y-1 text-sm">
@@ -439,6 +532,7 @@ export function AdminDashboard() {
                     <th className="text-left py-2 pr-4">Plan</th>
                     <th className="text-left py-2 pr-4">Today</th>
                     <th className="text-left py-2 pr-4">Total predictions</th>
+                    <th className="text-left py-2 pr-4">Cost</th>
                     <th className="text-left py-2 pr-4">Last {data?.window_days ?? days}d</th>
                     <th className="text-left py-2 pr-4">Recent matches</th>
                   </tr>
@@ -454,6 +548,7 @@ export function AdminDashboard() {
                       <td className="py-2 pr-4 capitalize">{u.plan}</td>
                       <td className="py-2 pr-4">{u.analyses_today}</td>
                       <td className="py-2 pr-4 font-semibold text-[#00ffe8]">{u.analyses_total}</td>
+                      <td className="py-2 pr-4">{formatCost(u.cost_eur)}</td>
                       <td className="py-2 pr-4">{u.analyses_last_days}</td>
                       <td className="py-2 pr-4 text-zinc-400">{(u.recent_matches || []).slice(0, 4).join(" • ") || "—"}</td>
                     </tr>
@@ -475,6 +570,7 @@ export function AdminDashboard() {
                       Plan <span className="capitalize text-white">{selected.plan}</span>
                       {" · "}
                       {predCount ?? selected.analyses_total} predictions in total
+                      {typeof selected.cost_eur === "number" ? ` · cost ${formatCost(selected.cost_eur)}` : ""}
                       {userPredictions && predCount && userPredictions.length < predCount
                         ? ` · showing last ${userPredictions.length}`
                         : ""}
@@ -501,7 +597,15 @@ export function AdminDashboard() {
               </section>
             )}
             <section className="rounded-xl border border-white/10 bg-[#14141c] p-4">
-              <h2 className="text-lg font-semibold mb-3">{selected ? "All other recent predictions" : "All generated predictions"}</h2>
+              <h2 className="text-lg font-semibold mb-1">{selected ? "All other recent predictions" : "All generated predictions"}</h2>
+              <p className="text-xs text-zinc-500 mb-3">
+                {allPredictions.length} shown
+                {allPredictions.length
+                  ? ` · ${formatCost(
+                      allPredictions.reduce((sum, p) => sum + (typeof p.cost_eur === "number" ? p.cost_eur : 0), 0)
+                    )} OpenAI cost on this list`
+                  : ""}
+              </p>
               {allPredStatus === "loading" && <p className="text-sm text-zinc-400">Loading predictions…</p>}
               {allPredStatus === "error" && <p className="text-sm text-rose-400">Could not load predictions.</p>}
               {allPredStatus === "idle" && (
