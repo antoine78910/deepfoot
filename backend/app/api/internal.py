@@ -50,6 +50,54 @@ def _fetch_auth_emails_via_http() -> dict[str, str]:
     return uid_to_email
 
 
+def dashboard_admin_emails() -> set[str]:
+    raw = (get_settings().admin_emails or "anto.delbos@gmail.com")
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def is_dashboard_admin_email(email: str | None) -> bool:
+    em = (email or "").strip().lower()
+    return bool(em) and em in dashboard_admin_emails()
+
+
+def _email_for_user_id(user_id: str) -> str | None:
+    uid = (user_id or "").strip()
+    if not uid:
+        return None
+    admin = get_supabase_admin()
+    if admin:
+        try:
+            r = admin.auth.admin.get_user_by_id(uid)
+            user_obj = getattr(r, "user", None)
+            if user_obj is not None:
+                em = getattr(user_obj, "email", None) or (user_obj.get("email") if isinstance(user_obj, dict) else None)
+                if em:
+                    return str(em).strip()
+        except Exception:
+            pass
+    s = get_settings()
+    url_base = (s.supabase_url or "").strip().rstrip("/")
+    key = (s.supabase_service_role_key or "").strip()
+    if not url_base or not key:
+        return None
+    try:
+        import httpx
+
+        r = httpx.get(
+            f"{url_base}/auth/v1/admin/users/{uid}",
+            headers={"Authorization": f"Bearer {key}", "apikey": key},
+            timeout=20.0,
+        )
+        if r.status_code < 400:
+            data = r.json() if r.content else {}
+            em = (data.get("email") or "").strip() if isinstance(data, dict) else ""
+            if em:
+                return em
+    except Exception:
+        pass
+    return None
+
+
 def _check_admin(x_admin_key: str | None) -> None:
     key = get_settings().admin_api_key
     if not key:
@@ -58,13 +106,44 @@ def _check_admin(x_admin_key: str | None) -> None:
         raise HTTPException(status_code=403, detail="Invalid or missing X-Admin-Key")
 
 
-def _check_dashboard_admin(x_admin_key: str | None) -> None:
+def _check_dashboard_admin(
+    x_admin_key: str | None,
+    x_user_id: str | None = None,
+) -> None:
+    if is_dashboard_admin_email(_email_for_user_id(x_user_id or "")):
+        return
     s = get_settings()
     expected = (s.admin_dashboard_token or s.admin_api_key or "").strip()
-    if not expected:
+    if expected and (x_admin_key or "").strip() == expected:
         return
-    if (x_admin_key or "").strip() != expected:
-        raise HTTPException(status_code=403, detail="Invalid or missing X-Admin-Key")
+    raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _prediction_summary(row: dict) -> dict:
+    """Compact prediction card for the admin dashboard (no full analysis blob)."""
+    result = row.get("result") if isinstance(row.get("result"), dict) else {}
+    mls = result.get("most_likely_score") if isinstance(result.get("most_likely_score"), dict) else {}
+    home = (row.get("home_team") or result.get("home_team") or "").strip() or None
+    away = (row.get("away_team") or result.get("away_team") or "").strip() or None
+    score = None
+    if mls.get("home") is not None and mls.get("away") is not None:
+        score = f"{mls.get('home')}-{mls.get('away')}"
+    return {
+        "id": row.get("id"),
+        "created_at": row.get("created_at"),
+        "home_team": home,
+        "away_team": away,
+        "league": row.get("league") or result.get("league"),
+        "home_logo": row.get("home_logo") or result.get("home_team_logo"),
+        "away_logo": row.get("away_logo") or result.get("away_team_logo"),
+        "prob_home": result.get("prob_home"),
+        "prob_draw": result.get("prob_draw"),
+        "prob_away": result.get("prob_away"),
+        "most_likely_score": score,
+        "most_likely_score_pct": mls.get("probability"),
+        "quick_summary": result.get("quick_summary"),
+        "source": row.get("source") or "history",
+    }
 
 
 class FeedbackPayload(BaseModel):
@@ -109,12 +188,20 @@ def create_feedback(payload: FeedbackPayload):
     return {"ok": True}
 
 
+@router.get("/admin/session")
+def admin_session(x_user_id: str | None = Header(None, alias="X-User-Id")):
+    email = _email_for_user_id(x_user_id or "")
+    return {"admin": is_dashboard_admin_email(email), "email": email}
+
+
 @router.get("/admin/summary")
 def admin_summary(
     days: int = 30,
+    q: str | None = None,
     x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
 ):
-    _check_dashboard_admin(x_admin_key)
+    _check_dashboard_admin(x_admin_key, x_user_id)
     supabase = get_supabase_admin() or get_supabase()
     days = max(1, min(int(days or 30), 365))
 
@@ -145,23 +232,35 @@ def admin_summary(
     except Exception:
         profiles_rows = []
 
-    # Evénements analyses (historique pour agrégations)
+    # Evénements analyses (historique pour agrégations) — all-time, then window in Python
     events_rows = []
     try:
         from datetime import datetime, timezone, timedelta
 
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         r_ev = (
             supabase.table("analysis_events")
             .select("created_at, user_id, home_team, away_team")
-            .gte("created_at", since)
             .order("created_at", desc=True)
-            .limit(20000)
+            .limit(50000)
             .execute()
         )
         events_rows = r_ev.data or []
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     except Exception:
         events_rows = []
+        since = ""
+
+    history_counts: dict[str, int] = {}
+    try:
+        r_hist = supabase.table("analysis_history").select("user_id").limit(20000).execute()
+        for hrow in r_hist.data or []:
+            if not isinstance(hrow, dict):
+                continue
+            hid = str(hrow.get("user_id") or "").strip()
+            if hid:
+                history_counts[hid] = history_counts.get(hid, 0) + 1
+    except Exception:
+        history_counts = {}
 
     # Agrégations
     per_user: dict[str, dict] = {}
@@ -170,8 +269,11 @@ def admin_summary(
         if not isinstance(ev, dict):
             continue
         uid = (ev.get("user_id") or "").strip() or "anonymous"
-        row = per_user.setdefault(uid, {"user_id": uid, "analyses_window": 0, "matches": []})
-        row["analyses_window"] += 1
+        row = per_user.setdefault(uid, {"user_id": uid, "analyses_window": 0, "analyses_all_time": 0, "matches": []})
+        row["analyses_all_time"] += 1
+        created = str(ev.get("created_at") or "")
+        if not since or created >= since:
+            row["analyses_window"] += 1
         h = (ev.get("home_team") or "").strip()
         a = (ev.get("away_team") or "").strip()
         if h and a:
@@ -181,35 +283,37 @@ def admin_summary(
 
     profile_map = {str((p or {}).get("id") or ""): p for p in profiles_rows if isinstance(p, dict)}
     users = []
-    for uid, r in per_user.items():
+    all_uids = set(per_user.keys()) | set(profile_map.keys()) | set(history_counts.keys())
+    for uid in all_uids:
+        if not uid or uid == "anonymous":
+            continue
         p = profile_map.get(uid) or {}
+        r = per_user.get(uid) or {}
+        from_profile = int(p.get("analyses_total") or 0)
+        from_events = int(r.get("analyses_all_time") or 0)
+        from_history = int(history_counts.get(uid) or 0)
         users.append(
             {
                 "user_id": uid,
                 "plan": (p.get("plan") or "free"),
                 "analyses_today": int(p.get("analyses_used_today") or 0),
-                "analyses_total": int(p.get("analyses_total") or 0),
+                "analyses_total": max(from_profile, from_events, from_history),
                 "analyses_last_days": int(r.get("analyses_window") or 0),
                 "last_analysis_date": p.get("last_analysis_date"),
-                "recent_matches": (r.get("matches") or [])[:10],
+                "recent_matches": (r.get("matches") or [])[:12],
             }
         )
-    # utilisateurs visibles même sans évènement fenêtre
-    for p in profiles_rows:
-        if not isinstance(p, dict):
-            continue
-        uid = str(p.get("id") or "")
-        if not uid or any(u["user_id"] == uid for u in users):
-            continue
+    if "anonymous" in per_user:
+        r = per_user["anonymous"]
         users.append(
             {
-                "user_id": uid,
-                "plan": (p.get("plan") or "free"),
-                "analyses_today": int(p.get("analyses_used_today") or 0),
-                "analyses_total": int(p.get("analyses_total") or 0),
-                "analyses_last_days": 0,
-                "last_analysis_date": p.get("last_analysis_date"),
-                "recent_matches": [],
+                "user_id": "anonymous",
+                "plan": "free",
+                "analyses_today": 0,
+                "analyses_total": int(r.get("analyses_all_time") or 0),
+                "analyses_last_days": int(r.get("analyses_window") or 0),
+                "last_analysis_date": None,
+                "recent_matches": (r.get("matches") or [])[:12],
             }
         )
 
@@ -274,6 +378,17 @@ def admin_summary(
             except Exception:
                 pass
 
+    q_norm = (q or "").strip().lower()
+    if q_norm:
+        users = [
+            u
+            for u in users
+            if q_norm in (u.get("email") or "").lower()
+            or q_norm in (u.get("plan") or "").lower()
+            or q_norm in (u.get("user_id") or "").lower()
+            or any(q_norm in (m or "").lower() for m in (u.get("recent_matches") or []))
+        ]
+
     return {
         "window_days": days,
         "feedback_count": len(feedback_rows),
@@ -281,4 +396,86 @@ def admin_summary(
         "users_count": len(users),
         "users": users[:500],
         "top_requested_matches": top_matches,
+    }
+
+
+@router.get("/admin/users/{user_id}/predictions")
+def admin_user_predictions(
+    user_id: str,
+    limit: int = 100,
+    x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+):
+    """All saved predictions for one user (history first, events as fallback)."""
+    _check_dashboard_admin(x_admin_key, x_user_id)
+    uid = (user_id or "").strip()
+    if not uid or uid == "anonymous":
+        raise HTTPException(status_code=400, detail="user_id required")
+    limit = max(1, min(int(limit or 100), 300))
+    supabase = get_supabase_admin() or get_supabase()
+    predictions: list[dict] = []
+    try:
+        r = (
+            supabase.table("analysis_history")
+            .select("id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, result")
+            .eq("user_id", uid)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        for row in r.data or []:
+            if isinstance(row, dict):
+                predictions.append(_prediction_summary({**row, "source": "history"}))
+    except Exception:
+        predictions = []
+
+    seen_keys = {
+        f"{(p.get('created_at') or '')[:19]}|{(p.get('home_team') or '').lower()}|{(p.get('away_team') or '').lower()}"
+        for p in predictions
+    }
+    if len(predictions) < limit:
+        try:
+            r_ev = (
+                supabase.table("analysis_events")
+                .select("id, created_at, user_id, home_team, away_team")
+                .eq("user_id", uid)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            for row in r_ev.data or []:
+                if not isinstance(row, dict):
+                    continue
+                key = f"{str(row.get('created_at') or '')[:19]}|{(row.get('home_team') or '').lower()}|{(row.get('away_team') or '').lower()}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                predictions.append(_prediction_summary({**row, "source": "event", "result": {}}))
+                if len(predictions) >= limit:
+                    break
+        except Exception:
+            pass
+
+    predictions.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+    email = _email_for_user_id(uid)
+    plan = "free"
+    analyses_total = len(predictions)
+    try:
+        pr = supabase.table("profiles").select("plan, analyses_total").eq("id", uid).limit(1).execute()
+        if pr.data:
+            plan = (pr.data[0] or {}).get("plan") or "free"
+            analyses_total = max(int((pr.data[0] or {}).get("analyses_total") or 0), len(predictions))
+    except Exception:
+        pass
+    try:
+        ev = supabase.table("analysis_events").select("id").eq("user_id", uid).limit(20000).execute()
+        analyses_total = max(analyses_total, len(ev.data or []))
+    except Exception:
+        pass
+    return {
+        "user_id": uid,
+        "email": email,
+        "plan": plan,
+        "predictions_count": analyses_total,
+        "predictions": predictions[:limit],
     }
