@@ -452,6 +452,14 @@ def translate_analysis(analysis: dict, target_lang: str) -> dict:
 
 CHAT_AI_SYSTEM = """You are Deepfoot's match assistant. Your job is to answer the user's actual question, not to recap every market.
 
+LANGUAGE (mandatory):
+- Always write the entire reply in the same language as the user's question.
+- Detect the question language from the user's words (French, Spanish, English, etc.).
+- If the question language is clear, IGNORE the UI language hint.
+- Only use the UI language when the question is mixed, tiny, or language-ambiguous.
+- Do not answer in English unless the user wrote in English.
+- Keep football terms and team names natural for that language (e.g. French: "cote", "favori", "match nul").
+
 You will receive match predictions (1X2, xG, BTTS, over/under, form, summary) plus optional news.
 
 ANSWER SHAPE (always):
@@ -471,8 +479,7 @@ IF they ask what to bet / which odds are interesting:
 - Close with one line: probabilities, not certainties; never stake more than you can afford to lose.
 
 OTHER questions: answer first, then only the 1–2 stats that support it.
-Never invent injuries, news, scores, or odds. If data is missing, say so.
-Reply in the requested language."""
+Never invent injuries, news, scores, or odds. If data is missing, say so."""
 
 
 def _brief_num(val: Any) -> float | None:
@@ -605,6 +612,28 @@ def build_chat_prediction_brief(analysis: dict[str, Any] | None) -> dict[str, An
     return {k: v for k, v in brief.items() if v not in (None, "", [], {})}
 
 
+def _chat_ui_language_name(language: str | None) -> str:
+    lang_names = {
+        "en": "English",
+        "fr": "French",
+        "es": "Spanish",
+        "de": "German",
+        "it": "Italian",
+        "pt": "Portuguese",
+        "nl": "Dutch",
+    }
+    return lang_names.get((language or "en").strip().lower()[:2], "English")
+
+
+def _chat_empty_prompt(language: str | None) -> str:
+    code = (language or "en").strip().lower()[:2]
+    if code == "fr":
+        return "Pose une question précise sur l'analyse du match."
+    if code == "es":
+        return "Haz una pregunta concreta sobre el análisis del partido."
+    return "Please ask a specific question about the match analysis."
+
+
 def chat_ai_reply(
     analysis_context: dict,
     user_message: str,
@@ -615,28 +644,33 @@ def chat_ai_reply(
     Generates a single GPT reply for the AI chat, based on the match analysis and optional news.
     analysis_context: full analysis object (quick_summary, scenarios, key_forces, etc.).
     user_message: the user's question.
-    language: "en", "fr", or "es" for response language.
+    language: UI language hint ("en", "fr", "es", ...). The reply must follow the question language.
     news_context: optional pre-formatted news text to include.
     """
     client = _client()
     if not client:
         raise ChatAIError()
     if not (user_message or "").strip():
-        return "Please ask a specific question about the match analysis."
-    lang_names = {"en": "English", "fr": "French", "es": "Spanish"}
-    lang_name = lang_names.get((language or "en").strip().lower(), "English")
+        return _chat_empty_prompt(language)
+    ui_lang = _chat_ui_language_name(language)
     try:
         brief = build_chat_prediction_brief(analysis_context if isinstance(analysis_context, dict) else {})
         question = (user_message or "").strip()
         context_parts = [
+            "LANGUAGE RULE: Reply in the SAME language as the user question below. "
+            f"UI language hint (fallback only if the question language is unclear): {ui_lang}.",
             f"User question (answer this directly, do not dump every market):\n{question}",
-            "Match data:",
+            "Match data (numbers stay as-is; prose must match the user question language):",
             json.dumps(brief or {"note": "No compact prediction was available."}, ensure_ascii=False, indent=2)[:8000],
         ]
         if (news_context or "").strip():
             context_parts.append("Recent news (use only if it changes the answer):")
             context_parts.append((news_context or "").strip()[:4000])
-        system = CHAT_AI_SYSTEM + f"\n\nRespond in {lang_name}."
+        system = (
+            CHAT_AI_SYSTEM
+            + "\n\nFinal check before you answer: if the user wrote in French, reply in French; "
+            "if Spanish, reply in Spanish; if English, reply in English; same for any other language."
+        )
         user_content = "\n\n".join(context_parts)
         r = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -647,7 +681,13 @@ def chat_ai_reply(
             max_tokens=700,
         )
         raw = (r.choices[0].message.content or "").strip()
-        return raw or "I couldn't generate a reply. Please try again."
+        if raw:
+            return raw
+        if (language or "").strip().lower()[:2] == "fr":
+            return "Je n'ai pas pu générer de réponse. Réessaie."
+        if (language or "").strip().lower()[:2] == "es":
+            return "No pude generar una respuesta. Inténtalo de nuevo."
+        return "I couldn't generate a reply. Please try again."
     except ChatAIError:
         raise
     except Exception as e:

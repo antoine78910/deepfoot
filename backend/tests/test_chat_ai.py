@@ -109,6 +109,44 @@ class ChatOpenAIErrorTests(unittest.TestCase):
         self.assertNotIn("credits", ctx.exception.user_message.lower())
         self.assertNotIn("openai.com", ctx.exception.user_message.lower())
 
+    def test_prompt_forces_reply_in_question_language(self) -> None:
+        captured: dict = {}
+
+        class _FakeCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                class _Msg:
+                    content = "Le favori est le PSG."
+
+                class _Choice:
+                    message = _Msg()
+
+                class _Resp:
+                    choices = [_Choice()]
+
+                return _Resp()
+
+        class _FakeChat:
+            completions = _FakeCompletions()
+
+        class _FakeClient:
+            chat = _FakeChat()
+
+        with patch("app.services.openai_summary._client", return_value=_FakeClient()):
+            out = chat_ai_reply(
+                {"home_team": "Lyon", "away_team": "PSG"},
+                "Qui est favori pour ce match ?",
+                language="en",
+            )
+        self.assertEqual(out, "Le favori est le PSG.")
+        messages = captured.get("messages") or []
+        system = messages[0]["content"]
+        user = messages[1]["content"]
+        self.assertIn("same language as the user's question", system.lower())
+        self.assertIn("SAME language as the user question", user)
+        self.assertIn("Qui est favori pour ce match ?", user)
+        self.assertIn("English", user)
+
 
 if __name__ == "__main__":
     unittest.main()
