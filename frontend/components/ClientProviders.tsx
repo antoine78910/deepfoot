@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 /** If Supabase sent the PKCE `code` to the wrong path (Site URL), finish login on /auth/callback. */
@@ -15,10 +16,28 @@ function OAuthCodeCatcher() {
   return null;
 }
 
+/** Extra page views on App Router client navigations. First load is already fired by the pixel snippet. */
+function WhopPixelRouteTracker() {
+  const pathname = usePathname();
+  const isFirstLoad = useRef(true);
+  useEffect(() => {
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      return;
+    }
+    const whop = (window as unknown as { whop?: { track?: (...args: unknown[]) => void } }).whop;
+    if (typeof whop?.track === "function") {
+      whop.track("page");
+    }
+  }, [pathname]);
+  return null;
+}
+
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
     <LanguageProvider>
       <OAuthCodeCatcher />
+      <WhopPixelRouteTracker />
       {children}
     </LanguageProvider>
   );
