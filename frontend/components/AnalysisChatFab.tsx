@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getUserFromStorage, setUserInStorage, type PlanId } from "@/lib/auth";
 import { getApiUrl } from "@/lib/api";
 import { UnlockPricingModal, type PricingModalVariant } from "./UnlockPricingModal";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 const ACCENT = "#00ffe8";
 
@@ -252,13 +253,13 @@ export function AnalysisChatFab({
                   className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                    className={`rounded-xl px-3 py-2 text-sm ${
                       m.role === "user"
-                        ? "bg-[#00ffe8]/20 text-white"
-                        : "bg-zinc-800/80 text-zinc-200"
+                        ? "max-w-[85%] bg-[#00ffe8]/20 text-white whitespace-pre-wrap"
+                        : "max-w-[95%] bg-zinc-800/80 text-zinc-200"
                     }`}
                   >
-                    {m.content}
+                    {m.role === "assistant" ? <ChatMarkdown text={m.content} /> : m.content}
                   </div>
                 </div>
               ))}

@@ -450,21 +450,29 @@ def translate_analysis(analysis: dict, target_lang: str) -> dict:
         return out
 
 
-CHAT_AI_SYSTEM = """You are Deepfoot's match assistant. The user is looking at an AI football prediction and wants help interpreting it.
+CHAT_AI_SYSTEM = """You are Deepfoot's match assistant. Your job is to answer the user's actual question, not to recap every market.
 
-You will receive:
-1. Compact match predictions: 1X2 probabilities, xG, most likely score, BTTS, over/under, form, summary, scenarios.
-2. Recent team/match news when available (injuries, lineups, motivation, results).
-3. The user's question.
+You will receive match predictions (1X2, xG, BTTS, over/under, form, summary) plus optional news.
 
-How to answer:
-- Use the provided 1X2, xG, form, and news to help the user think about the match.
-- Prefer citing the actual numbers (home/draw/away %, most likely score, BTTS, Over 2.5).
-- If news (injuries, rotation, motivation) could shift the picture, say so clearly and why.
-- Predictions are probabilities, never certainties. Do not promise wins or betting advice as guaranteed.
-- Do not invent scores, tables, injuries, or news. If the context is missing, say so.
-- Keep answers focused and under 300 words unless the question requires more.
-- Reply in the language requested (or the user's language)."""
+ANSWER SHAPE (always):
+1. First sentence: a direct answer to the question.
+2. Blank line.
+3. Then 1–3 short blocks. Each block starts with a **bold title** on its own line, then 1–3 bullets.
+4. Use markdown: blank lines between blocks, **bold** only for the pick and the fair odds, "- " bullets.
+5. Keep it under 160 words. No wall of text. No numbered dump of every market.
+
+IF they ask what to bet / which odds are interesting:
+- Choose ONE primary angle (the clearest edge). Optionally one backup. Skip the rest.
+- Explain WHY in football language (form, xG, news, how close the match is) — do not restack every percentage.
+- Fair decimal odds = 100 / model probability %. A book price is interesting only if it is STRICTLY HIGHER than that fair odds.
+- Use the fair_odds values from the data. Do not invent bookmaker prices.
+- If 1X2 is tight (favorite under ~45%, or home/away gap under ~8 points), say 1X2 is low-edge and prefer BTTS or Over/Under instead of forcing a winner.
+- Do not recommend exact-score bets unless asked (they are longshots).
+- Close with one line: probabilities, not certainties; never stake more than you can afford to lose.
+
+OTHER questions: answer first, then only the 1–2 stats that support it.
+Never invent injuries, news, scores, or odds. If data is missing, say so.
+Reply in the requested language."""
 
 
 def _brief_num(val: Any) -> float | None:
@@ -474,6 +482,20 @@ def _brief_num(val: Any) -> float | None:
         return round(float(val), 1)
     except (TypeError, ValueError):
         return None
+
+
+def _fair_decimal_odds(pct: float | None) -> float | None:
+    """Book odds are interesting only if strictly higher than 100 / model %."""
+    if pct is None or pct <= 0:
+        return None
+    return round(100.0 / float(pct), 2)
+
+
+def _value_row(pct: float | None) -> dict[str, Any] | None:
+    fair = _fair_decimal_odds(pct)
+    if pct is None or fair is None:
+        return None
+    return {"prob_pct": pct, "fair_decimal_odds": fair}
 
 
 def _brief_scenario(val: Any) -> Any:
@@ -568,6 +590,18 @@ def build_chat_prediction_brief(analysis: dict[str, Any] | None) -> dict[str, An
     injuries = pick("injuries", "injury_absence_impact")
     if injuries:
         brief["injuries"] = str(injuries)[:500]
+
+    p1x2 = brief.get("probabilities_1x2_pct") if isinstance(brief.get("probabilities_1x2_pct"), dict) else {}
+    over_25 = next((x for x in over_under_out if str(x.get("line")) == "2.5"), None)
+    value_guide: dict[str, Any] = {
+        "rule": "A book price is interesting only if it is strictly higher than fair_decimal_odds (100 / model %).",
+        "1x2_home": _value_row(p1x2.get("home") if isinstance(p1x2, dict) else None),
+        "1x2_draw": _value_row(p1x2.get("draw") if isinstance(p1x2, dict) else None),
+        "1x2_away": _value_row(p1x2.get("away") if isinstance(p1x2, dict) else None),
+        "btts_yes": _value_row(brief.get("btts_yes_pct") if isinstance(brief.get("btts_yes_pct"), (int, float)) else None),
+        "over_2_5": _value_row(over_25.get("over_pct") if isinstance(over_25, dict) else None),
+    }
+    brief["value_guide"] = {k: v for k, v in value_guide.items() if v}
     return {k: v for k, v in brief.items() if v not in (None, "", [], {})}
 
 
@@ -593,22 +627,24 @@ def chat_ai_reply(
     lang_name = lang_names.get((language or "en").strip().lower(), "English")
     try:
         brief = build_chat_prediction_brief(analysis_context if isinstance(analysis_context, dict) else {})
+        question = (user_message or "").strip()
         context_parts = [
-            "Match predictions (use these probabilities and form to help the user):",
+            f"User question (answer this directly, do not dump every market):\n{question}",
+            "Match data:",
             json.dumps(brief or {"note": "No compact prediction was available."}, ensure_ascii=False, indent=2)[:8000],
         ]
         if (news_context or "").strip():
-            context_parts.append("\nRecent news and match comments (injuries, lineups, form — use if relevant):")
+            context_parts.append("Recent news (use only if it changes the answer):")
             context_parts.append((news_context or "").strip()[:4000])
         system = CHAT_AI_SYSTEM + f"\n\nRespond in {lang_name}."
-        user_content = "\n\n".join(context_parts) + "\n\n---\nUser question: " + (user_message or "").strip()
+        user_content = "\n\n".join(context_parts)
         r = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=800,
+            max_tokens=700,
         )
         raw = (r.choices[0].message.content or "").strip()
         return raw or "I couldn't generate a reply. Please try again."

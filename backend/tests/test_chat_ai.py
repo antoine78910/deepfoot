@@ -42,6 +42,8 @@ class ChatPredictionBriefTests(unittest.TestCase):
         self.assertEqual(brief["over_under"][0]["line"], "2.5")
         self.assertEqual(brief["home_form"], ["W", "D", "L", "W", "W"])
         self.assertNotIn("exact_scores", brief)
+        self.assertEqual(brief["value_guide"]["1x2_home"]["fair_decimal_odds"], 3.52)
+        self.assertEqual(brief["value_guide"]["over_2_5"]["fair_decimal_odds"], 2.07)
 
     def test_empty_or_invalid_input(self) -> None:
         self.assertEqual(build_chat_prediction_brief(None), {})
