@@ -14,7 +14,18 @@ Quand un client **déjà abonné** (Starter ou Pro) veut passer à un plan supé
 - **Frontend** : pour tout clic « Upgrade » (Starter→Pro, Starter→Lifetime, Pro→Lifetime), si l’utilisateur a `whop_manage_url`, on redirige vers cette URL. Sinon (fallback) on utilise le lien checkout classique avec `membership_id`.
 - **Nouvel abonnement** (utilisateur free) : lien checkout normal vers le plan choisi (pas de manage_url).
 
+## Lifetime alors qu’un abo mensuel est encore en cours
+
+Si le client achète **Lifetime** pendant un Starter/Pro encore payé :
+
+1. Le webhook / `sync-payment` trouve les memberships **active/trialing** (sauf le Lifetime).
+2. Whop **rembourse au prorata du mois en cours uniquement** (`POST /payments/{id}/refund` avec `partial_amount`).
+3. L’ancien abo est ensuite **annulé en fin de période** pour bloquer le renouvellement.
+
+On ne rembourse pas le paiement Lifetime, ni des mois futurs.
+
 ## Résumé
 
 - **Upgrade** → `whop_manage_url` (page gestion Whop, prorata géré par Whop).
 - **Nouveau** → lien checkout plan + email (optionnellement `prefilled_identification[email]`).
+- **Achat Lifetime avec abo mensuel restant** → remboursement Whop du mois non consommé, puis cancel at period end.

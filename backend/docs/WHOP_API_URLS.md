@@ -17,6 +17,8 @@ Toutes ces routes sont **compatibles Company API Key** (pas de route `/me` ni de
 | GET | `https://api.whop.com/api/v1/members?company_id={company_id}&first=100` |
 | GET | `https://api.whop.com/api/v1/memberships?company_id={company_id}&statuses=active&user_ids={user_id}&first=50` |
 | POST | `https://api.whop.com/api/v1/memberships/{membership_id}/cancel` |
+| GET | `https://api.whop.com/api/v1/payments?membership_id={id}&first=20` |
+| POST | `https://api.whop.com/api/v1/payments/{payment_id}/refund` (`partial_amount` = prorata unused month) |
 
 Aucune route v2 ni v5 `/company/*` n’est appelée (elles nécessitent une App API Key et renvoient 401 avec une Company API Key).
 

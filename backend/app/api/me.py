@@ -416,7 +416,8 @@ async def whop_cancel_other_memberships_for_email(
 ) -> int:
     """
     Annule tous les abonnements actifs/trialing de cet utilisateur (par email) SAUF keep_membership_id.
-    Utilisé quand l'utilisateur achète le Lifetime : on coupe Starter/Pro pour éviter double facturation.
+    Utilisé quand l'utilisateur achète le Lifetime : on rembourse le prorata du mois en cours
+    via Whop, puis on coupe Starter/Pro pour éviter un renouvellement.
     Retourne le nombre de memberships annulés.
     """
     if not email or not whop_key or not company_id:
@@ -450,6 +451,26 @@ async def whop_cancel_other_memberships_for_email(
             mid = (m.get("id") or m.get("membership_id") or "").strip()
             if not mid or mid == keep_membership_id:
                 continue
+            if app_plan_from_whop(m) == "lifetime":
+                continue
+            try:
+                from app.services.whop_lifetime_prorata import refund_unused_month_for_membership
+
+                refund = await refund_unused_month_for_membership(mid, m, whop_key, company_id)
+                if refund.get("refunded"):
+                    logger.info(
+                        "Whop: refunded unused month %.2f on membership %s (Lifetime purchase)",
+                        float(refund.get("amount") or 0),
+                        mid[:12] + "...",
+                    )
+                elif refund.get("reason") not in ("unused_too_small", "nothing_refundable", "no_refundable_payment"):
+                    logger.warning(
+                        "Whop: unused-month refund skipped membership=%s reason=%s",
+                        mid[:12] + "...",
+                        refund.get("reason"),
+                    )
+            except Exception as refund_exc:
+                logger.warning("Whop: unused-month refund failed membership=%s: %s", mid[:12] + "...", refund_exc)
             ok, _ = await _whop_cancel_membership(mid, whop_key)
             if ok:
                 cancelled += 1
