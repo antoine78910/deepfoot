@@ -78,6 +78,18 @@ def _form_list(value: Any) -> list[str]:
     return [str(item).upper() for item in value if str(item).strip()]
 
 
+_THIN_FORM = 5
+_LAMBDA_PRIOR = 1.2
+
+
+def _shrink_lambda_for_sample(value: float, n: int, prior: float = _LAMBDA_PRIOR, full_n: int = _THIN_FORM) -> float:
+    """Avoid 90%+ 1X2 from one or two international results."""
+    if n >= full_n:
+        return float(value)
+    w = max(0, int(n)) / float(full_n)
+    return float(prior) + w * (float(value) - float(prior))
+
+
 def apply_thesportsdb_form_if_missing(
     ctx: dict[str, Any],
     home_team: str,
@@ -138,6 +150,8 @@ def apply_thesportsdb_form_if_missing(
     lambda_home, lambda_away = compute_lambda_home_away(
         home_goals, home_against, away_goals, away_against
     )
+    lambda_home = _shrink_lambda_for_sample(lambda_home, len(home_goals))
+    lambda_away = _shrink_lambda_for_sample(lambda_away, len(away_goals))
     pcts = dict(ctx.get("comparison_pcts") or {})
     pcts.update(
         build_comparison_pcts(

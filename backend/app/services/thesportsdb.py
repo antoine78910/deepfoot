@@ -301,7 +301,9 @@ def resolve_team(team_name: str) -> Optional[dict]:
     cached = _read_cache("teaminfo", key, _SEARCH_TTL)
     if isinstance(cached, dict) and cached.get("idTeam"):
         return cached
-    alias = _SEARCH_ALIASES.get(key)
+    from app.services.team_aliases import canonical_search_name
+
+    alias = canonical_search_name(name) or _SEARCH_ALIASES.get(key)
     if not alias:
         for needle, english in _CYRILLIC_ALIASES.items():
             if needle in key:
@@ -310,6 +312,11 @@ def resolve_team(team_name: str) -> Optional[dict]:
     search_terms: list[str] = []
     if alias:
         search_terms.append(alias)
+        lowered = alias.lower()
+        if lowered.startswith("republic of "):
+            short = alias[len("Republic of "):].strip()
+            if short and short not in search_terms:
+                search_terms.append(short)
     if name not in search_terms:
         search_terms.append(name)
     picked = None
@@ -324,7 +331,7 @@ def resolve_team(team_name: str) -> Optional[dict]:
         rows = data.get("teams") or []
         if not isinstance(rows, list):
             rows = []
-        picked = _pick_team(rows, name) or _pick_team(rows, search)
+        picked = _pick_team(rows, search) or _pick_team(rows, name)
         if picked:
             break
     if not picked:

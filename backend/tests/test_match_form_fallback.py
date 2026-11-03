@@ -181,6 +181,14 @@ class TheSportsDbFormEnrichTests(unittest.TestCase):
         self.assertEqual(out["lambda_home"], 1.8)
         self.assertFalse(out["data_recap"]["placeholder_form"])
 
+    def test_shrinks_lambda_when_international_sample_is_tiny(self) -> None:
+        from app.services.data_loader import _shrink_lambda_for_sample
+
+        self.assertAlmostEqual(_shrink_lambda_for_sample(4.0, 5), 4.0)
+        shrunk = _shrink_lambda_for_sample(4.0, 1)
+        self.assertGreater(shrunk, 1.2)
+        self.assertLess(shrunk, 4.0)
+
 
 if __name__ == "__main__":
     unittest.main()

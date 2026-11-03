@@ -40,8 +40,14 @@ def _get(path: str, params: Optional[dict[str, Any]] = None, include: Optional[s
             r.raise_for_status()
             return data or {}
     except Exception as e:
-        print(f"[sportmonks] GET {path[:50]}... ERREUR: {e}")
+        print(f"[sportmonks] GET {path[:50]}... ERREUR: {_redact_sm_error(e)}")
         return {}
+
+
+def _redact_sm_error(err: Exception) -> str:
+    import re
+
+    return re.sub(r"api_token=[^&\s'\"]+", "api_token=REDACTED", str(err))
 
 
 def _get_allow_404(path: str, params: Optional[dict[str, Any]] = None, include: Optional[str] = None) -> dict[str, Any]:
@@ -64,7 +70,7 @@ def _get_allow_404(path: str, params: Optional[dict[str, Any]] = None, include: 
             r.raise_for_status()
             return data or {}
     except Exception as e:
-        print(f"[sportmonks] GET {path[:50]}... ERREUR: {e}")
+        print(f"[sportmonks] GET {path[:50]}... ERREUR: {_redact_sm_error(e)}")
         return {}
 
 
@@ -183,7 +189,7 @@ def _short_team_search_terms(team_name: str) -> list[str]:
         out.append(parts[0].strip())
     if len(parts) >= 2:
         out.append(" ".join(parts[:2]).strip())
-    return [x for x in out if x and x.lower() != s.lower()]
+    return [x for x in out if x and len(x) >= 3 and x.lower() != s.lower()]
 
 
 def _resolve_team_candidate(team_name: str) -> Optional[dict[str, Any]]:
@@ -194,9 +200,14 @@ def _resolve_team_candidate(team_name: str) -> Optional[dict[str, Any]]:
     name = (team_name or "").strip()
     if not name:
         return None
+    from app.services.team_aliases import canonical_search_name
+
     q_norm = _normalize_for_search(name)
     q_core = _normalize_team_core(name) or q_norm
     search_terms = [name]
+    canon = canonical_search_name(name)
+    if canon:
+        search_terms.insert(0, canon)
     if q_norm in TEAM_SEARCH_ALIASES:
         search_terms.extend(TEAM_SEARCH_ALIASES[q_norm][:3])
     search_terms.extend(_short_team_search_terms(name))
@@ -225,8 +236,13 @@ def _resolve_team_candidate(team_name: str) -> Optional[dict[str, Any]]:
         n_norm = _normalize_for_search(name_raw)
         n_core = _normalize_team_core(name_raw) or n_norm
         youth_penalty = 1 if any(x in n_norm for x in ("women", "u19", "u20", "u21", "u23")) else 0
+        canon_norm = _normalize_for_search(canon) if canon else ""
+        if canon_norm and (n_norm == canon_norm or n_core == canon_norm):
+            return (0, youth_penalty, len(n_norm), n_norm)
         if n_norm == q_norm or n_core == q_core:
             return (0, youth_penalty, len(n_norm), n_norm)
+        if canon_norm and (canon_norm in n_norm or n_norm in canon_norm):
+            return (1, youth_penalty, len(n_norm), n_norm)
         if q_core and (n_core.startswith(q_core) or q_core in n_core):
             return (1, youth_penalty, len(n_norm), n_norm)
         if q_norm and (n_norm.startswith(q_norm) or q_norm in n_norm):
@@ -257,6 +273,13 @@ def _team_matches_query_sportmonks(team: dict, q_normalized: str) -> bool:
     n_norm = _normalize_for_search(name)
     s_norm = _normalize_for_search(short)
     combined = n_norm + " " + s_norm
+    from app.services.team_aliases import canonical_search_name
+
+    canon = canonical_search_name(q_normalized)
+    if canon:
+        cn = _normalize_for_search(canon)
+        if cn and (cn in combined or n_norm.startswith(cn) or s_norm.startswith(cn)):
+            return True
     if q_normalized in TEAM_SEARCH_ALIASES:
         for part in TEAM_SEARCH_ALIASES[q_normalized]:
             if part in combined or n_norm.startswith(part) or s_norm.startswith(part):
@@ -692,6 +715,7 @@ def get_h2h_last_5_seasons_details(
 def team_past_fixtures(
     team_id: int,
     last_n: int = 5,
+    days: int = 120,
 ) -> tuple[list[int], list[int], list[str]]:
     """
     Derniers matchs terminés d'une équipe (Sportmonks).
@@ -701,8 +725,9 @@ def team_past_fixtures(
         return ([], [], [])
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
+    window = max(30, int(days or 120))
     end_date = now.strftime("%Y-%m-%d")
-    start_date = (now - timedelta(days=120)).strftime("%Y-%m-%d")
+    start_date = (now - timedelta(days=window)).strftime("%Y-%m-%d")
     path = f"/fixtures/between/{start_date}/{end_date}/{team_id}"
     params: dict[str, Any] = {"per_page": 30}
     data = _get_allow_404(path, params=params, include="participants;scores")

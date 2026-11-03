@@ -93,7 +93,7 @@ def recompute_match_model(home_team: str, away_team: str) -> Optional[dict[str, 
             "h2h_home_pct": pcts.get("h2h_home_pct"),
             "goals_home_pct": pcts.get("goals_home_pct"),
             "overall_home_pct": pcts.get("overall_home_pct"),
-            "form_source": "TheSportsDB",
+            "form_source": recap.get("form_source") or "TheSportsDB",
             "recalculated_from_form": True,
             "recalculated_at": datetime.now(timezone.utc).isoformat(),
         }
