@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from app.api.internal import (
     _check_dashboard_admin,
     _history_row_for_card,
+    _plan_view_for_user,
     _prediction_summary,
     is_dashboard_admin_email,
 )
@@ -167,6 +168,32 @@ class AdminDashboardHelperTests(unittest.TestCase):
         self.assertEqual(card["prob_draw"], 16.3)
         self.assertEqual(card["most_likely_score"], "2-0")
         self.assertFalse(card["placeholder_form"])
+
+    def test_plan_view_free_is_blurred(self) -> None:
+        plan, full = _plan_view_for_user(None, None)
+        self.assertEqual(plan, "free")
+        self.assertFalse(full)
+
+    def test_plan_view_pro_is_full(self) -> None:
+        class _ProClient:
+            def table(self, *_a, **_k):
+                return self
+
+            def select(self, *_a, **_k):
+                return self
+
+            def eq(self, *_a, **_k):
+                return self
+
+            def limit(self, *_a, **_k):
+                return self
+
+            def execute(self):
+                return type("R", (), {"data": [{"plan": "pro"}]})()
+
+        plan, full = _plan_view_for_user(_ProClient(), "user-1")
+        self.assertEqual(plan, "pro")
+        self.assertTrue(full)
 
 
 if __name__ == "__main__":

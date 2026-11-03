@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { displayNameFromEmail, getUserFromStorage, setAuthCookie, setUserInStorage, type UserInfo } from "@/lib/auth";
+import {
+  displayNameFromEmail,
+  getAdminActingUser,
+  getUserFromStorage,
+  setAuthCookie,
+  setUserInStorage,
+  startImpersonation,
+  type PlanId,
+  type UserInfo,
+} from "@/lib/auth";
 import { getSignInHref } from "@/lib/app-url";
 import { getApiUrl } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -79,7 +88,7 @@ type PredictionCard = {
   most_likely_score?: string | null;
   most_likely_score_pct?: number | null;
   quick_summary?: string | null;
-  source?: string;
+  source?: string | null;
   cost_eur?: number | null;
   cost_estimated?: boolean;
   data_source?: string | null;
@@ -160,8 +169,28 @@ function PredictionList({
     <div className="space-y-3">
       {items.map((p, i) => {
         const email = p.email || (p.user_id ? emailByUser?.[p.user_id] : null);
+        const canOpen = Boolean(p.id) && p.source !== "event";
+        const cardClass = `rounded-lg border border-white/10 bg-[#1c1c28] p-3 ${
+          canOpen ? "cursor-pointer hover:border-[#00ffe8]/40 hover:bg-[#22222e] transition-colors" : ""
+        }`;
+        const openPreview = () => {
+          if (!canOpen || !p.id) return;
+          window.open(`/admin/prediction/${encodeURIComponent(String(p.id))}`, "_blank", "noopener,noreferrer");
+        };
         return (
-          <div key={String(p.id ?? i)} className="rounded-lg border border-white/10 bg-[#1c1c28] p-3">
+          <div
+            key={String(p.id ?? i)}
+            className={cardClass}
+            onClick={openPreview}
+            onKeyDown={(e) => {
+              if (canOpen && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                openPreview();
+              }
+            }}
+            role={canOpen ? "link" : undefined}
+            tabIndex={canOpen ? 0 : undefined}
+          >
             <div className="flex flex-wrap items-center gap-2 mb-1">
               {p.home_logo ? <img src={p.home_logo} alt="" className="w-6 h-6 object-contain" /> : null}
               <p className="font-semibold">
@@ -194,6 +223,9 @@ function PredictionList({
             {p.quick_summary ? (
               <p className="text-xs text-zinc-400 mt-2 whitespace-pre-wrap">{p.quick_summary}</p>
             ) : null}
+            {canOpen ? (
+              <p className="text-[11px] text-[#00ffe8]/80 mt-2">Open as this user&apos;s plan →</p>
+            ) : null}
           </div>
         );
       })}
@@ -220,11 +252,26 @@ export function AdminDashboard() {
 
   const adminHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = {};
-    const user = (await resolveSignedInUser()) || getUserFromStorage();
+    const user = getAdminActingUser() || (await resolveSignedInUser()) || getUserFromStorage();
     if (user?.id) headers["X-User-Id"] = user.id;
     if (user?.email) headers["X-User-Email"] = user.email;
     return headers;
   }, []);
+
+  const impersonateUser = (u: AdminUser) => {
+    if (!u.user_id || u.user_id === "anonymous") return;
+    const admin = getAdminActingUser() || getUserFromStorage();
+    if (!admin?.id) return;
+    const plan = ((u.plan || "free").toLowerCase() as PlanId) || "free";
+    startImpersonation({
+      id: u.user_id,
+      email: u.email || "",
+      displayName: displayNameFromEmail(u.email || u.user_id),
+      plan: ["free", "starter", "pro", "lifetime"].includes(plan) ? plan : "free",
+    });
+    const onAppHost = window.location.hostname.startsWith("app.");
+    window.location.href = onAppHost ? "/matches" : "/app/matches";
+  };
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -266,7 +313,8 @@ export function AdminDashboard() {
   useEffect(() => {
     let cancelled = false;
     const boot = async () => {
-      const user = await resolveSignedInUser();
+      const signedIn = await resolveSignedInUser();
+      const user = getAdminActingUser() || signedIn;
       const headers: Record<string, string> = {};
       if (user?.id) headers["X-User-Id"] = user.id;
       if (user?.email) headers["X-User-Email"] = user.email;
@@ -560,6 +608,7 @@ export function AdminDashboard() {
                     <th className="text-left py-2 pr-4">Cost</th>
                     <th className="text-left py-2 pr-4">Last {data?.window_days ?? days}d</th>
                     <th className="text-left py-2 pr-4">Recent matches</th>
+                    <th className="text-right py-2">Impersonate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -576,6 +625,22 @@ export function AdminDashboard() {
                       <td className="py-2 pr-4">{formatCost(u.cost_eur)}</td>
                       <td className="py-2 pr-4">{u.analyses_last_days}</td>
                       <td className="py-2 pr-4 text-zinc-400">{(u.recent_matches || []).slice(0, 4).join(" • ") || "—"}</td>
+                      <td className="py-2 text-right">
+                        {u.user_id && u.user_id !== "anonymous" ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              impersonateUser(u);
+                            }}
+                            className="text-xs rounded-md px-2 py-1 bg-[#00ffe8]/15 text-[#00ffe8] hover:bg-[#00ffe8]/25"
+                          >
+                            Impersonate
+                          </button>
+                        ) : (
+                          <span className="text-xs text-zinc-600">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -601,16 +666,27 @@ export function AdminDashboard() {
                         : ""}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelected(null);
-                      setUserPredictions(null);
-                    }}
-                    className="text-xs text-zinc-400 hover:text-white"
-                  >
-                    Show all users
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selected.user_id && selected.user_id !== "anonymous" ? (
+                      <button
+                        type="button"
+                        onClick={() => impersonateUser(selected)}
+                        className="text-xs rounded-md px-2 py-1 bg-[#00ffe8]/15 text-[#00ffe8] hover:bg-[#00ffe8]/25"
+                      >
+                        Impersonate
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(null);
+                        setUserPredictions(null);
+                      }}
+                      className="text-xs text-zinc-400 hover:text-white"
+                    >
+                      Show all users
+                    </button>
+                  </div>
                 </div>
                 {predStatus === "loading" && <p className="text-sm text-zinc-400">Loading predictions…</p>}
                 {predStatus === "error" && (

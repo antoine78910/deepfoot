@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { BGPattern } from "@/components/BGPattern";
-import { getUserFromStorage, setUserInStorage, clearAuthCookie, clearUserFromStorage, type UserInfo, type PlanId } from "@/lib/auth";
+import { getUserFromStorage, setUserInStorage, clearAuthCookie, clearUserFromStorage, isImpersonating, stopImpersonation, type UserInfo, type PlanId } from "@/lib/auth";
 import { getDatafastVisitorId } from "@/lib/whopCheckout";
 import { trackDatafastGoal } from "@/lib/datafast";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -349,13 +349,34 @@ export function AppLayoutClient({ children }: { children: React.ReactNode }) {
     router.push("/");
   };
 
+  const handleStopImpersonation = () => {
+    stopImpersonation();
+    window.location.href = "/admin";
+  };
+
   const closeSidebar = () => setSidebarOpen(false);
 
+  const impersonating = isImpersonating();
+
   return (
-    <div className="min-h-screen bg-app-gradient text-zinc-200 flex flex-col md:flex-row relative">
+    <div className={`min-h-screen bg-app-gradient text-zinc-200 flex flex-col md:flex-row relative ${impersonating ? "pt-10" : ""}`}>
       <BGPattern variant="grid" mask="fade-edges" size={24} fill="rgba(0,255,232,0.07)" className="fixed inset-0" />
+      {impersonating ? (
+        <div className="fixed top-0 left-0 right-0 z-[90] bg-amber-500 text-[#0d0d12] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
+          <span>
+            Impersonating {user?.email || user?.displayName || "user"} · plan {user?.plan || "free"}
+          </span>
+          <button
+            type="button"
+            onClick={handleStopImpersonation}
+            className="rounded-md bg-[#0d0d12] text-amber-300 px-3 py-1 text-xs font-semibold"
+          >
+            Stop impersonation
+          </button>
+        </div>
+      ) : null}
       {/* Mobile header: logo + hamburger */}
-      <header className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0a0a0e]/50 backdrop-blur-md sticky top-0 z-30">
+      <header className={`md:hidden flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0a0a0e]/50 backdrop-blur-md sticky z-30 ${impersonating ? "top-10" : "top-0"}`}>
         <Link href="/" className="flex items-center">
           <img src="/logo.png" alt="DEEPFOOT" className="h-12 w-auto object-contain" />
         </Link>

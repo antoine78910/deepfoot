@@ -13,6 +13,7 @@ from app.services.prediction_costs import (
     estimated_cost_eur,
     revenue_for_plan,
 )
+from app.services.subscription import _normalize_plan, get_analysis_limit
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -576,6 +577,65 @@ def admin_recent_predictions(
                 continue
         predictions.append(card)
     return {"predictions_count": len(predictions), "predictions": predictions}
+
+
+def _plan_view_for_user(supabase, user_id: str | None) -> tuple[str, bool]:
+    """Current subscription plan and whether that plan sees the full analysis."""
+    uid = (user_id or "").strip()
+    plan = "free"
+    if uid and uid != "anonymous" and supabase:
+        try:
+            pr = supabase.table("profiles").select("plan").eq("id", uid).limit(1).execute()
+            if pr.data:
+                plan = _normalize_plan(str((pr.data[0] or {}).get("plan") or "free"))
+        except Exception:
+            plan = "free"
+    _, full = get_analysis_limit(plan)
+    return plan, full
+
+
+@router.get("/admin/predictions/{prediction_id}")
+def admin_prediction_detail(
+    prediction_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    x_user_email: str | None = Header(None, alias="X-User-Email"),
+):
+    """Full stored analysis, rendered as that user's current plan (free = blurred)."""
+    _check_dashboard_admin(x_user_id, x_user_email)
+    pid = (prediction_id or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="prediction_id required")
+    supabase = get_supabase_admin() or get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    try:
+        r = supabase.table("analysis_history").select("*").eq("id", pid).limit(1).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Could not load prediction") from exc
+    if not r.data:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    row = r.data[0] if isinstance(r.data[0], dict) else {}
+    result = row.get("result") if isinstance(row.get("result"), dict) else {}
+    uid = str(row.get("user_id") or "").strip() or None
+    plan, full = _plan_view_for_user(supabase, uid)
+    out = {
+        **result,
+        "home_team": row.get("home_team") or result.get("home_team"),
+        "away_team": row.get("away_team") or result.get("away_team"),
+        "league": row.get("league") or result.get("league"),
+        "home_team_logo": row.get("home_logo") or result.get("home_team_logo"),
+        "away_team_logo": row.get("away_logo") or result.get("away_team_logo"),
+        "full_analysis": full,
+    }
+    return {
+        "id": row.get("id"),
+        "user_id": uid,
+        "email": _email_for_user_id(uid) if uid else None,
+        "plan": plan,
+        "full_analysis": full,
+        "created_at": row.get("created_at"),
+        "result": out,
+    }
 
 
 @router.get("/admin/users/{user_id}/predictions")

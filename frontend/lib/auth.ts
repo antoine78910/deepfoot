@@ -55,6 +55,56 @@ export function clearUserFromStorage(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem(USER_STORAGE_KEY);
+  localStorage.removeItem(IMPERSONATOR_KEY);
+}
+
+export const IMPERSONATOR_KEY = "visifoot_impersonator";
+
+export function getImpersonator(): UserInfo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(IMPERSONATOR_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as UserInfo;
+    if (data && typeof data.email === "string" && typeof data.plan === "string") {
+      return { ...data, id: data.id ?? undefined };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export function isImpersonating(): boolean {
+  return getImpersonator() != null;
+}
+
+/** Identity to use for admin API calls (the real admin, even while impersonating). */
+export function getAdminActingUser(): UserInfo | null {
+  return getImpersonator() || getUserFromStorage();
+}
+
+export function startImpersonation(target: UserInfo): void {
+  if (typeof window === "undefined") return;
+  const current = getUserFromStorage();
+  if (!current?.id) return;
+  if (!getImpersonator()) {
+    localStorage.setItem(IMPERSONATOR_KEY, JSON.stringify(current));
+  }
+  setUserInStorage(target);
+}
+
+export function stopImpersonation(): UserInfo | null {
+  if (typeof window === "undefined") return null;
+  const admin = getImpersonator();
+  localStorage.removeItem(IMPERSONATOR_KEY);
+  if (admin) setUserInStorage(admin);
+  return admin;
+}
+
+export function fullAnalysisForPlan(plan?: string | null): boolean {
+  const p = (plan || "free").toLowerCase().trim();
+  return p === "starter" || p === "pro" || p === "lifetime" || p === "premium";
 }
 
 /** Derive display name from email (e.g. anto.delbos@gmail.com → anto.delbos) */

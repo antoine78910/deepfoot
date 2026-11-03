@@ -452,7 +452,7 @@ function statIconFromType(type: string) {
   return <span className="text-base">📈</span>;
 }
 
-export function AnalysisResult({ result }: { result: Result }) {
+export function AnalysisResult({ result, hideChat = false }: { result: Result; hideChat?: boolean }) {
   const home = result.home_team ?? "Home";
   const away = result.away_team ?? "Away";
   const { t } = useLanguage();
@@ -1266,10 +1266,12 @@ export function AnalysisResult({ result }: { result: Result }) {
 
       <p className="text-center text-zinc-500 text-xs pt-6 border-t border-white/5">This analysis is provided for informational purposes only.</p>
       </div>
-      <AnalysisChatFab
-        analysisData={result as Record<string, unknown>}
-        matchLabel={`${home} vs ${away}`}
-      />
+      {!hideChat ? (
+        <AnalysisChatFab
+          analysisData={result as Record<string, unknown>}
+          matchLabel={`${home} vs ${away}`}
+        />
+      ) : null}
     </div>
   );
 }
