@@ -299,10 +299,19 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (!sessionAdmin) return;
+    setAllPredStatus("loading");
     void load();
     void loadAllPredictions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionAdmin]);
+
+  useEffect(() => {
+    if (!sessionAdmin || section !== "predictions") return;
+    if (allPredStatus === "idle" && allPredictions.length === 0) {
+      void loadAllPredictions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionAdmin, section]);
 
   const openUser = async (u: AdminUser) => {
     setSelected(u);
@@ -395,7 +404,10 @@ export function AdminDashboard() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setSection(item.id)}
+              onClick={() => {
+                setSection(item.id);
+                if (item.id === "predictions") void loadAllPredictions();
+              }}
               className={`w-full text-left rounded-lg px-3 py-2 text-sm ${
                 section === item.id ? "bg-[#00ffe8] text-[#0d0d12] font-semibold" : "text-zinc-300 hover:bg-white/5"
               }`}

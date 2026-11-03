@@ -6,7 +6,12 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.api.internal import _check_dashboard_admin, _prediction_summary, is_dashboard_admin_email
+from app.api.internal import (
+    _check_dashboard_admin,
+    _history_row_for_card,
+    _prediction_summary,
+    is_dashboard_admin_email,
+)
 
 
 class AdminDashboardHelperTests(unittest.TestCase):
@@ -130,6 +135,37 @@ class AdminDashboardHelperTests(unittest.TestCase):
                 },
             }
         )
+        self.assertFalse(card["placeholder_form"])
+
+    def test_compact_history_row_shows_recalculated_probs(self) -> None:
+        card = _prediction_summary(
+            _history_row_for_card(
+                {
+                    "id": "hist-1",
+                    "user_id": "u1",
+                    "created_at": "2026-11-02T10:00:00+00:00",
+                    "home_team": "Lyon",
+                    "away_team": "Auxerre",
+                    "prob_home": 80.6,
+                    "prob_draw": 16.3,
+                    "prob_away": 3.0,
+                    "internal_prob_home": 80.6,
+                    "internal_prob_draw": 16.3,
+                    "internal_prob_away": 3.0,
+                    "xg_home": 1.98,
+                    "xg_away": 0.20,
+                    "most_likely_score": {"home": 2, "away": 0, "probability": 18.4},
+                    "quick_summary": "Lyon favoured from recent form.",
+                    "recalculated_from_form": True,
+                    "placeholder_form": False,
+                    "data_source": "TheSportsDB",
+                }
+            )
+        )
+        self.assertEqual(card["home_team"], "Lyon")
+        self.assertEqual(card["prob_home"], 80.6)
+        self.assertEqual(card["prob_draw"], 16.3)
+        self.assertEqual(card["most_likely_score"], "2-0")
         self.assertFalse(card["placeholder_form"])
 
 

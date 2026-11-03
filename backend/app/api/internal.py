@@ -126,8 +126,60 @@ def _check_dashboard_admin(
     raise HTTPException(status_code=403, detail="Admin access required")
 
 
+_ADMIN_HISTORY_SELECT = (
+    "id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, "
+    "result->prob_home, result->prob_draw, result->prob_away, "
+    "result->internal_prob_home, result->internal_prob_draw, result->internal_prob_away, "
+    "result->xg_home, result->xg_away, result->most_likely_score, result->quick_summary, "
+    "result->recalculated_from_form, result->data_source, result->llm_usage, "
+    "result->analysis_recap->placeholder_form, result->analysis_recap->data_source"
+)
+
+
+def _history_row_for_card(row: dict) -> dict:
+    """Accept either nested `result` or flattened PostgREST jsonb columns."""
+    if isinstance(row.get("result"), dict):
+        return row
+    recap = {
+        "placeholder_form": row.get("placeholder_form"),
+        "recalculated_from_form": row.get("recalculated_from_form"),
+        "data_source": row.get("data_source"),
+    }
+    result = {
+        "prob_home": row.get("prob_home"),
+        "prob_draw": row.get("prob_draw"),
+        "prob_away": row.get("prob_away"),
+        "internal_prob_home": row.get("internal_prob_home"),
+        "internal_prob_draw": row.get("internal_prob_draw"),
+        "internal_prob_away": row.get("internal_prob_away"),
+        "xg_home": row.get("xg_home"),
+        "xg_away": row.get("xg_away"),
+        "most_likely_score": row.get("most_likely_score"),
+        "quick_summary": row.get("quick_summary"),
+        "recalculated_from_form": row.get("recalculated_from_form"),
+        "data_source": row.get("data_source"),
+        "llm_usage": row.get("llm_usage"),
+        "analysis_recap": recap,
+    }
+    return {**row, "result": result}
+
+
+def _fetch_history_prediction_rows(supabase, *, user_id: str | None = None, limit: int) -> list[dict]:
+    query = (
+        supabase.table("analysis_history")
+        .select(_ADMIN_HISTORY_SELECT)
+        .order("created_at", desc=True)
+        .limit(limit)
+    )
+    if user_id:
+        query = query.eq("user_id", user_id)
+    r = query.execute()
+    return [row for row in (r.data or []) if isinstance(row, dict)]
+
+
 def _prediction_summary(row: dict) -> dict:
     """Compact prediction card for the admin dashboard (no full analysis blob)."""
+    row = _history_row_for_card(row)
     result = row.get("result") if isinstance(row.get("result"), dict) else {}
     mls = result.get("most_likely_score") if isinstance(result.get("most_likely_score"), dict) else {}
     home = (row.get("home_team") or result.get("home_team") or "").strip() or None
@@ -165,9 +217,15 @@ def _prediction_summary(row: dict) -> dict:
         "league": row.get("league") or result.get("league"),
         "home_logo": row.get("home_logo") or result.get("home_team_logo"),
         "away_logo": row.get("away_logo") or result.get("away_team_logo"),
-        "prob_home": result.get("prob_home"),
-        "prob_draw": result.get("prob_draw"),
-        "prob_away": result.get("prob_away"),
+        "prob_home": result.get("internal_prob_home")
+        if result.get("internal_prob_home") is not None
+        else result.get("prob_home"),
+        "prob_draw": result.get("internal_prob_draw")
+        if result.get("internal_prob_draw") is not None
+        else result.get("prob_draw"),
+        "prob_away": result.get("internal_prob_away")
+        if result.get("internal_prob_away") is not None
+        else result.get("prob_away"),
         "most_likely_score": score,
         "most_likely_score_pct": mls.get("probability"),
         "quick_summary": result.get("quick_summary"),
@@ -478,21 +536,30 @@ def admin_recent_predictions(
     supabase = get_supabase_admin() or get_supabase()
     rows: list[dict] = []
     try:
-        r = (
-            supabase.table("analysis_history")
-            .select("id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, result")
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        rows = [row for row in (r.data or []) if isinstance(row, dict)]
-    except Exception:
-        rows = []
+        rows = _fetch_history_prediction_rows(supabase, limit=limit)
+    except Exception as exc:
+        print(f"[admin] compact history fetch failed: {exc}")
+        try:
+            r = (
+                supabase.table("analysis_history")
+                .select("id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, result")
+                .order("created_at", desc=True)
+                .limit(min(limit, 80))
+                .execute()
+            )
+            rows = [row for row in (r.data or []) if isinstance(row, dict)]
+        except Exception as exc2:
+            print(f"[admin] full history fetch failed: {exc2}")
+            rows = []
     uid_to_email = _fetch_auth_emails_via_http()
     q_norm = (q or "").strip().lower()
     predictions: list[dict] = []
     for row in rows:
-        card = _prediction_summary({**row, "source": "history"})
+        try:
+            card = _prediction_summary({**row, "source": "history"})
+        except Exception as exc:
+            print(f"[admin] skip prediction card {row.get('id')}: {exc}")
+            continue
         uid = str(row.get("user_id") or "").strip()
         card["email"] = uid_to_email.get(uid)
         if q_norm:
@@ -527,18 +594,13 @@ def admin_user_predictions(
     supabase = get_supabase_admin() or get_supabase()
     predictions: list[dict] = []
     try:
-        r = (
-            supabase.table("analysis_history")
-            .select("id, created_at, user_id, home_team, away_team, home_logo, away_logo, league, result")
-            .eq("user_id", uid)
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        for row in r.data or []:
-            if isinstance(row, dict):
+        for row in _fetch_history_prediction_rows(supabase, user_id=uid, limit=limit):
+            try:
                 predictions.append(_prediction_summary({**row, "source": "history"}))
-    except Exception:
+            except Exception as exc:
+                print(f"[admin] skip user prediction card {row.get('id')}: {exc}")
+    except Exception as exc:
+        print(f"[admin] user history fetch failed: {exc}")
         predictions = []
 
     seen_keys = {
