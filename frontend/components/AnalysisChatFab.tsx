@@ -38,8 +38,13 @@ export function AnalysisChatFab({
   const [loading, setLoading] = useState(false);
   const [chatRemaining, setChatRemaining] = useState<number | null>(remainingFromPlan(user?.plan ?? "free"));
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const uid = user?.id;
@@ -132,20 +137,29 @@ export function AnalysisChatFab({
 
   const proLimitReached = plan === "pro" && chatRemaining !== null && chatRemaining <= 0;
 
-  const fab = (
-    <button
-      type="button"
-      onClick={handleFabClick}
-      className="fixed bottom-6 right-6 z-[98] flex items-center gap-2 px-4 py-3 rounded-2xl text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200 border border-white/10"
-      style={{
-        background: `linear-gradient(135deg, #0d9488 0%, ${ACCENT} 100%)`,
-      }}
-      aria-label={t("chat.button")}
-    >
-      <MessageCircle className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
-      <span className="hidden sm:inline max-w-[200px] truncate">{t("chat.button")}</span>
-    </button>
-  );
+  const fab =
+    mounted && !openChatPanel
+      ? createPortal(
+          <button
+            type="button"
+            onClick={handleFabClick}
+            className="fixed bottom-5 right-5 z-[98] h-14 w-14 rounded-full text-[#0d0d12] shadow-[0_8px_24px_rgba(0,255,232,0.35)] hover:scale-105 active:scale-95 transition-transform duration-200 border border-white/20 flex items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, #0d9488 0%, ${ACCENT} 100%)`,
+            }}
+            aria-label={t("chat.button")}
+            title={t("chat.button")}
+          >
+            <MessageCircle className="w-6 h-6" strokeWidth={2.2} />
+            {!canUseChat && (
+              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#101217] border border-white/20 flex items-center justify-center">
+                <Lock className="w-2.5 h-2.5 text-[#00ffe8]" />
+              </span>
+            )}
+          </button>,
+          document.body
+        )
+      : null;
 
   const lockedModal = openLockedModal
     ? createPortal(
@@ -197,11 +211,17 @@ export function AnalysisChatFab({
       )
     : null;
 
-  const chatPanel = openChatPanel
-    ? createPortal(
-        <div className="fixed inset-0 z-[100] flex flex-col sm:items-end sm:justify-end sm:p-4">
-          <div className="absolute inset-0 bg-black/40 sm:bg-transparent" onClick={() => setOpenChatPanel(false)} aria-hidden />
-          <div className="relative w-full sm:max-w-md sm:max-h-[85vh] sm:rounded-2xl bg-[#101217]/95 border border-white/10 shadow-2xl flex flex-col flex-1 sm:flex-initial sm:min-h-[400px] max-h-[90vh]">
+  const chatPanel =
+    mounted && openChatPanel
+      ? createPortal(
+          <div className="fixed inset-0 z-[100] pointer-events-none">
+            <button
+              type="button"
+              className="absolute inset-0 pointer-events-auto bg-black/20 sm:bg-transparent"
+              onClick={() => setOpenChatPanel(false)}
+              aria-label="Close"
+            />
+            <div className="pointer-events-auto absolute left-3 right-3 bottom-3 h-[min(70vh,520px)] sm:left-auto sm:right-5 sm:bottom-5 sm:w-[360px] sm:h-[480px] rounded-2xl bg-[#101217]/95 border border-white/10 shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-white/5 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#00ffe8]/20" style={{ color: ACCENT }}>
