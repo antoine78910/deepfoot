@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnalysisResult } from "@/components/AnalysisResult";
-import { AnalysisChatFab } from "@/components/AnalysisChatFab";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -88,10 +87,6 @@ export default function AppAnalysisPage() {
     );
   }
 
-  const homeTeam = typeof data?.home_team === "string" ? data.home_team : "";
-  const awayTeam = typeof data?.away_team === "string" ? data.away_team : "";
-  const matchLabel = [homeTeam, awayTeam].filter(Boolean).join(" vs ") || "Match";
-
   return (
     <div className="px-1 py-4 sm:p-8 pb-16 w-full flex flex-col items-center">
       <div className="w-full max-w-4xl mx-auto min-w-0">
@@ -100,7 +95,6 @@ export default function AppAnalysisPage() {
         </Link>
         <AnalysisResult result={data} />
       </div>
-      <AnalysisChatFab analysisData={data} matchLabel={matchLabel} />
     </div>
   );
 }

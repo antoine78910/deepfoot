@@ -437,14 +437,125 @@ def translate_analysis(analysis: dict, target_lang: str) -> dict:
         return out
 
 
-CHAT_AI_SYSTEM = """You are a professional football match analyst assistant. The user has just viewed a match analysis and can ask you specific questions about it.
+CHAT_AI_SYSTEM = """You are Deepfoot's match assistant. The user is looking at an AI football prediction and wants help interpreting it.
 
 You will receive:
-1. The current match analysis (summary, scenarios, key forces, probabilities, etc.) as context.
-2. Optionally recent news about the teams or the match.
+1. Compact match predictions: 1X2 probabilities, xG, most likely score, BTTS, over/under, form, summary, scenarios.
+2. Recent team/match news when available (injuries, lineups, motivation, results).
 3. The user's question.
 
-Your task: Answer the user's question in a clear, concise way using ONLY the analysis and news provided. Do not invent data. If the analysis or news does not contain enough information to answer fully, say so and give a short answer based on what you have. You may add brief general football context if relevant. Reply in the same language as the user's question unless they ask for another language. Keep answers focused and under 300 words unless the question requires more."""
+How to answer:
+- Use the provided 1X2, xG, form, and news to help the user think about the match.
+- Prefer citing the actual numbers (home/draw/away %, most likely score, BTTS, Over 2.5).
+- If news (injuries, rotation, motivation) could shift the picture, say so clearly and why.
+- Predictions are probabilities, never certainties. Do not promise wins or betting advice as guaranteed.
+- Do not invent scores, tables, injuries, or news. If the context is missing, say so.
+- Keep answers focused and under 300 words unless the question requires more.
+- Reply in the language requested (or the user's language)."""
+
+
+def _brief_num(val: Any) -> float | None:
+    if val is None or val == "":
+        return None
+    try:
+        return round(float(val), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _brief_scenario(val: Any) -> Any:
+    if isinstance(val, str) and val.strip():
+        return val.strip()[:400]
+    if isinstance(val, dict):
+        body = str(val.get("body") or "").strip()
+        title = str(val.get("title") or "").strip()
+        out: dict[str, Any] = {}
+        if title:
+            out["title"] = title[:120]
+        if body:
+            out["body"] = body[:400]
+        pct = _brief_num(val.get("probability_pct"))
+        if pct is not None:
+            out["probability_pct"] = pct
+        return out or None
+    return None
+
+
+def build_chat_prediction_brief(analysis: dict[str, Any] | None) -> dict[str, Any]:
+    """Compact prediction payload for the AI chat (1X2, xG, form, news-ready fields)."""
+    if not isinstance(analysis, dict) or not analysis:
+        return {}
+
+    def pick(*keys: str) -> Any:
+        for key in keys:
+            val = analysis.get(key)
+            if val is not None and val != "":
+                return val
+        return None
+
+    home = str(pick("home_team") or "Home")
+    away = str(pick("away_team") or "Away")
+    mls = analysis.get("most_likely_score") if isinstance(analysis.get("most_likely_score"), dict) else {}
+    over_under_out: list[dict[str, Any]] = []
+    raw_ou = analysis.get("over_under")
+    if isinstance(raw_ou, list):
+        for item in raw_ou[:4]:
+            if not isinstance(item, dict):
+                continue
+            over_under_out.append(
+                {
+                    "line": str(item.get("line") or ""),
+                    "over_pct": _brief_num(item.get("over_pct")),
+                    "under_pct": _brief_num(item.get("under_pct")),
+                }
+            )
+
+    brief: dict[str, Any] = {
+        "match": f"{home} vs {away}",
+        "league": pick("league"),
+        "kickoff": pick("match_date", "match_date_iso", "date"),
+        "venue": pick("venue"),
+        "probabilities_1x2_pct": {
+            "home": _brief_num(pick("internal_prob_home", "prob_home")),
+            "draw": _brief_num(pick("internal_prob_draw", "prob_draw")),
+            "away": _brief_num(pick("internal_prob_away", "prob_away")),
+        },
+        "xg": {
+            "home": _brief_num(pick("xg_home")),
+            "away": _brief_num(pick("xg_away")),
+            "total": _brief_num(pick("xg_total")),
+        },
+        "most_likely_score": None,
+        "btts_yes_pct": _brief_num(pick("btts_yes_pct")),
+        "btts_no_pct": _brief_num(pick("btts_no_pct")),
+        "over_under": over_under_out,
+        "home_form": pick("home_form"),
+        "away_form": pick("away_form"),
+        "home_form_label": pick("home_form_label"),
+        "away_form_label": pick("away_form_label"),
+        "quick_summary": (str(pick("quick_summary") or "").strip()[:800] or None),
+        "match_overview": (str(pick("match_overview", "match_context_summary") or "").strip()[:600] or None),
+        "motivation": {
+            "home": pick("home_motivation_label"),
+            "away": pick("away_motivation_label"),
+        },
+        "key_forces_home": pick("key_forces_home"),
+        "key_forces_away": pick("key_forces_away"),
+    }
+    if mls:
+        brief["most_likely_score"] = {
+            "home": mls.get("home"),
+            "away": mls.get("away"),
+            "probability_pct": _brief_num(mls.get("probability")),
+        }
+    for key in ("scenario_1", "scenario_2", "scenario_3"):
+        sc = _brief_scenario(analysis.get(key))
+        if sc:
+            brief[key] = sc
+    injuries = pick("injuries", "injury_absence_impact")
+    if injuries:
+        brief["injuries"] = str(injuries)[:500]
+    return {k: v for k, v in brief.items() if v not in (None, "", [], {})}
 
 
 def chat_ai_reply(
@@ -468,12 +579,13 @@ def chat_ai_reply(
     lang_names = {"en": "English", "fr": "French", "es": "Spanish"}
     lang_name = lang_names.get((language or "en").strip().lower(), "English")
     try:
+        brief = build_chat_prediction_brief(analysis_context if isinstance(analysis_context, dict) else {})
         context_parts = [
-            "Match analysis context (use this to answer the user):",
-            json.dumps(analysis_context, ensure_ascii=False, indent=0)[:12000],
+            "Match predictions (use these probabilities and form to help the user):",
+            json.dumps(brief or {"note": "No compact prediction was available."}, ensure_ascii=False, indent=2)[:8000],
         ]
         if (news_context or "").strip():
-            context_parts.append("\nRecent news (use if relevant to the question):")
+            context_parts.append("\nRecent news and match comments (injuries, lineups, form — use if relevant):")
             context_parts.append((news_context or "").strip()[:4000])
         system = CHAT_AI_SYSTEM + f"\n\nRespond in {lang_name}."
         user_content = "\n\n".join(context_parts) + "\n\n---\nUser question: " + (user_message or "").strip()

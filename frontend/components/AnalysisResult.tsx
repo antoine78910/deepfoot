@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { UnlockFullAnalysisModal } from "@/components/UnlockFullAnalysisModal";
 import { UnlockPricingModal } from "@/components/UnlockPricingModal";
+import { AnalysisChatFab } from "@/components/AnalysisChatFab";
 import { trackDatafastGoal } from "@/lib/datafast";
 
 type OverUnderItem = { line: string; over_pct: number; under_pct: number };
@@ -1265,6 +1266,10 @@ export function AnalysisResult({ result }: { result: Result }) {
 
       <p className="text-center text-zinc-500 text-xs pt-6 border-t border-white/5">This analysis is provided for informational purposes only.</p>
       </div>
+      <AnalysisChatFab
+        analysisData={result as Record<string, unknown>}
+        matchLabel={`${home} vs ${away}`}
+      />
     </div>
   );
 }

@@ -811,13 +811,67 @@ def get_match_result(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _optional_int(val) -> Optional[int]:
+    if val is None or val == "":
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _chat_news_context(analysis_context: dict) -> str:
+    """Latest news + Sportmonks comments for the chat assistant."""
+    home_team = str(analysis_context.get("home_team") or "").strip()
+    away_team = str(analysis_context.get("away_team") or "").strip()
+    league = str(analysis_context.get("league") or "").strip() or None
+    if not home_team or not away_team:
+        return ""
+    items: list = []
+    try:
+        items = fetch_news_multi_source(
+            home_team=home_team,
+            away_team=away_team,
+            league=league,
+            max_items_total=12,
+            max_age_days=5,
+        ) or []
+    except Exception:
+        items = []
+    try:
+        from app.services.sportmonks import get_match_news_and_comments
+
+        recap = analysis_context.get("analysis_recap") if isinstance(analysis_context.get("analysis_recap"), dict) else {}
+        sportmonks_news = get_match_news_and_comments(
+            fixture_id=_optional_int(analysis_context.get("fixture_id") or recap.get("fixture_id")),
+            home_team_id=_optional_int(analysis_context.get("home_team_id")),
+            away_team_id=_optional_int(analysis_context.get("away_team_id")),
+            match_date=str(
+                analysis_context.get("match_date_iso")
+                or analysis_context.get("match_date")
+                or recap.get("match_date")
+                or ""
+            )
+            or None,
+        )
+        if sportmonks_news:
+            items.extend(sportmonks_news)
+    except Exception:
+        pass
+    try:
+        return format_news_for_prompt(items) if items else ""
+    except Exception:
+        return ""
+
+
 @router.post("/chat")
 def predict_chat(
     payload: ChatRequest,
     x_user_id: str | None = Header(None, alias="X-User-Id"),
 ):
     """
-    Chat IA: answer one user question about the current match analysis. Pro: 1 request/day, Lifetime: unlimited.
+    Chat IA: answer one user question using this match's predictions and latest news.
+    Whop plans: Pro 1 request/day, Lifetime unlimited.
     Requires X-User-Id. Body: message, analysis_context (optional), language (optional).
     """
     user_id = (x_user_id or "").strip()
@@ -827,27 +881,12 @@ def predict_chat(
     if not allowed:
         raise HTTPException(
             status_code=403,
-            detail=msg or "Chat IA is not available for your plan.",
+            detail=msg or "AI chat is not available for your plan.",
         )
     analysis_context = payload.analysis_context or {}
-    home_team = (analysis_context.get("home_team") or "").strip() or ""
-    away_team = (analysis_context.get("away_team") or "").strip() or ""
-    league = (analysis_context.get("league") or "").strip() or None
-    news_context = ""
-    if home_team and away_team:
-        try:
-            scraped_items = fetch_news_multi_source(
-                home_team=home_team,
-                away_team=away_team,
-                league=league,
-                max_items_total=12,
-                max_age_days=5,
-            )
-            news_context = format_news_for_prompt(scraped_items) if scraped_items else ""
-        except Exception:
-            news_context = ""
+    news_context = _chat_news_context(analysis_context) if isinstance(analysis_context, dict) else ""
     reply = chat_ai_reply(
-        analysis_context=analysis_context,
+        analysis_context=analysis_context if isinstance(analysis_context, dict) else {},
         user_message=payload.message or "",
         language=payload.language or "en",
         news_context=news_context,

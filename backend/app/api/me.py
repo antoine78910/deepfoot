@@ -18,6 +18,7 @@ from app.services.subscription import (
     reset_if_new_day,
     can_analyze,
     consume_analysis,
+    get_chat_quota,
 )
 from app.core.supabase_client import get_supabase_admin
 from app.core.config import get_settings
@@ -162,12 +163,15 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
     limit, full_analysis = get_analysis_limit(plan)
     allowed, _msg, next_full, _ = can_analyze(user_id)
 
+    chat_quota = get_chat_quota(user_id)
     logger.info(
-        "me: user_id=%s plan=%s full_analysis=%s can_analyze=%s subscription_ends_at=%s",
+        "me: user_id=%s plan=%s full_analysis=%s can_analyze=%s chat_limit=%s chat_remaining=%s subscription_ends_at=%s",
         _mask_user_id(user_id),
         plan,
         next_full,
         allowed,
+        chat_quota.get("chat_limit"),
+        chat_quota.get("chat_remaining"),
         subscription_ends_at[:10] if subscription_ends_at else None,
     )
     return {
@@ -181,6 +185,9 @@ async def me(x_user_id: str | None = Header(None, alias="X-User-Id")):
         "next_analysis_at": next_analysis_at,  # ISO timestamp when at limit (24h from last use)
         "whop_membership_id": whop_membership_id,
         "whop_manage_url": whop_manage_url,  # page Whop pour gérer l'abo (upgrade avec prorata)
+        "chat_allowed": chat_quota["chat_allowed"],
+        "chat_remaining": chat_quota["chat_remaining"],
+        "chat_limit": chat_quota["chat_limit"],  # 1 = Pro, null = Lifetime unlimited, 0 = locked
     }
 
 

@@ -4,14 +4,19 @@ import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { MessageCircle, Lock, Crown, X, Send } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getUserFromStorage } from "@/lib/auth";
+import { getUserFromStorage, setUserInStorage, type PlanId } from "@/lib/auth";
 import { getApiUrl } from "@/lib/api";
 import { UnlockPricingModal, type PricingModalVariant } from "./UnlockPricingModal";
 
 const ACCENT = "#00ffe8";
-const SCROLL_THRESHOLD = 200;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+
+function remainingFromPlan(plan: string): number | null {
+  if (plan === "lifetime") return null;
+  if (plan === "pro") return 1;
+  return 0;
+}
 
 export function AnalysisChatFab({
   analysisData,
@@ -22,27 +27,43 @@ export function AnalysisChatFab({
 }) {
   const { t, lang } = useLanguage();
   const user = getUserFromStorage();
-  const plan = user?.plan ?? "free";
+  const [plan, setPlan] = useState<string>(user?.plan ?? "free");
   const canUseChat = plan === "pro" || plan === "lifetime";
 
-  const [showFab, setShowFab] = useState(false);
   const [openChatPanel, setOpenChatPanel] = useState(false);
   const [openLockedModal, setOpenLockedModal] = useState(false);
   const [openPricingModal, setOpenPricingModal] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
-  const [chatRemaining, setChatRemaining] = useState<number | null>(plan === "lifetime" ? null : plan === "pro" ? 1 : 0);
+  const [chatRemaining, setChatRemaining] = useState<number | null>(remainingFromPlan(user?.plan ?? "free"));
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const onScroll = () => setShowFab(typeof window !== "undefined" && window.scrollY > SCROLL_THRESHOLD);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    const uid = user?.id;
+    if (!uid) return;
+    const ac = new AbortController();
+    fetch(`${getApiUrl()}/me`, { headers: { "X-User-Id": uid }, signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || typeof data !== "object") return;
+        const nextPlan = typeof data.plan === "string" ? data.plan : user?.plan ?? "free";
+        setPlan(nextPlan);
+        if (data.chat_remaining !== undefined) {
+          setChatRemaining(data.chat_remaining === null ? null : Number(data.chat_remaining));
+        } else {
+          setChatRemaining(remainingFromPlan(nextPlan));
+        }
+        const stored = getUserFromStorage();
+        if (stored && stored.plan !== nextPlan) {
+          setUserInStorage({ ...stored, plan: nextPlan as PlanId });
+        }
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [user?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -111,7 +132,7 @@ export function AnalysisChatFab({
 
   const proLimitReached = plan === "pro" && chatRemaining !== null && chatRemaining <= 0;
 
-  const fab = showFab ? (
+  const fab = (
     <button
       type="button"
       onClick={handleFabClick}
@@ -124,7 +145,7 @@ export function AnalysisChatFab({
       <MessageCircle className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
       <span className="hidden sm:inline max-w-[200px] truncate">{t("chat.button")}</span>
     </button>
-  ) : null;
+  );
 
   const lockedModal = openLockedModal
     ? createPortal(
@@ -202,7 +223,7 @@ export function AnalysisChatFab({
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
               {messages.length === 0 && !error && (
-                <p className="text-sm text-zinc-500">{t("chat.placeholder")}</p>
+                <p className="text-sm text-zinc-500">{t("chat.hint")}</p>
               )}
               {messages.map((m, i) => (
                 <div
@@ -231,9 +252,13 @@ export function AnalysisChatFab({
               <div ref={messagesEndRef} />
             </div>
             <div className="p-4 border-t border-white/5 flex-shrink-0">
-              {plan === "pro" && (
+              {(plan === "pro" || plan === "lifetime") && (
                 <p className="text-xs text-zinc-500 mb-2">
-                  {chatRemaining === null ? t("chat.unlimited") : chatRemaining > 0 ? t("chat.oneLeft") : t("chat.limitReached")}
+                  {plan === "lifetime" || chatRemaining === null
+                    ? t("chat.unlimited")
+                    : chatRemaining > 0
+                      ? t("chat.oneLeft")
+                      : t("chat.limitReached")}
                 </p>
               )}
               <div className="flex gap-2">

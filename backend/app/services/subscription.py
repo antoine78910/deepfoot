@@ -173,9 +173,10 @@ def can_analyze(user_id: str) -> tuple[bool, str, bool, str | None]:
 
 def get_chat_limit(plan: str) -> int | None:
     """
-    Retourne la limite de requêtes chat IA par jour.
-    Pro: 1/jour. Lifetime: None (illimité). Free/Starter: 0 (non autorisé).
+    Daily AI-chat replies by Whop plan.
+    Pro: 1/day. Lifetime: None (unlimited). Free/Starter: 0 (locked).
     """
+    plan = _normalize_plan(plan)
     if plan == PLAN_LIFETIME:
         return None
     if plan == PLAN_PRO:
@@ -215,7 +216,7 @@ def can_use_chat_ai(user_id: str) -> tuple[bool, int | None, str]:
     plan, _, _, _, _, _ = get_plan_and_usage(user_id)
     limit = get_chat_limit(plan)
     if limit == 0:
-        return (False, 0, "Chat IA réservé aux abonnés Pro et Lifetime.")
+        return (False, 0, "AI chat is available on Pro (1 question per day) and Lifetime (unlimited).")
     today = datetime.now(timezone.utc).date()
     used, last = get_chat_usage(user_id)
     used = reset_if_new_day(used, last, today)
@@ -223,8 +224,21 @@ def can_use_chat_ai(user_id: str) -> tuple[bool, int | None, str]:
         return (True, None, "")
     remaining = max(0, limit - used)
     if remaining == 0:
-        return (False, 0, "Limite atteinte : 1 question par jour pour le plan Pro. Réessayez demain ou passez à Lifetime pour des questions illimitées.")
+        return (False, 0, "Limit reached: 1 question per day on Pro. Try again tomorrow or upgrade to Lifetime for unlimited questions.")
     return (True, remaining, "")
+
+
+def get_chat_quota(user_id: str) -> dict:
+    """Whop-synced chat quota for /me: Pro 1/day, Lifetime unlimited, others locked."""
+    plan = PLAN_FREE
+    if user_id:
+        plan, *_ = get_plan_and_usage(user_id)
+    allowed, remaining, _msg = can_use_chat_ai(user_id)
+    return {
+        "chat_allowed": bool(allowed),
+        "chat_remaining": remaining,
+        "chat_limit": get_chat_limit(plan),
+    }
 
 
 def consume_chat_ai(user_id: str) -> None:
