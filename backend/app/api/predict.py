@@ -22,7 +22,7 @@ from app.schemas.predict import (
 )
 from app.services.data_loader import load_match_context
 from app.ml.poisson import predict_all
-from app.services.openai_summary import build_prompt_context, generate_ai_analysis, generate_ai_analysis_sportmonks, translate_analysis, chat_ai_reply
+from app.services.openai_summary import build_prompt_context, generate_ai_analysis, generate_ai_analysis_sportmonks, translate_analysis, chat_ai_reply, ChatAIError
 from app.services.news_fetcher import fetch_football_news
 from app.services.news_scraper import fetch_news_multi_source, format_news_for_prompt
 from app.services.motivation_analysis import run_motivation_analysis
@@ -883,14 +883,19 @@ def predict_chat(
             status_code=403,
             detail=msg or "AI chat is not available for your plan.",
         )
+    if not (payload.message or "").strip():
+        raise HTTPException(status_code=400, detail="Please ask a specific question about the match analysis.")
     analysis_context = payload.analysis_context or {}
     news_context = _chat_news_context(analysis_context) if isinstance(analysis_context, dict) else ""
-    reply = chat_ai_reply(
-        analysis_context=analysis_context if isinstance(analysis_context, dict) else {},
-        user_message=payload.message or "",
-        language=payload.language or "en",
-        news_context=news_context,
-    )
+    try:
+        reply = chat_ai_reply(
+            analysis_context=analysis_context if isinstance(analysis_context, dict) else {},
+            user_message=payload.message or "",
+            language=payload.language or "en",
+            news_context=news_context,
+        )
+    except ChatAIError as e:
+        raise HTTPException(status_code=503, detail=e.user_message) from e
     consume_chat_ai(user_id)
     _, remaining_after, _ = can_use_chat_ai(user_id)
     return {"answer": reply, "chat_remaining": remaining_after}

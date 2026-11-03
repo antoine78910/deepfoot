@@ -4,12 +4,25 @@ Génération du résumé rapide, scénarios et key forces via OpenAI (un seul ap
 + Analyse professionnelle Sportmonks (8 sections) quand les données viennent de Sportmonks.
 """
 import json
+import logging
 import re
 from typing import Any, Optional
 
 from openai import OpenAI
 from app.core.config import get_settings
 from app.services.prediction_costs import usage_from_openai
+
+logger = logging.getLogger(__name__)
+
+CHAT_UNAVAILABLE_MSG = "The AI chat is temporarily unavailable. Please try again later."
+
+
+class ChatAIError(Exception):
+    """OpenAI chat failed; do not consume the user's daily quota."""
+
+    def __init__(self, user_message: str = CHAT_UNAVAILABLE_MSG):
+        super().__init__(user_message)
+        self.user_message = user_message
 
 SPORTMONKS_ANALYST_SYSTEM = """You are a professional football match analyst.
 
@@ -573,7 +586,7 @@ def chat_ai_reply(
     """
     client = _client()
     if not client:
-        return "Chat IA is temporarily unavailable."
+        raise ChatAIError()
     if not (user_message or "").strip():
         return "Please ask a specific question about the match analysis."
     lang_names = {"en": "English", "fr": "French", "es": "Spanish"}
@@ -599,5 +612,8 @@ def chat_ai_reply(
         )
         raw = (r.choices[0].message.content or "").strip()
         return raw or "I couldn't generate a reply. Please try again."
+    except ChatAIError:
+        raise
     except Exception as e:
-        return f"Sorry, an error occurred: {str(e)[:200]}"
+        logger.exception("chat_ai_reply failed: %s", e)
+        raise ChatAIError() from e

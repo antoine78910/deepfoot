@@ -119,7 +119,8 @@ export function AnalysisChatFab({
         return;
       }
       if (!res.ok) {
-        setError("Something went wrong. Please try again.");
+        const detail = typeof data.detail === "string" ? data.detail : "";
+        setError(detail || t("chat.unavailable"));
         setMessages((prev) => prev.slice(0, -1));
         setInputValue(text);
         return;

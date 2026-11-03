@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from app.services.openai_summary import build_chat_prediction_brief
+from app.services.openai_summary import ChatAIError, build_chat_prediction_brief, chat_ai_reply
 from app.services.subscription import get_chat_limit, get_chat_quota
 
 
@@ -84,6 +84,28 @@ class ChatQuotaTests(unittest.TestCase):
         self.assertFalse(quota["chat_allowed"])
         self.assertEqual(quota["chat_remaining"], 0)
         self.assertEqual(quota["chat_limit"], 1)
+
+
+class ChatOpenAIErrorTests(unittest.TestCase):
+    def test_quota_error_is_not_leaked_to_the_user(self) -> None:
+        class _FakeCompletions:
+            def create(self, **_kwargs):
+                raise RuntimeError(
+                    "Error code: 429 - You have no credits remaining. "
+                    "Add credits at https://platform.openai.com/settings/organization/billing/"
+                )
+
+        class _FakeChat:
+            completions = _FakeCompletions()
+
+        class _FakeClient:
+            chat = _FakeChat()
+
+        with patch("app.services.openai_summary._client", return_value=_FakeClient()):
+            with self.assertRaises(ChatAIError) as ctx:
+                chat_ai_reply({"home_team": "Lyon", "away_team": "PSG"}, "Who is favorite?")
+        self.assertNotIn("credits", ctx.exception.user_message.lower())
+        self.assertNotIn("openai.com", ctx.exception.user_message.lower())
 
 
 if __name__ == "__main__":
