@@ -229,6 +229,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "chat.oneLeft": "1 question left today",
     "chat.unlimited": "Unlimited questions",
     "chat.unavailable": "The AI chat is temporarily unavailable. Please try again later.",
+    "chat.thinking": "Thinking…",
     "nav.account": "My account",
     "account.title": "My account",
     "account.subtitle": "Manage your personal information",
@@ -522,6 +523,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "chat.oneLeft": "1 question restante aujourd'hui",
     "chat.unlimited": "Questions illimitées",
     "chat.unavailable": "Le chat IA est temporairement indisponible. Réessaie dans un moment.",
+    "chat.thinking": "Réflexion…",
     "nav.account": "Mon compte",
     "account.title": "Mon compte",
     "account.subtitle": "Gérez vos informations personnelles",
@@ -773,6 +775,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "chat.oneLeft": "1 pregunta restante hoy",
     "chat.unlimited": "Preguntas ilimitadas",
     "chat.unavailable": "El chat IA no está disponible por ahora. Inténtalo más tarde.",
+    "chat.thinking": "Pensando…",
   },
 };
 

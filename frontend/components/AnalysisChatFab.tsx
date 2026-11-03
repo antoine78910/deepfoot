@@ -13,6 +13,46 @@ const ACCENT = "#00ffe8";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+function ChatThinkingLogo({ label }: { label: string }) {
+  return (
+    <div
+      className="inline-flex items-center gap-2.5 rounded-xl px-3 py-2 bg-zinc-800/80 border border-[#00ffe8]/15"
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <div className="relative h-8 w-8 flex-shrink-0">
+        <span
+          className="absolute inset-0 rounded-full border border-[#00ffe8]/35 border-t-[#00ffe8] animate-chat-think-orbit"
+          aria-hidden
+        />
+        <span
+          className="absolute inset-[3px] rounded-full bg-[#00ffe8]/10 animate-chat-think-pulse"
+          aria-hidden
+        />
+        <img
+          src="/logo.png"
+          alt=""
+          className="absolute inset-[5px] h-[22px] w-[22px] object-contain animate-chat-think-pulse"
+          draggable={false}
+        />
+      </div>
+      <div className="flex flex-col gap-1 min-w-0">
+        <span className="text-xs text-zinc-300 font-medium truncate">{label}</span>
+        <span className="flex items-center gap-1" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-1.5 w-1.5 rounded-full bg-[#00ffe8] animate-chat-think-dot"
+              style={{ animationDelay: `${i * 0.16}s` }}
+            />
+          ))}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function remainingFromPlan(plan: string): number | null {
   if (plan === "lifetime") return null;
   if (plan === "pro") return 1;
@@ -73,7 +113,7 @@ export function AnalysisChatFab({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading]);
 
   const handleFabClick = () => {
     if (canUseChat) {
@@ -226,12 +266,29 @@ export function AnalysisChatFab({
             <div className="pointer-events-auto absolute left-3 right-3 bottom-3 h-[min(70vh,520px)] sm:left-auto sm:right-5 sm:bottom-5 sm:w-[360px] sm:h-[480px] rounded-2xl bg-[#101217]/95 border border-white/10 shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-white/5 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#00ffe8]/20" style={{ color: ACCENT }}>
-                  <MessageCircle className="w-5 h-5" />
+                <div className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-[#00ffe8]/20 overflow-hidden">
+                  {loading ? (
+                    <>
+                      <span
+                        className="absolute inset-0 rounded-lg border border-[#00ffe8]/40 border-t-[#00ffe8] animate-chat-think-orbit"
+                        aria-hidden
+                      />
+                      <img
+                        src="/logo.png"
+                        alt=""
+                        className="relative h-6 w-6 object-contain animate-chat-think-pulse"
+                        draggable={false}
+                      />
+                    </>
+                  ) : (
+                    <MessageCircle className="w-5 h-5" style={{ color: ACCENT }} />
+                  )}
                 </div>
                 <div>
                   <h2 className="font-bold text-white">{t("chat.title")}</h2>
-                  <p className="text-xs text-zinc-400 truncate max-w-[220px]">{matchLabel}</p>
+                  <p className="text-xs text-zinc-400 truncate max-w-[220px]">
+                    {loading ? t("chat.thinking") : matchLabel}
+                  </p>
                 </div>
               </div>
               <button
@@ -265,7 +322,7 @@ export function AnalysisChatFab({
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="rounded-xl px-3 py-2 text-sm bg-zinc-800/80 text-zinc-400">…</div>
+                  <ChatThinkingLogo label={t("chat.thinking")} />
                 </div>
               )}
               {error && (
@@ -307,7 +364,13 @@ export function AnalysisChatFab({
                   style={{ background: ACCENT }}
                   aria-label={t("chat.send")}
                 >
-                  <Send className="w-5 h-5" />
+                  {loading ? (
+                    <span className="relative h-5 w-5 block" aria-hidden>
+                      <span className="absolute inset-0 rounded-full border border-black/25 border-t-black/80 animate-chat-think-orbit" />
+                    </span>
+                  ) : (
+                    <Send className="w-5 h-5 text-[#0a0a0a]" />
+                  )}
                 </button>
               </div>
             </div>
