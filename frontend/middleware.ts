@@ -97,6 +97,6 @@ export const config = {
      * Match all paths on app subdomain except _next, static files, api.
      * For localhost with port: host is "app.localhost:3000"
      */
-    "/((?!_next/static|_next/image|api|favicon.ico|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|monitoring|api|favicon.ico|logo.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
