@@ -12,6 +12,9 @@ env/
 .env
 .env.local
 .env.*.local
+.env*.local
+# Sentry webpack plugin auth (SENTRY_AUTH_TOKEN). Never commit this file.
+.env.sentry-build-plugin
 
 # Build / IDE
 .next/

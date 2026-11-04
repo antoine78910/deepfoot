@@ -73,6 +73,12 @@ module.exports = withSentryConfig(module.exports, {
   org: "deepfoot",
   project: "javascript-nextjs",
 
+  // Source map upload reads SENTRY_AUTH_TOKEN from the environment (CI / Vercel).
+  // Do not commit .env.sentry-build-plugin — a missing token skips the upload
+  // and must not fail the build.
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  telemetry: false,
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
@@ -89,11 +95,9 @@ module.exports = withSentryConfig(module.exports, {
   tunnelRoute: "/monitoring",
 
   webpack: {
-    // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-    // See the following for more information:
-    // https://docs.sentry.io/product/crons/
-    // https://vercel.com/docs/cron-jobs
-    automaticVercelMonitors: true,
+    // No Vercel cron jobs in this app. Leave monitors off so the plugin does not
+    // create check-ins.
+    automaticVercelMonitors: false,
 
     // Tree-shaking options for reducing bundle size
     treeshake: {
